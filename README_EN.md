@@ -281,12 +281,18 @@ ACP_ARGS=["--acp"]
 
 The generic ACP entry point requires no Gateway code changes. Configure its command, arguments, display label, model, and workspace with `ACP_COMMAND`, `ACP_ARGS`, `ACP_LABEL`, `ACP_MODEL`, and `ACP_WORKSPACE`.
 
-By default, qwen-audio-agent sends no model setting to ACP Sessions, so the
-selected Agent continues using the user's existing configuration. Only an
-explicit `QWEN_AUDIO_AGENT_BACKEND_MODEL` or backend-specific model setting
-forces the model across every Session managed by qwen-audio-agent. A clear
-error is returned when the Agent does not support that model or the override
-cannot be verified.
+Backend model selection follows these rules:
+
+- With no model configured, the Gateway sends no model, never calls the ACP
+  model-setting interface, and does not guess a default.
+- For a new Session, the selected Agent chooses the model entirely from the
+  user's own configuration.
+- For a resumed Session, the selected Agent preserves that Session's existing
+  model.
+- Only an explicit `QWEN_AUDIO_AGENT_BACKEND_MODEL` or backend-specific model
+  setting makes the Gateway force the model for Sessions managed by
+  qwen-audio-agent and verify the result. A clear error is returned when the
+  Agent does not support the model or the override cannot be verified.
 
 Backend permissions default to `native`, so the backend Agent asks when
 permission is required. Enable the following option only in trusted projects

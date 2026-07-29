@@ -65,6 +65,11 @@ QWEN_AUDIO_AGENT_BACKEND_MODEL=qwen3.7-max
 `CLAUDE_MODEL` 和 `ACP_MODEL` 可进一步使用后台原生模型标识，并优先于公共值。
 模型 ID 由各 Agent 定义，并不由 ACP 统一命名。
 
+未指定模型时，Gateway 不传模型，也不猜测默认值：新建 Session 的模型完全由
+后台 Agent 根据用户配置选择，恢复 Session 则保留其原有模型。历史 Session
+使用的模型可能与用户当前默认模型不同，这是后台 Agent 的 Session 语义，
+Gateway 不会擅自重置。
+
 显式模型会应用于协调 Session、新建项目 Session 和恢复的项目 Session。Gateway
 从 ACP `configOptions` 中按 `category: model` 发现模型选项，并通过
 `session/set_config_option` 设置；如果 Agent 没有提供模型配置、目标模型不在

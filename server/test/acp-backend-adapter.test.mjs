@@ -183,6 +183,10 @@ function fakeAcpClient({
     async cancelSession(sessionId) {
       calls.push(['cancel', sessionId])
     },
+    async setSessionConfigOption(sessionId, configId, value) {
+      calls.push(['config', sessionId, configId, value])
+      return { configOptions: [] }
+    },
     async close() {},
   }
 }
@@ -419,6 +423,10 @@ for (const action of ['start', 'send']) {
       call[0] === 'prompt' && call[1] === 'coordinator-session'
     ))
     assert.equal(coordinatorPrompts.length, 2)
+    assert.equal(
+      client.calls.some(call => call[0] === 'config'),
+      false,
+    )
     await adapter.close()
   })
 }
@@ -711,6 +719,7 @@ test('never calls ACP model configuration without an explicit model', async () =
       model,
       client,
     })
+    assert.equal(adapter.describe().model, null)
     await adapter.configureSession({
       sessionId: 'session-one',
       response: {

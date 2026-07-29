@@ -30,6 +30,11 @@ function clean(value) {
   return String(value || '').trim()
 }
 
+function explicitModel(value) {
+  const model = clean(value)
+  return model.toLowerCase() === 'auto' ? '' : model
+}
+
 function bounded(value, max = 300) {
   return clean(value).replace(/\s+/g, ' ').slice(0, max)
 }
@@ -88,7 +93,10 @@ export class AcpBackendAdapter {
     this.root = root
     this.ownership = ownership === 'external' ? 'external' : 'owned'
     this.permissionMode = permissionMode === 'full' ? 'full' : 'native'
-    this.model = clean(model)
+    // An empty model means the Agent owns model selection for both new and
+    // resumed Sessions. `auto` is retained only as a legacy configuration
+    // spelling and is normalized to the same no-override state here.
+    this.model = explicitModel(model)
     this.timeoutMs = timeoutMs
     this.directory = directory
     this.baseUrl = clean(baseUrl) || null
@@ -275,7 +283,7 @@ export class AcpBackendAdapter {
         option.currentValue = value
       }
     }
-    if (this.model && this.model !== 'auto') {
+    if (this.model) {
       await this.forceSessionModel(session, options)
     }
   }
