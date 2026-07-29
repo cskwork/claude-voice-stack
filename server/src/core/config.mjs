@@ -117,16 +117,23 @@ function backendModelName(value) {
 
 export function resolveBackendModels(env = process.env) {
   const common = String(env.QWEN_AUDIO_AGENT_BACKEND_MODEL || '').trim()
+  const name = backendModelName(common)
   return {
     common,
     openCode: String(
       env.OPENCODE_MODEL
-      || (common ? `alibaba-cn/${backendModelName(common)}` : ''),
+      || (common ? `alibaba-cn/${name}` : ''),
     ).trim(),
     openClaw: String(
       env.OPENCLAW_MODEL
-      || (common ? `bailian/${backendModelName(common)}` : ''),
+      || (common ? `bailian/${name}` : ''),
     ).trim(),
+    qoder: String(env.QODER_MODEL || name).trim(),
+    hermes: String(env.HERMES_MODEL || common).trim(),
+    codeBuddy: String(env.CODEBUDDY_MODEL || name).trim(),
+    codex: String(env.CODEX_MODEL || name).trim(),
+    claude: String(env.CLAUDE_MODEL || common).trim(),
+    acp: String(env.ACP_MODEL || common).trim(),
   }
 }
 
@@ -244,13 +251,18 @@ export const config = {
   qoderCliPath: String(
     process.env.QODERCLI_PATH || process.env.QODER_CLI_PATH || '',
   ).trim(),
-  qoderModel: String(process.env.QODER_MODEL || 'auto').trim() || 'auto',
+  qoderModel: String(
+    backendModels.qoder || 'auto',
+  ).trim() || 'auto',
   hermesDirectory: resolveHermesWorkspace(),
   hermesCliPath: String(process.env.HERMES_BIN || '').trim(),
+  hermesModel: String(
+    backendModels.hermes,
+  ).trim(),
   codeBuddyDirectory: resolveCodeBuddyWorkspace(),
   codeBuddyCliPath: String(process.env.CODEBUDDY_BIN || '').trim(),
   codeBuddyModel: String(
-    process.env.CODEBUDDY_MODEL || backendModelName(backendModels.common),
+    backendModels.codeBuddy,
   ).trim(),
   codeBuddyModelUrl: (
     process.env.CODEBUDDY_MODEL_URL
@@ -263,7 +275,7 @@ export const config = {
   codexDirectory: resolveCodexWorkspace(),
   codexCliPath: String(process.env.CODEX_ACP_BIN || '').trim(),
   codexModel: String(
-    process.env.CODEX_MODEL || backendModelName(backendModels.common),
+    backendModels.codex,
   ).trim(),
   codexModelUrl: (
     process.env.CODEX_BASE_URL
@@ -278,6 +290,9 @@ export const config = {
   claudeExecutable: String(
     process.env.CLAUDE_CODE_EXECUTABLE || '',
   ).trim(),
+  claudeModel: String(
+    backendModels.claude,
+  ).trim(),
   claudeConfigDirectory: process.env.CLAUDE_CONFIG_DIR
     ? resolve(process.env.CLAUDE_CONFIG_DIR)
     : '',
@@ -285,17 +300,13 @@ export const config = {
   acpArgs: resolveAcpArgs(process.env.ACP_ARGS),
   acpLabel: String(process.env.ACP_LABEL || 'ACP Agent').trim() || 'ACP Agent',
   acpDirectory: resolveAcpWorkspace(),
-  acpModel: String(process.env.ACP_MODEL || 'auto').trim() || 'auto',
+  acpModel: String(
+    backendModels.acp || 'auto',
+  ).trim() || 'auto',
   acpCoordinatorAgent: String(process.env.ACP_COORDINATOR_AGENT || '').trim(),
-  openCodeModel: (
-    process.env.OPENCODE_MODEL
-    || (backendOwnership === 'owned' ? backendModels.openCode : '')
-  ),
-  openClawModel: (
-    process.env.OPENCLAW_MODEL
-    || (backendOwnership === 'owned' ? backendModels.openClaw : '')
-  ),
-  backendModel: backendOwnership === 'owned' ? backendModels.common : '',
+  openCodeModel: backendModels.openCode,
+  openClawModel: backendModels.openClaw,
+  backendModel: backendModels.common,
   openCodeCoordinatorAgent: resolveOpenCodeCoordinatorAgent(),
   announceIntoContext: (
     String(process.env.QWEN_AUDIO_AGENT_ANNOUNCE_INTO_CONTEXT || 'true').toLowerCase()

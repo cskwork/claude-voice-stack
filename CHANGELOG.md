@@ -5,6 +5,8 @@
 - 统一后台 Setup：默认使用用户已安装的 Agent，并继承其原有模型、Provider、工具、
   MCP、Skill 和认证；只有显式配置时才覆盖后台模型。新增只读
   `qwenaudio setup` 检查及可复用的 JSON 输出。
+- 统一 ACP Session 模型覆盖：默认不发送模型设置；显式配置时按标准
+  `category: model` 强制设置并验证全部受管 Session，失败时明确报错。
 - 新增基于 `@zed-industries/claude-code-acp` 的 Claude Code 后端，支持独立协调
   工作区、原生权限确认、第三层项目 Session 和固定版本回退启动。
 - 清理 OpenCode 旧版命名 Agent Prompt，统一由 Gateway 通过 ACP 动态注入协调规则，

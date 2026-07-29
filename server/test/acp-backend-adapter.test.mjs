@@ -652,7 +652,19 @@ test('busy-coordinator cancellation uses ACP directly and reconciles on the next
 test('selects supported ACP Session mode and model config options', async () => {
   const client = fakeAcpClient()
   const configured = []
-  client.setSessionConfigOption = async (...args) => configured.push(args)
+  client.setSessionConfigOption = async (...args) => {
+    configured.push(args)
+    if (args[1] !== 'llm-selector') return {}
+    return {
+      configOptions: [{
+        id: 'llm-selector',
+        category: 'model',
+        type: 'select',
+        currentValue: args[2],
+        options: [{ value: 'provider/model' }],
+      }],
+    }
+  }
   client.newSession = async options => ({
     sessionId: 'coordinator-session',
     cwd: options.cwd,
@@ -665,7 +677,8 @@ test('selects supported ACP Session mode and model config options', async () => 
           options: [{ value: 'voice-coordinator' }],
         },
         {
-          id: 'model',
+          id: 'llm-selector',
+          category: 'model',
           type: 'select',
           currentValue: 'default',
           options: [{ value: 'provider/model' }],
@@ -683,9 +696,154 @@ test('selects supported ACP Session mode and model config options', async () => 
   await adapter.ensureCoordinatorSession('owner-one')
   assert.deepEqual(configured, [
     ['coordinator-session', 'mode', 'voice-coordinator'],
-    ['coordinator-session', 'model', 'provider/model'],
+    ['coordinator-session', 'llm-selector', 'provider/model'],
   ])
   await adapter.close()
+})
+
+test('never calls ACP model configuration without an explicit model', async () => {
+  for (const model of ['', 'auto']) {
+    const client = fakeAcpClient()
+    const configured = []
+    client.setSessionConfigOption = async (...args) => configured.push(args)
+    const adapter = new AcpBackendAdapter({
+      protocol: 'opencode',
+      model,
+      client,
+    })
+    await adapter.configureSession({
+      sessionId: 'session-one',
+      response: {
+        configOptions: [{
+          id: 'models',
+          category: 'model',
+          type: 'select',
+          currentValue: 'user-default',
+          options: [{ value: 'user-default' }, { value: 'forced-model' }],
+        }],
+      },
+    }, 'project')
+    assert.deepEqual(configured, [])
+    await adapter.close()
+  }
+})
+
+test('rejects explicit models that ACP cannot apply', async () => {
+  const client = fakeAcpClient()
+  const adapter = new AcpBackendAdapter({
+    protocol: 'opencode',
+    model: 'forced-model',
+    client,
+  })
+  await assert.rejects(
+    adapter.configureSession({
+      sessionId: 'missing-option',
+      response: { configOptions: [] },
+    }, 'project'),
+    /没有通过 ACP 提供 Session 模型配置/,
+  )
+  await assert.rejects(
+    adapter.configureSession({
+      sessionId: 'unsupported-model',
+      response: {
+        configOptions: [{
+          id: 'model',
+          type: 'select',
+          currentValue: 'user-default',
+          options: [{ value: 'user-default' }],
+        }],
+      },
+    }, 'project'),
+    /不支持模型 forced-model.*user-default/,
+  )
+  await adapter.close()
+})
+
+test('verifies that an explicit ACP model override took effect', async () => {
+  const client = fakeAcpClient()
+  client.setSessionConfigOption = async () => ({
+    configOptions: [{
+      id: 'models',
+      category: 'model',
+      type: 'select',
+      currentValue: 'different-model',
+      options: [
+        {
+          group: 'Models',
+          options: [{ value: 'forced-model' }, { value: 'different-model' }],
+        },
+      ],
+    }],
+  })
+  const adapter = new AcpBackendAdapter({
+    protocol: 'opencode',
+    model: 'forced-model',
+    client,
+  })
+  await assert.rejects(
+    adapter.configureSession({
+      sessionId: 'session-one',
+      response: {
+        configOptions: [{
+          id: 'models',
+          category: 'model',
+          type: 'select',
+          currentValue: 'user-default',
+          options: [{
+            group: 'Models',
+            options: [
+              { value: 'forced-model' },
+              { value: 'different-model' },
+            ],
+          }],
+        }],
+      },
+    }, 'project'),
+    /未确认模型覆盖生效/,
+  )
+  await adapter.close()
+})
+
+test('reports ACP model-setting and unverifiable-response failures', async () => {
+  const session = {
+    sessionId: 'session-one',
+    response: {
+      configOptions: [{
+        id: 'llm',
+        category: 'MODEL',
+        type: 'select',
+        currentValue: 'user-default',
+        options: [{ value: 'forced-model' }],
+      }],
+    },
+  }
+  const failingClient = fakeAcpClient()
+  failingClient.setSessionConfigOption = async () => {
+    throw new Error('backend rejected the request')
+  }
+  const failingAdapter = new AcpBackendAdapter({
+    protocol: 'opencode',
+    model: 'forced-model',
+    client: failingClient,
+  })
+  await assert.rejects(
+    failingAdapter.configureSession(session, 'project'),
+    /无法把 Session 模型设置为 forced-model：backend rejected the request/,
+  )
+  await failingAdapter.close()
+
+  const unverifiableClient = fakeAcpClient()
+  unverifiableClient.setSessionConfigOption = async () => ({})
+  const unverifiableAdapter = new AcpBackendAdapter({
+    protocol: 'opencode',
+    model: 'forced-model',
+    client: unverifiableClient,
+  })
+  await assert.rejects(
+    unverifiableAdapter.configureSession(session, 'project'),
+    /没有返回 ACP configOptions/,
+  )
+  await unverifiableAdapter.close()
 })
 
 test('OpenClaw maps native Session tool updates into the shared delegation lifecycle', async () => {

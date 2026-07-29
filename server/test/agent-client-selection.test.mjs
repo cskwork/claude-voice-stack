@@ -59,6 +59,7 @@ test('opens the active OpenCode ACP coordinator Session directly', async () => {
   const client = new AgentClient({
     protocol: 'opencode',
     baseUrl: 'http://opencode.test:4096',
+    model: '',
     directory: '/workspace',
     sessionStatePath: null,
     acpClient: fakeAcpClient(),

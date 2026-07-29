@@ -34,6 +34,22 @@ function bounded(value, max = 300) {
   return clean(value).replace(/\s+/g, ' ').slice(0, max)
 }
 
+function optionValues(entries = []) {
+  return entries.flatMap(entry => (
+    Array.isArray(entry?.options)
+      ? optionValues(entry.options)
+      : clean(entry?.value) ? [clean(entry.value)] : []
+  ))
+}
+
+function modelConfigOption(options = []) {
+  return options.find(option => clean(option?.category).toLowerCase() === 'model')
+    || options.find(option => (
+      ['model', 'models'].includes(clean(option?.id).toLowerCase())
+    ))
+    || null
+}
+
 function deferred() {
   let resolvePromise
   let rejectPromise
@@ -244,25 +260,92 @@ export class AcpBackendAdapter {
     const options = Array.isArray(session?.response?.configOptions)
       ? session.response.configOptions
       : []
-    const desired = [
-      ...(role === 'coordinator' && this.coordinatorAgent
-        ? [['mode', this.coordinatorAgent]]
-        : []),
-      ...(this.model && this.model !== 'auto'
-        ? [['model', this.model]]
-        : []),
-    ]
-    for (const [configId, value] of desired) {
-      const option = options.find(item => item.id === configId)
+    if (role === 'coordinator' && this.coordinatorAgent) {
+      const configId = 'mode'
+      const value = this.coordinatorAgent
+      const option = options.find(item => clean(item?.id) === configId)
       const supported = option?.type !== 'select'
         || option.options?.some(item => item.value === value)
-      if (!option || !supported || option.currentValue === value) continue
-      await this.client.setSessionConfigOption(
-        session.sessionId,
-        configId,
-        value,
+      if (option && supported && option.currentValue !== value) {
+        await this.client.setSessionConfigOption(
+          session.sessionId,
+          configId,
+          value,
+        )
+        option.currentValue = value
+      }
+    }
+    if (this.model && this.model !== 'auto') {
+      await this.forceSessionModel(session, options)
+    }
+  }
+
+  async forceSessionModel(session, options) {
+    const desired = this.model
+    const option = modelConfigOption(options)
+    if (!option) {
+      throw new AgentError(
+        `${this.label} 没有通过 ACP 提供 Session 模型配置，`
+        + `无法强制使用模型 ${desired}`,
+        { status: 422, protocol: 'acp' },
       )
-      option.currentValue = value
+    }
+    const values = optionValues(option.options)
+    if (
+      option.type === 'select'
+      && (!values.length || !values.includes(desired))
+    ) {
+      const available = values.length
+        ? `；可选模型：${values.slice(0, 12).join('、')}`
+        : ''
+      throw new AgentError(
+        `${this.label} 当前 Session 不支持模型 ${desired}${available}`,
+        { status: 422, protocol: 'acp' },
+      )
+    }
+    if (clean(option.currentValue) === desired) return
+    let response
+    try {
+      response = await this.client.setSessionConfigOption(
+        session.sessionId,
+        option.id,
+        desired,
+      )
+    } catch (error) {
+      throw new AgentError(
+        `${this.label} 无法把 Session 模型设置为 ${desired}：${
+          clean(error?.message) || '未知错误'
+        }`,
+        {
+          status: error.status || 502,
+          protocol: 'acp',
+        },
+      )
+    }
+    const updatedOptions = Array.isArray(response?.configOptions)
+      ? response.configOptions
+      : null
+    if (!updatedOptions) {
+      throw new AgentError(
+        `${this.label} 设置模型后没有返回 ACP configOptions，`
+        + `无法确认模型 ${desired} 已生效`,
+        { status: 502, protocol: 'acp' },
+      )
+    }
+    const updated = updatedOptions.find(item => (
+      clean(item?.id) === clean(option.id)
+    ))
+      || modelConfigOption(updatedOptions)
+    if (clean(updated?.currentValue) !== desired) {
+      throw new AgentError(
+        `${this.label} 未确认模型覆盖生效：要求 ${desired}，`
+        + `实际 ${clean(updated?.currentValue) || '未知'}`,
+        { status: 502, protocol: 'acp' },
+      )
+    }
+    session.response = {
+      ...(session.response || {}),
+      configOptions: updatedOptions,
     }
   }
 

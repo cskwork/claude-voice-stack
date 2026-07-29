@@ -8,7 +8,7 @@ export const claudeBackendDriver = {
   resolveOptions(options) {
     return {
       baseUrl: '',
-      model: '',
+      model: options.claudeModel,
       directory: options.claudeDirectory,
       cliPath: options.claudeCliPath,
       claudeExecutable: options.claudeExecutable,

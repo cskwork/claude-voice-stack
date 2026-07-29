@@ -52,16 +52,24 @@ DASHSCOPE_API_KEY=your-key
 AGENT_PROTOCOL=openclaw
 ```
 
-Gateway 默认不指定后台模型，直接使用所选 Agent 用户级配置中的模型、Provider、
-工具、MCP、Skill 和认证。只有需要由 qwen-audio-agent 显式覆盖模型时，才设置：
+Gateway 默认不指定后台模型，也不会调用 ACP Session 模型设置接口，直接使用所选
+Agent 用户级配置中的模型、Provider、工具、MCP、Skill 和认证。只有需要由
+qwen-audio-agent 强制覆盖其管理的全部 Session 时，才设置：
 
 ```dotenv
 QWEN_AUDIO_AGENT_BACKEND_MODEL=qwen3.7-max
 ```
 
-公共覆盖会映射到支持该设置的后台；`OPENCODE_MODEL`、`OPENCLAW_MODEL`、
-`QODER_MODEL`、`CODEBUDDY_MODEL` 和 `CODEX_MODEL` 可进一步使用后台原生模型
-标识。未设置这些变量时不会改变 Agent 当前使用的模型。
+公共覆盖会映射到所选后台；`OPENCODE_MODEL`、`OPENCLAW_MODEL`、
+`QODER_MODEL`、`HERMES_MODEL`、`CODEBUDDY_MODEL`、`CODEX_MODEL`、
+`CLAUDE_MODEL` 和 `ACP_MODEL` 可进一步使用后台原生模型标识，并优先于公共值。
+模型 ID 由各 Agent 定义，并不由 ACP 统一命名。
+
+显式模型会应用于协调 Session、新建项目 Session 和恢复的项目 Session。Gateway
+从 ACP `configOptions` 中按 `category: model` 发现模型选项，并通过
+`session/set_config_option` 设置；如果 Agent 没有提供模型配置、目标模型不在
+可选清单中、调用失败或返回结果无法确认生效，当前请求会明确失败，不会静默换用
+其他模型。未设置任何模型变量时完全不调用模型设置接口。
 
 本地身份密钥由程序首次启动时自动生成，保存在同一配置目录的 `state.env`，
 文件权限为仅当前用户可读写。
@@ -161,12 +169,13 @@ AGENT_PROTOCOL=hermes
 QWEN_AUDIO_AGENT_BACKEND_PERMISSION_MODE=native
 ```
 
-Hermes 使用自身配置的模型与 provider，不受
-`QWEN_AUDIO_AGENT_BACKEND_MODEL` 影响。首次使用前可运行
-`hermes acp --check` 检查依赖。高级配置：
+Hermes 默认使用自身配置的模型与 provider。显式设置
+`HERMES_MODEL` 或 `QWEN_AUDIO_AGENT_BACKEND_MODEL` 时，Gateway 才会通过 ACP
+覆盖其 Session 模型。首次使用前可运行 `hermes acp --check` 检查依赖。高级配置：
 
 ```dotenv
 HERMES_BIN=
+HERMES_MODEL=
 HERMES_WORKSPACE=
 ```
 
@@ -239,9 +248,10 @@ AGENT_PROTOCOL=claude
 QWEN_AUDIO_AGENT_BACKEND_PERMISSION_MODE=native
 ```
 
-模型和凭据由 Claude Code 自己管理，不受
-`QWEN_AUDIO_AGENT_BACKEND_MODEL` 影响。默认复用 `~/.claude` 中已有的登录状态；
-也可以设置 `ANTHROPIC_API_KEY`。高级配置：
+模型和凭据默认由 Claude Code 自己管理，并复用 `~/.claude` 中已有的登录状态；
+也可以设置 `ANTHROPIC_API_KEY`。显式设置 `CLAUDE_MODEL` 或
+`QWEN_AUDIO_AGENT_BACKEND_MODEL` 时，Gateway 才会通过 ACP 覆盖其 Session
+模型。高级配置：
 
 ```dotenv
 CLAUDE_CODE_ACP_BIN=
@@ -250,6 +260,7 @@ CLAUDE_CODE_ACP_RUNTIME=auto
 CLAUDE_WORKSPACE=
 CLAUDE_CODE_EXECUTABLE=
 CLAUDE_CONFIG_DIR=
+CLAUDE_MODEL=
 ```
 
 设置 `CLAUDE_CONFIG_DIR` 会改用独立配置目录，需要在该目录中单独完成认证。
@@ -404,7 +415,7 @@ QWEN_AUDIO_AGENT_OPENCODE_ISOLATE_USER_CONFIG=true
 | `OPENCODE_WORKSPACE` | 用户配置目录下的 `workspaces/opencode` |
 | `QODER_WORKSPACE` | 用户配置目录下的 `workspaces/qoder` |
 | `QWEN_AUDIO_AGENT_BACKEND_MODEL` | 空；使用后台 Agent 原有模型 |
-| `OPENCODE_MODEL` / `OPENCLAW_MODEL` | 空；仅在用户显式设置时覆盖 |
+| 后台专属 `*_MODEL` | 空；显式设置时优先于公共模型并强制覆盖 Session |
 | `OPENCLAW_ATTACH_EXISTING` | `false`；由 Adapter 启动 OpenClaw Gateway |
 | `QODER_MODEL` | `auto` |
 | `QWEN_AUDIO_AGENT_BACKEND_PERMISSION_MODE` | `native` |
