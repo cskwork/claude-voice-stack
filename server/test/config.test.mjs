@@ -103,6 +103,22 @@ test('ignores backend-native model variables as Gateway overrides', () => {
   })
 })
 
+test('treats legacy auto as no backend model override', () => {
+  assert.deepEqual(resolveBackendModels({
+    QWEN_AUDIO_AGENT_BACKEND_MODEL: 'AUTO',
+  }), {
+    common: '',
+    openCode: '',
+    openClaw: '',
+    qoder: '',
+    hermes: '',
+    codeBuddy: '',
+    codex: '',
+    claude: '',
+    acp: '',
+  })
+})
+
 test('uses only the unified backend model override', () => {
   assert.deepEqual(resolveBackendModels({
     QWEN_AUDIO_AGENT_BACKEND_MODEL: 'qwen3.7-max',

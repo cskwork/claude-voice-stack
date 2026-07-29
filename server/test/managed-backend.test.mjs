@@ -1,7 +1,20 @@
 import assert from 'node:assert/strict'
 import { EventEmitter } from 'node:events'
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs'
+import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
 import test from 'node:test'
+import {
+  resolveOpenClawGatewayToken,
+  syncOpenClawGatewayTokenFile,
+  writeIsolatedOpenClawConfig,
+} from '../src/process/backend-drivers/openclaw-auth.mjs'
 import {
   applyBackendPermissionMode,
   resolveManagedBackend,
@@ -19,34 +32,77 @@ function childProcess() {
   return child
 }
 
-test('attaching an existing OpenClaw Gateway does not start another one', async () => {
-  let spawned = false
-  const env = {
-    AGENT_PROTOCOL: 'openclaw',
-    OPENCLAW_ATTACH_EXISTING: 'true',
-    OPENCLAW_BASE_URL: 'http://127.0.0.1:18789',
+function openClawFixture() {
+  const root = mkdtempSync(resolve(tmpdir(), 'qwaudio-openclaw-'))
+  const stateDirectory = resolve(root, '.openclaw')
+  mkdirSync(stateDirectory, { recursive: true })
+  return {
+    root,
+    configPath: resolve(stateDirectory, 'openclaw.json'),
+    tokenPath: resolve(root, 'qwaudio', 'gateway-secret'),
   }
-  assert.deepEqual(resolveManagedBackend(env), {
-    protocol: 'openclaw',
-    ownership: 'external',
-    permissionMode: 'native',
-    baseUrl: 'http://127.0.0.1:18789',
+}
+
+test('reads the configured OpenClaw Gateway credential', () => {
+  const fixture = openClawFixture()
+  writeFileSync(fixture.configPath, `{
+    gateway: { auth: { token: 'configured-value' } },
+  }`)
+  assert.equal(resolveOpenClawGatewayToken({
+    env: {},
+    homeDirectory: fixture.root,
+  }), 'configured-value')
+})
+
+test('writes the resolved credential to the private ACP file', () => {
+  const fixture = openClawFixture()
+  writeFileSync(fixture.configPath, JSON.stringify({
+    gateway: { auth: { token: '${PRIVATE_VALUE}' } },
+  }))
+  assert.equal(syncOpenClawGatewayTokenFile({
+    env: { PRIVATE_VALUE: 'resolved-value' },
+    homeDirectory: fixture.root,
+    targetPath: fixture.tokenPath,
+  }), true)
+  assert.equal(readFileSync(fixture.tokenPath, 'utf8'), 'resolved-value\n')
+  assert.equal(statSync(fixture.tokenPath).mode & 0o777, 0o600)
+})
+
+test('prefers an explicit OpenClaw Gateway credential', () => {
+  assert.equal(resolveOpenClawGatewayToken({
+    env: { OPENCLAW_GATEWAY_TOKEN: 'explicit-value' },
+  }), 'explicit-value')
+})
+
+test('copies OpenClaw capabilities without external message channels', () => {
+  const fixture = openClawFixture()
+  const isolatedPath = resolve(fixture.root, 'isolated', 'openclaw.json')
+  writeFileSync(fixture.configPath, `{
+    models: { providers: { user: { models: [] } } },
+    agents: { defaults: { model: 'user/default' } },
+    plugins: { allow: ['example'] },
+    channels: { dingtalk: { enabled: true } },
+  }`)
+  assert.equal(writeIsolatedOpenClawConfig({
+    sourcePath: fixture.configPath,
+    targetPath: isolatedPath,
+  }), true)
+  const isolated = JSON.parse(readFileSync(isolatedPath, 'utf8'))
+  assert.deepEqual(isolated.models, {
+    providers: { user: { models: [] } },
   })
-  const runtime = await startManagedBackend({
-    root: '/repo',
-    env,
-    spawnImpl: () => {
-      spawned = true
-    },
-  })
-  assert.equal(runtime.ownsProcess, false)
-  assert.equal(spawned, false)
+  assert.equal(isolated.agents.defaults.model, 'user/default')
+  assert.deepEqual(isolated.plugins.allow, ['example'])
+  assert.equal('channels' in isolated, false)
+  assert.equal(statSync(isolatedPath).mode & 0o777, 0o600)
 })
 
 test('Gateway-owned backend moves away from occupied ports', async () => {
   const env = {
     AGENT_PROTOCOL: 'openclaw',
     OPENCLAW_BASE_URL: 'http://127.0.0.1:18789',
+    DASHSCOPE_API_KEY: 'test-key',
+    QWEN_AUDIO_AGENT_BACKEND_MODEL: 'qwen-plus',
   }
   const calls = []
   const child = childProcess()
@@ -69,6 +125,28 @@ test('Gateway-owned backend moves away from occupied ports', async () => {
   assert.equal(calls[0][2].env.QWEN_AUDIO_AGENT_ENV_LOADED, '1')
   runtime.close()
   assert.deepEqual(signals, [[-4242, 'SIGTERM']])
+})
+
+test('force-stops a managed backend that ignores graceful shutdown', async () => {
+  const env = {
+    AGENT_PROTOCOL: 'openclaw',
+    OPENCLAW_BASE_URL: 'http://127.0.0.1:18789',
+  }
+  const child = childProcess()
+  const signals = []
+  const runtime = await startManagedBackend({
+    root: '/repo',
+    env,
+    platform: 'darwin',
+    isAddressInUse: async () => false,
+    spawnImpl: () => child,
+  })
+  runtime.killImpl = (pid, signal) => signals.push([pid, signal])
+  await runtime.stop('SIGTERM', 1)
+  assert.deepEqual(signals, [
+    [-4242, 'SIGTERM'],
+    [-4242, 'SIGKILL'],
+  ])
 })
 
 test('requires an explicit backend selection', () => {
@@ -177,11 +255,6 @@ test('full permission mode configures managed OpenCode without discarding inline
 })
 
 test('full permission mode rejects backends that cannot support it safely', () => {
-  assert.throws(() => resolveManagedBackend({
-    AGENT_PROTOCOL: 'openclaw',
-    OPENCLAW_ATTACH_EXISTING: 'true',
-    QWEN_AUDIO_AGENT_BACKEND_PERMISSION_MODE: 'full',
-  }), /只支持由 Gateway 启动/)
   assert.throws(() => resolveManagedBackend({
     AGENT_PROTOCOL: 'openclaw',
     QWEN_AUDIO_AGENT_BACKEND_PERMISSION_MODE: 'full',

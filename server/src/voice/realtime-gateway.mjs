@@ -63,6 +63,14 @@ export function confirmsTaskNotificationOnPlaybackStart(context) {
   )
 }
 
+export function acceptsPlaybackReceipt({
+  outputEnabled,
+  active,
+  responseKnown,
+}) {
+  return outputEnabled === true && active === true && responseKnown === true
+}
+
 function clientDescriptor(event = {}) {
   const type = ['desktop', 'cli', 'web'].includes(event.clientType)
     ? event.clientType
@@ -1310,13 +1318,30 @@ export function attachRealtimeGateway(server, {
         announcements.dismissActive()
         frontend?.cancel()
       } else if (event.type === GatewayClientEvent.PLAYBACK_STARTED) {
-        startPlayback(String(event.responseId || ''))
+        const id = String(event.responseId || '')
+        if (acceptsPlaybackReceipt({
+          outputEnabled,
+          active: activeVoiceClients.isActive(ownerId, voiceClient),
+          responseKnown: responseContexts.has(id),
+        })) startPlayback(id)
       } else if (event.type === GatewayClientEvent.PLAYBACK_ENDED) {
-        finishPlayback(String(event.responseId || ''))
+        const id = String(event.responseId || '')
+        if (acceptsPlaybackReceipt({
+          outputEnabled,
+          active: activeVoiceClients.isActive(ownerId, voiceClient),
+          responseKnown: responseContexts.has(id),
+        })) finishPlayback(id)
       } else if (event.type === GatewayClientEvent.PLAYBACK_CANCELLED) {
-        cancelQueuedPlayback(String(event.responseId || ''), {
-          reason: String(event.reason || ''),
-        })
+        const id = String(event.responseId || '')
+        if (acceptsPlaybackReceipt({
+          outputEnabled,
+          active: activeVoiceClients.isActive(ownerId, voiceClient),
+          responseKnown: responseContexts.has(id),
+        })) {
+          cancelQueuedPlayback(id, {
+            reason: String(event.reason || ''),
+          })
+        }
       } else if (event.type === GatewayClientEvent.MUTE) {
         releaseVoiceClient()
         turnGeneration += 1

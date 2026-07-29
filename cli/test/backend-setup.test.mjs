@@ -56,6 +56,44 @@ test('reports an incompatible installed OpenCode version', () => {
   assert.match(report.backends[0].issues[0], /最低版本 1\.18\.0/)
 })
 
+test('reports automatic OpenCode and OpenClaw package setup', () => {
+  const openCode = inspector({
+    backend: 'opencode',
+    env: {
+      DASHSCOPE_API_KEY: 'test-key',
+      QWEN_AUDIO_AGENT_BACKEND_MODEL: 'qwen3.7-max',
+    },
+    commands: { npx: '/bin/npx' },
+  }).backends[0]
+  assert.equal(openCode.ready, true)
+  assert.equal(openCode.backend.source, 'managed')
+  assert.equal(openCode.configuration, 'automatic-bailian')
+
+  const openClaw = inspector({
+    backend: 'openclaw',
+    env: {
+      DASHSCOPE_API_KEY: 'test-key',
+      QWEN_AUDIO_AGENT_BACKEND_MODEL: 'qwen3.7-max',
+    },
+    commands: { npx: '/bin/npx' },
+  }).backends[0]
+  assert.equal(openClaw.ready, true)
+  assert.equal(openClaw.backend.source, 'managed')
+  assert.equal(openClaw.configuration, 'automatic-bailian')
+})
+
+test('does not report automatic fallback ready without Bailian setup', () => {
+  for (const backend of ['opencode', 'openclaw']) {
+    const item = inspector({
+      backend,
+      commands: { npx: '/bin/npx' },
+    }).backends[0]
+    assert.equal(item.ready, false)
+    assert.match(item.issues[0], /DASHSCOPE_API_KEY/)
+    assert.match(item.issues[0], /QWEN_AUDIO_AGENT_BACKEND_MODEL/)
+  }
+})
+
 test('checks explicit generic ACP commands and adapter binaries', () => {
   const generic = inspector({
     backend: 'acp',
@@ -116,5 +154,5 @@ test('formats a concise read-only setup report', () => {
   assert.match(output, /只读，不会安装、登录或修改配置/)
   assert.match(output, /Codex \[当前\]/)
   assert.match(output, /默认不覆盖后台模型/)
-  assert.match(output, /不读取或验证凭据/)
+  assert.match(output, /不会输出或验证凭据/)
 })

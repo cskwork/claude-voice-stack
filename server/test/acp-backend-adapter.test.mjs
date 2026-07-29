@@ -218,6 +218,171 @@ test('waits for the managed OpenClaw Gateway before starting its ACP bridge', as
   assert.equal(starts, 1)
 })
 
+test('retries an empty ACP coordinator response in a fresh Session', async () => {
+  const prompts = []
+  let nextSession = 0
+  const client = {
+    async newSession(options) {
+      return {
+        sessionId: `coordinator-${++nextSession}`,
+        cwd: options.cwd,
+        response: {},
+      }
+    },
+    async prompt(sessionId) {
+      prompts.push(sessionId)
+      return {
+        content: prompts.length === 1 ? '' : completed('新 Session 已恢复'),
+        response: { stopReason: 'end_turn' },
+      }
+    },
+    async close() {},
+  }
+  const adapter = new AcpBackendAdapter({
+    protocol: 'openclaw',
+    baseUrl: 'http://127.0.0.1:18789',
+    directory: '/coordinator',
+    client,
+  })
+
+  const result = await adapter.runCoordinator('plain request', {
+    ownerId: 'owner-one',
+    coordinationRunId: 'work-one',
+  })
+
+  assert.deepEqual(prompts, ['coordinator-1', 'coordinator-2'])
+  assert.equal(
+    JSON.parse(result.content).presentation.speech,
+    '新 Session 已恢复',
+  )
+  await adapter.close()
+})
+
+test('retries an OpenClaw reply initialization conflict in the same Session', async () => {
+  const prompts = []
+  let nextSession = 0
+  const client = {
+    async newSession(options) {
+      return {
+        sessionId: `coordinator-${++nextSession}`,
+        cwd: options.cwd,
+        response: {},
+      }
+    },
+    async prompt(sessionId) {
+      prompts.push(sessionId)
+      if (prompts.length === 1) {
+        const error = new Error(
+          'OpenClaw ACP session/prompt 失败：Internal error',
+        )
+        error.body = 'reply session initialization conflicted for agent:main:test'
+        throw error
+      }
+      return {
+        content: completed('同一 Session 重试成功'),
+        response: { stopReason: 'end_turn' },
+      }
+    },
+    async close() {},
+  }
+  const adapter = new AcpBackendAdapter({
+    protocol: 'openclaw',
+    baseUrl: 'http://127.0.0.1:18789',
+    directory: '/coordinator',
+    client,
+  })
+
+  const result = await adapter.runCoordinator('plain request', {
+    ownerId: 'owner-one',
+    coordinationRunId: 'work-one',
+  })
+
+  assert.deepEqual(prompts, ['coordinator-1', 'coordinator-1'])
+  assert.equal(nextSession, 1)
+  assert.equal(
+    JSON.parse(result.content).presentation.speech,
+    '同一 Session 重试成功',
+  )
+  await adapter.close()
+})
+
+test('does not replay an OpenClaw conflict after response activity', async () => {
+  let prompts = 0
+  const client = {
+    async newSession(options) {
+      return {
+        sessionId: 'coordinator-one',
+        cwd: options.cwd,
+        response: {},
+      }
+    },
+    async prompt(_sessionId, _prompt, options) {
+      prompts += 1
+      options.onUpdate({
+        sessionUpdate: 'agent_message_chunk',
+        content: { type: 'text', text: 'partial' },
+      })
+      const error = new Error(
+        'reply session initialization conflicted for agent:main:test',
+      )
+      throw error
+    },
+    async close() {},
+  }
+  const adapter = new AcpBackendAdapter({
+    protocol: 'openclaw',
+    baseUrl: 'http://127.0.0.1:18789',
+    directory: '/coordinator',
+    client,
+  })
+
+  await assert.rejects(
+    adapter.runCoordinator('plain request', {
+      ownerId: 'owner-one',
+      coordinationRunId: 'work-one',
+    }),
+    /reply session initialization conflicted/,
+  )
+  assert.equal(prompts, 1)
+  await adapter.close()
+})
+
+test('rejects repeated empty ACP coordinator responses', async () => {
+  let nextSession = 0
+  const client = {
+    async newSession(options) {
+      return {
+        sessionId: `coordinator-${++nextSession}`,
+        cwd: options.cwd,
+        response: {},
+      }
+    },
+    async prompt() {
+      return {
+        content: '',
+        response: { stopReason: 'end_turn' },
+      }
+    },
+    async close() {},
+  }
+  const adapter = new AcpBackendAdapter({
+    protocol: 'openclaw',
+    baseUrl: 'http://127.0.0.1:18789',
+    directory: '/coordinator',
+    client,
+  })
+
+  await assert.rejects(
+    adapter.runCoordinator('plain request', {
+      ownerId: 'owner-one',
+      coordinationRunId: 'work-one',
+    }),
+    /未返回任何内容/,
+  )
+  assert.equal(nextSession, 2)
+  await adapter.close()
+})
+
 test('continues a remembered project Session when session_send omits directory', async () => {
   const client = fakeAcpClient({
     action: 'send',
@@ -271,6 +436,7 @@ test('uses one ACP profile family while preserving backend differences', () => {
       root,
       directory: '/work',
       permissionMode: 'full',
+      model: 'qwen3.7-max',
     }).args,
     ['--acp', '--dangerously-skip-permissions'],
   )
@@ -293,6 +459,17 @@ test('uses one ACP profile family while preserving backend differences', () => {
     '/state/gateway-token',
     '--verbose',
   ])
+  assert.equal(openClaw.env.OPENCLAW_STATE_DIR, '/state')
+  const openClawWithTokenFileOnly = acpBackendProfile({
+    protocol: 'openclaw',
+    root,
+    directory: '/work',
+    baseUrl: 'http://127.0.0.1:18789',
+    token: '',
+    tokenFile: '/state/gateway-token',
+    permissionMode: 'native',
+  })
+  assert.ok(openClawWithTokenFileOnly.args.includes('--token-file'))
   const generic = acpBackendProfile({
     protocol: 'acp',
     root,
@@ -709,6 +886,72 @@ test('selects supported ACP Session mode and model config options', async () => 
   await adapter.close()
 })
 
+test('matches Qoder ACP model names case-insensitively and sends the opaque ID', async () => {
+  const client = fakeAcpClient()
+  const configured = []
+  client.setSessionConfigOption = async (...args) => {
+    configured.push(args)
+    return {
+      configOptions: [{
+        id: 'model',
+        category: 'model',
+        type: 'select',
+        currentValue: args[2],
+        options: [{ value: 'qmodel_latest', name: 'Qwen3.7-Max' }],
+      }],
+    }
+  }
+  const adapter = new AcpBackendAdapter({
+    protocol: 'qoder',
+    model: 'qwen3.7-max',
+    client,
+  })
+  await adapter.configureSession({
+    sessionId: 'qoder-session',
+    response: {
+      configOptions: [{
+        id: 'model',
+        category: 'model',
+        type: 'select',
+        currentValue: 'qmodel',
+        options: [
+          { value: 'qmodel', name: 'Qwen3.7-Plus' },
+          { value: 'qmodel_latest', name: 'Qwen3.7-Max' },
+        ],
+      }],
+    },
+  }, 'project')
+  assert.deepEqual(configured, [
+    ['qoder-session', 'model', 'qmodel_latest'],
+  ])
+  await adapter.close()
+})
+
+test('does not reset a Qoder model already selected by its opaque ID', async () => {
+  const client = fakeAcpClient()
+  const configured = []
+  client.setSessionConfigOption = async (...args) => configured.push(args)
+  const adapter = new AcpBackendAdapter({
+    protocol: 'qoder',
+    model: 'qwen3.7-max',
+    client,
+  })
+  await adapter.configureSession({
+    sessionId: 'qoder-session',
+    response: {
+      configOptions: [{
+        id: 'model',
+        category: 'model',
+        type: 'select',
+        currentValue: 'qmodel_latest',
+        options: [{ value: 'qmodel_latest', name: 'Qwen3.7-Max' }],
+      }],
+    },
+  }, 'project')
+  assert.deepEqual(configured, [])
+  await adapter.close()
+})
+
 test('never calls ACP model configuration without an explicit model', async () => {
   for (const model of ['', 'auto']) {
     const client = fakeAcpClient()
@@ -735,6 +978,137 @@ test('never calls ACP model configuration without an explicit model', async () =
     assert.deepEqual(configured, [])
     await adapter.close()
   }
+})
+
+test('replaces a restored OpenCode coordinator with a stale mode', async () => {
+  const client = fakeAcpClient()
+  client.resumeSession = async () => ({
+    sessionId: 'old-coordinator',
+    response: {
+      configOptions: [{
+        id: 'mode',
+        type: 'select',
+        currentValue: 'qwen-audio-agent-backend',
+        options: [{ value: 'build' }, { value: 'plan' }],
+      }],
+    },
+  })
+  client.newSession = async options => ({
+    sessionId: 'new-coordinator',
+    cwd: options.cwd,
+    response: {
+      configOptions: [{
+        id: 'mode',
+        type: 'select',
+        currentValue: 'build',
+        options: [{ value: 'build' }, { value: 'plan' }],
+      }],
+    },
+  })
+  const adapter = new AcpBackendAdapter({
+    protocol: 'opencode',
+    client,
+  })
+  adapter.registry.get = () => ({
+    sessionId: 'old-coordinator',
+    cwd: '/old-workspace',
+  })
+  const deleted = []
+  const saved = []
+  adapter.registry.delete = key => deleted.push(key)
+  adapter.registry.set = (key, session) => saved.push([key, session.sessionId])
+
+  const session = await adapter.ensureCoordinatorSession('owner-one')
+  assert.equal(session.sessionId, 'new-coordinator')
+  assert.equal(session.isNew, true)
+  assert.equal(deleted.length, 1)
+  assert.deepEqual(saved, [[deleted[0], 'new-coordinator']])
+  await adapter.close()
+})
+
+test('supports legacy ACP Session model selection', async () => {
+  const client = fakeAcpClient()
+  const configured = []
+  client.setLegacySessionModel = async (...args) => configured.push(args)
+  const adapter = new AcpBackendAdapter({
+    protocol: 'claude',
+    model: 'claude-sonnet',
+    client,
+  })
+  const session = {
+    sessionId: 'legacy-session',
+    response: {
+      models: {
+        currentModelId: 'claude-default',
+        availableModels: [
+          { modelId: 'claude-default' },
+          { modelId: 'claude-sonnet' },
+        ],
+      },
+    },
+  }
+  await adapter.configureSession(session, 'project')
+  assert.deepEqual(configured, [
+    ['legacy-session', 'claude-sonnet'],
+  ])
+  assert.equal(session.response.models.currentModelId, 'claude-sonnet')
+  await adapter.close()
+})
+
+test('matches legacy ACP model IDs case-insensitively', async () => {
+  const client = fakeAcpClient()
+  const configured = []
+  client.setLegacySessionModel = async (...args) => configured.push(args)
+  const adapter = new AcpBackendAdapter({
+    protocol: 'claude',
+    model: 'claude-sonnet',
+    client,
+  })
+  const session = {
+    sessionId: 'legacy-session',
+    response: {
+      models: {
+        currentModelId: 'Claude-Default',
+        availableModels: [
+          { modelId: 'Claude-Default' },
+          { modelId: 'Claude-Sonnet' },
+        ],
+      },
+    },
+  }
+  await adapter.configureSession(session, 'project')
+  assert.deepEqual(configured, [
+    ['legacy-session', 'Claude-Sonnet'],
+  ])
+  assert.equal(session.response.models.currentModelId, 'Claude-Sonnet')
+  await adapter.close()
+})
+
+test('uses OpenClaw Gateway model override when ACP omits model options', async () => {
+  const client = fakeAcpClient()
+  const configured = []
+  const adapter = new AcpBackendAdapter({
+    protocol: 'openclaw',
+    baseUrl: 'http://127.0.0.1:18789',
+    directory: '/coordinator',
+    model: 'bailian/qwen3.7-plus',
+    client,
+    nativeDelegationAdapter: {
+      async setSessionModel(input) {
+        configured.push(input)
+      },
+    },
+  })
+  await adapter.configureSession({
+    sessionId: 'openclaw-session',
+    meta: { sessionKey: 'agent:voice:coordinator' },
+    response: { configOptions: [] },
+  }, 'coordinator')
+  assert.deepEqual(configured, [{
+    sessionKey: 'agent:voice:coordinator',
+    model: 'bailian/qwen3.7-plus',
+  }])
+  await adapter.close()
 })
 
 test('rejects explicit models that ACP cannot apply', async () => {

@@ -306,6 +306,18 @@ function inspectBackend(id, {
     ? environmentValue(env, spec.commandEnvironment)
     : environmentValue(env, spec.executableEnvironment)
   const command = configured.value || spec.command
+  const runtimeEnvironment = id === 'opencode'
+    ? 'OPENCODE_RUNTIME'
+    : id === 'openclaw' ? 'OPENCLAW_RUNTIME' : ''
+  const runtime = runtimeEnvironment
+    ? clean(env[runtimeEnvironment] || 'auto').toLowerCase()
+    : ''
+  const automaticBailian = (
+    ['opencode', 'openclaw'].includes(id)
+    && Boolean(clean(env.DASHSCOPE_API_KEY))
+    && Boolean(clean(env.QWEN_AUDIO_AGENT_BACKEND_MODEL))
+    && clean(env.QWEN_AUDIO_AGENT_BACKEND_MODEL).toLowerCase() !== 'auto'
+  )
   let backend = explicitRuntime(id, env, find)
   if (!backend) {
     const path = find(command)
@@ -323,6 +335,23 @@ function inspectBackend(id, {
               ? `请设置 ${spec.commandEnvironment}`
               : `未找到 ${definition.label}，请先安装并完成原生配置`,
         }
+    if (
+      !backend.ready
+      && ['opencode', 'openclaw'].includes(id)
+      && runtime === 'auto'
+    ) {
+      const npx = find('npx')
+      if (npx && automaticBailian) {
+        backend = {
+          ready: true,
+          source: 'managed',
+          path: npx,
+        }
+      } else if (npx) {
+        backend.issue = `未找到 ${definition.label}；自动部署需要 `
+          + 'DASHSCOPE_API_KEY 和 QWEN_AUDIO_AGENT_BACKEND_MODEL'
+      }
+    }
   }
 
   if (
@@ -333,10 +362,23 @@ function inspectBackend(id, {
     const version = readVersion(backend.path)
     backend.version = version
     if (!versionAtLeast(version, spec.minimumVersion)) {
-      backend.ready = false
-      backend.issue = version
-        ? `OpenCode ${version} 低于最低版本 ${spec.minimumVersion}`
-        : '无法确认 OpenCode 版本'
+      const npx = runtime === 'auto' ? find('npx') : ''
+      if (npx && automaticBailian) {
+        backend = {
+          ready: true,
+          source: 'managed',
+          path: npx,
+          fallbackFromVersion: version,
+        }
+      } else {
+        backend.ready = false
+        backend.issue = npx
+          ? `OpenCode ${version || '版本未知'} 不兼容；自动部署需要 `
+            + 'DASHSCOPE_API_KEY 和 QWEN_AUDIO_AGENT_BACKEND_MODEL'
+          : version
+            ? `OpenCode ${version} 低于最低版本 ${spec.minimumVersion}`
+            : '无法确认 OpenCode 版本'
+      }
     }
   }
 
@@ -352,7 +394,9 @@ function inspectBackend(id, {
     backend,
     adapter,
     integration: spec.integration,
-    configuration: id === 'acp' ? 'command-managed' : 'preserved',
+    configuration: id === 'acp'
+      ? 'command-managed'
+      : automaticBailian ? 'automatic-bailian' : 'preserved',
     authentication: 'backend-managed',
     issues,
     platform,
@@ -391,6 +435,9 @@ function integrationText(item) {
 
 function backendText(item) {
   if (!item.backend.ready) return item.backend.issue
+  if (item.backend.source === 'managed') {
+    return `启动时通过 npx 自动下载兼容版本（${item.backend.path}）`
+  }
   if (item.backend.source === 'package') return `显式 package 模式（${item.backend.path}）`
   if (item.backend.source === 'source') return `源码模式（${item.backend.path}）`
   if (item.backend.source === 'bundle') return `Bundle（${item.backend.path}）`
@@ -410,9 +457,11 @@ export function formatBackendSetup(report) {
       ? [
           backendText(item),
           integrationText(item),
-          item.configuration === 'preserved'
-            ? '复用用户级配置'
-            : '配置由 ACP Agent 管理',
+          item.configuration === 'automatic-bailian'
+            ? '自动配置百炼 API Key 与后台模型'
+            : item.configuration === 'preserved'
+              ? '复用用户级配置'
+              : '配置由 ACP Agent 管理',
         ]
       : item.issues
     lines.push(
@@ -422,8 +471,9 @@ export function formatBackendSetup(report) {
     lines.push('')
   }
   lines.push(
-    '默认不覆盖后台模型；认证由后台 Agent 管理，此命令不读取或验证凭据。',
-    '请先确认所选 Agent 在原生终端中可以正常工作。',
+    '默认不覆盖后台模型；认证由后台 Agent 管理，此命令不会输出或验证凭据。',
+    'OpenCode 和 OpenClaw 可在启动时自动下载；配置百炼 API Key 与后台模型后可一键接入。',
+    '其他后台请先确认在原生终端中可以正常工作。',
   )
   return lines.join('\n')
 }

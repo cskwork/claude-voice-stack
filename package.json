@@ -1,6 +1,6 @@
 {
   "name": "qwen-audio-agent",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "description": "A realtime voice frontend for mainstream AI agents.",
   "author": "qwen-audio-agent contributors",
   "license": "Apache-2.0",
@@ -31,6 +31,7 @@
     "cli/src/",
     "cli/package.json",
     "config/frontend-agent/",
+    "config/openclaw/openclaw.json5",
     "config/openclaw/workspace/AGENTS.md",
     "config/hermes/workspace/AGENTS.md",
     "config/codebuddy/workspace/AGENTS.md",

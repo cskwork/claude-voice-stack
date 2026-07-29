@@ -3,6 +3,7 @@ import test from 'node:test'
 import {
   phaseForTask,
   removeDeliveredTask,
+  removeTaskInPhase,
   taskDetail,
   taskLabel,
   taskView,
@@ -69,6 +70,17 @@ test('a late delivery receipt cannot resurrect a removed task card', () => {
     { id: 'other', phase: 'running' },
   ])
   assert.deepEqual(removeDeliveredTask([], 'delivered'), [])
+})
+
+test('removes a transient task only while it remains in the expected phase', () => {
+  const tasks = [
+    { id: 'cancelled', phase: 'cancelled' },
+    { id: 'reused', phase: 'running' },
+  ]
+  assert.deepEqual(removeTaskInPhase(tasks, 'cancelled', 'cancelled'), [
+    { id: 'reused', phase: 'running' },
+  ])
+  assert.deepEqual(removeTaskInPhase(tasks, 'reused', 'cancelled'), tasks)
 })
 
 test('shows stable user-facing progress instead of raw backend commands', () => {

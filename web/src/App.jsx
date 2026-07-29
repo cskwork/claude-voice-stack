@@ -20,6 +20,7 @@ import { desktopOrbClassName } from './orb-presentation.js'
 import { resultLabel } from './presentation.js'
 import {
   removeDeliveredTask,
+  removeTaskInPhase,
   taskDetail,
   taskLabel,
   taskView,
@@ -116,6 +117,7 @@ export default function App() {
   const currentTurnId = useRef('')
   const responseTurnMap = useRef(new Map())
   const agentTurnIds = useRef(new Set())
+  const taskDismissTimers = useRef(new Map())
   const messagesRef = useRef(null)
   const stickToBottom = useRef(true)
   const orbDrag = useRef(null)
@@ -180,6 +182,11 @@ export default function App() {
       container.scrollTop = container.scrollHeight
     }
   }, [messages, agentTasks])
+
+  useEffect(() => () => {
+    taskDismissTimers.current.forEach(timer => clearTimeout(timer))
+    taskDismissTimers.current.clear()
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -555,6 +562,16 @@ export default function App() {
         task => ({ ...taskView(cancelled, task), phase: 'cancelled' }),
         { ...taskView(cancelled), phase: 'cancelled' },
       ))
+      clearTimeout(taskDismissTimers.current.get(cancelled.id))
+      taskDismissTimers.current.set(cancelled.id, setTimeout(() => {
+        setAgentTasks(items => removeTaskInPhase(
+          items,
+          cancelled.id,
+          'cancelled',
+        ))
+        setActivity(current => current === '已取消' ? '待命' : current)
+        taskDismissTimers.current.delete(cancelled.id)
+      }, 3000))
     }
     if (event.type === 'transcript.final' && event.role === 'assistant') {
       if (event.turnId === currentTurnId.current) setActivity('待命')
@@ -599,6 +616,8 @@ export default function App() {
     : ''
 
   const resetSession = () => {
+    taskDismissTimers.current.forEach(timer => clearTimeout(timer))
+    taskDismissTimers.current.clear()
     const next = crypto.randomUUID()
     localStorage.setItem('qwen-audio-agent.session', next)
     setSessionId(next)

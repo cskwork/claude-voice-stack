@@ -24,17 +24,7 @@ export function resolveManagedBackend(env = process.env) {
   }
   const driver = backendRuntimeDriver(protocol)
   const resolvedPermissionMode = permissionMode(env)
-  const attachOpenClaw = (
-    protocol === 'openclaw'
-    && String(env.OPENCLAW_ATTACH_EXISTING || '').toLowerCase() === 'true'
-  )
-  if (
-    String(env.OPENCLAW_ATTACH_EXISTING || '').toLowerCase() === 'true'
-    && protocol !== 'openclaw'
-  ) {
-    throw new Error('OPENCLAW_ATTACH_EXISTING 只适用于 OpenClaw')
-  }
-  const ownership = attachOpenClaw ? 'external' : 'owned'
+  const ownership = driver.resolveOwnership?.({ env }) || 'owned'
   if (resolvedPermissionMode === 'full' && ownership !== 'owned') {
     throw new Error('最高权限模式只支持由 Gateway 启动的后台 Agent')
   }
@@ -154,6 +144,27 @@ export class ManagedBackendRuntime {
       }
     }
     child.kill(signal)
+  }
+
+  async stop(signal = 'SIGTERM', timeoutMs = 1500) {
+    const child = this.child
+    if (!child || child.exitCode != null || child.signalCode != null) return
+    this.close(signal)
+    await new Promise(resolvePromise => {
+      let finished = false
+      const finish = () => {
+        if (finished) return
+        finished = true
+        clearTimeout(timer)
+        child.off?.('exit', finish)
+        resolvePromise()
+      }
+      const timer = setTimeout(() => {
+        this.close('SIGKILL')
+        finish()
+      }, timeoutMs)
+      child.once?.('exit', finish)
+    })
   }
 }
 

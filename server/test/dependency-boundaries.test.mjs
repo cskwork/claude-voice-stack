@@ -57,6 +57,21 @@ test('server source dependencies follow the documented layer direction', () => {
   assert.deepEqual(violations, [])
 })
 
+test('generic ACP and process cores do not bind to named backends', () => {
+  const genericCoreFiles = [
+    resolve(sourceRoot, 'agent/acp-process-client.mjs'),
+    resolve(sourceRoot, 'agent/acp-backend-adapter.mjs'),
+    resolve(sourceRoot, 'process/managed-backend.mjs'),
+    resolve(projectRoot, 'cli/src/runtime.mjs'),
+    resolve(projectRoot, 'cli/src/launcher.mjs'),
+  ]
+  const namedBackend = /\b(?:openclaw|opencode|qoder|hermes|codebuddy|codex|claude)\b/i
+  const violations = genericCoreFiles
+    .filter(file => namedBackend.test(readFileSync(file, 'utf8')))
+    .map(file => relative(projectRoot, file))
+  assert.deepEqual(violations, [])
+})
+
 test('UI source code does not import Gateway or another client implementation', () => {
   const roots = [
     resolve(projectRoot, 'web/src'),

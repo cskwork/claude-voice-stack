@@ -70,9 +70,6 @@ export function parseArguments(argv, env = process.env) {
       env.QWEN_AUDIO_AGENT_TUI_AUDIO_MODE || 'half',
     ).toLowerCase(),
     backend: String(env.AGENT_PROTOCOL || '').toLowerCase(),
-    attachOpenClaw: String(
-      env.OPENCLAW_ATTACH_EXISTING || '',
-    ).toLowerCase() === 'true',
     backendPermissionMode: String(
       env.QWEN_AUDIO_AGENT_BACKEND_PERMISSION_MODE || 'native',
     ).toLowerCase(),
@@ -96,9 +93,6 @@ export function parseArguments(argv, env = process.env) {
     } else if (argument === '--backend') {
       options.backend = nextValue(args, index++, '--backend').toLowerCase()
       options.backendSpecified = true
-      options.gatewayConfigurationSpecified = true
-    } else if (argument === '--attach-openclaw') {
-      options.attachOpenClaw = true
       options.gatewayConfigurationSpecified = true
     } else if (argument === '--backend-agent') {
       options.backendAgent = nextValue(args, index++, '--backend-agent').trim()
@@ -175,20 +169,6 @@ export function parseArguments(argv, env = process.env) {
     : ''
   if (
     command !== 'setup'
-    && options.attachOpenClaw
-    && options.backend !== 'openclaw'
-  ) {
-    throw new Error('--attach-openclaw 只适用于 OpenClaw')
-  }
-  if (
-    command !== 'setup'
-    && options.backendPermissionMode === 'full'
-    && options.attachOpenClaw
-  ) {
-    throw new Error('最高权限模式只支持由 Gateway 启动的后台 Agent')
-  }
-  if (
-    command !== 'setup'
     && definition
     && options.backendPermissionMode === 'full'
     && !definition.supportsFullPermission
@@ -233,7 +213,6 @@ export function helpText() {
     'Gateway 选项：',
     '  --url URL              Gateway 地址（默认 http://127.0.0.1:3101）',
     '  --backend NAME         必填：openclaw、opencode、qoder、hermes、codebuddy、codex、claude 或 acp（也可在 config.env 设置 AGENT_PROTOCOL）',
-    '  --attach-openclaw      连接用户已启动的 OpenClaw Gateway',
     '  --backend-permission-mode MODE  native（默认）或 full（最高权限）',
     '  --backend-url URL      后台 Server 地址',
     '  --backend-agent ID     指定协调 Agent',

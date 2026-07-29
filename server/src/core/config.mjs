@@ -116,7 +116,10 @@ function backendModelName(value) {
 }
 
 export function resolveBackendModels(env = process.env) {
-  const common = String(env.QWEN_AUDIO_AGENT_BACKEND_MODEL || '').trim()
+  const configured = String(
+    env.QWEN_AUDIO_AGENT_BACKEND_MODEL || '',
+  ).trim()
+  const common = configured.toLowerCase() === 'auto' ? '' : configured
   const name = backendModelName(common)
   return {
     common,
@@ -134,13 +137,14 @@ export function resolveBackendModels(env = process.env) {
 const configuredAgentProtocol = String(
   process.env.AGENT_PROTOCOL || '',
 ).toLowerCase()
-const backendOwnership = (
-  configuredAgentProtocol === 'openclaw'
-  && String(
-    process.env.OPENCLAW_ATTACH_EXISTING || '',
-  ).toLowerCase() === 'true'
-) ? 'external' : 'owned'
+const backendOwnership = 'owned'
 const backendModels = resolveBackendModels()
+const managedOpenClawBailian = (
+  configuredAgentProtocol === 'openclaw'
+  && Boolean(backendModels.common)
+  && Boolean(process.env.DASHSCOPE_API_KEY)
+  && !process.env.OPENCLAW_CONFIG_PATH
+)
 const backendPermissionMode = String(
   process.env.QWEN_AUDIO_AGENT_BACKEND_PERMISSION_MODE || 'native',
 ).toLowerCase()
@@ -219,6 +223,9 @@ export const config = {
   openClawToken: (
     process.env.OPENCLAW_GATEWAY_TOKEN
     || process.env.AGENT_API_KEY
+    || (managedOpenClawBailian
+      ? process.env.QWEN_AUDIO_AGENT_AUTH_SECRET
+      : '')
     || ''
   ),
   openClawTokenFile: (
@@ -232,6 +239,7 @@ export const config = {
       process.env.OPENCLAW_COORDINATOR_AGENT,
       'voice-coordinator',
     )
+    || (managedOpenClawBailian ? 'qwen-audio-agent-backend' : '')
   ),
   openCodeBaseUrl: (
     process.env.OPENCODE_BASE_URL

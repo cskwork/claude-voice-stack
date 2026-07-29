@@ -63,13 +63,13 @@ module walkthrough.
 
 | Backend Agent | Integration | Setup | Rating |
 | --- | --- | --- | --- |
-| OpenCode | Native ACP | User installation and configuration required | ★★★★★ |
-| OpenClaw | Built-in ACP Bridge | User installation and configuration required | ★★★★★ |
-| Qoder | Native ACP | Requires user installation and authentication | ★★★★★ |
-| Hermes | Native ACP | Requires user installation and model configuration | ★★★★☆ |
-| CodeBuddy | Native ACP | Requires user installation and authentication | ★★★★☆ |
-| Codex | External ACP Adapter | Requires user installation and authentication | ★★★★☆ |
-| Claude Code | External ACP Adapter | Requires user installation and authentication | ★★★★☆ |
+| OpenCode | Native ACP | Automatic installation and Bailian setup supported | ★★★★★ |
+| OpenClaw | Built-in ACP Bridge | Automatic installation and Bailian setup supported | ★★★★★ |
+| Qoder | Native ACP | User installation and configuration required | ★★★★★ |
+| Hermes | Native ACP | User installation and configuration required | ★★★★☆ |
+| CodeBuddy | Native ACP | User installation and configuration required | ★★★★☆ |
+| Codex | External ACP Adapter | User installation and configuration required | ★★★★☆ |
+| Claude Code | External ACP Adapter | User installation and configuration required | ★★★★☆ |
 
 Ratings reflect the current integration completeness, compatibility, and
 extent of real-world validation. Five stars identify recommended integrations
@@ -147,6 +147,7 @@ qwenaudio config
 ```dotenv
 DASHSCOPE_API_KEY=your-key
 AGENT_PROTOCOL=openclaw
+QWEN_AUDIO_AGENT_BACKEND_MODEL=qwen3.7-max
 ```
 
 3. Check that the backend Agent is ready without changing it:
@@ -243,9 +244,11 @@ qwenaudio gateway uninstall
 ## Choose a Backend Agent
 
 Select the backend Agent with `AGENT_PROTOCOL` (required, no default value).
-The selected Agent must already be installed and configured.
-qwen-audio-agent reuses its existing user-level model, tools, MCP servers, Skills, and
-authentication by default. Use OpenClaw:
+OpenCode and OpenClaw can be downloaded automatically. Configure
+`DASHSCOPE_API_KEY` and `QWEN_AUDIO_AGENT_BACKEND_MODEL` to connect them to a
+Bailian model automatically. When no backend model is specified and the Agent
+is already installed and configured, qwen-audio-agent fully reuses the user's
+existing environment. Use OpenClaw:
 
 ```dotenv
 AGENT_PROTOCOL=openclaw
@@ -269,6 +272,10 @@ Hermes, CodeBuddy, Codex, and Claude Code can also be selected directly:
 AGENT_PROTOCOL=hermes
 # Or codebuddy, codex, or claude
 ```
+
+These other backends currently require the user to install and configure the
+native Agent first. qwen-audio-agent reuses its user-level model, tools, MCP
+servers, Skills, and authentication.
 
 Use another Agent that supports ACP over stdio:
 

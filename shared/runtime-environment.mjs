@@ -22,8 +22,6 @@ const USER_CONFIG_TEMPLATE = [
   '',
   '# 必填：选择后台 Agent（openclaw、opencode、qoder、hermes、codebuddy、codex、claude 或 acp）',
   'AGENT_PROTOCOL=',
-  '# OpenClaw 可选：连接用户已经启动的 Gateway',
-  '# OPENCLAW_ATTACH_EXISTING=true',
   '# 权限模式：native（后台自行询问）或 full（最高权限；仅支持安全映射的后端）',
   '# QWEN_AUDIO_AGENT_BACKEND_PERMISSION_MODE=native',
   '# 可选：显式覆盖后台模型；留空时使用 Agent 原有模型',

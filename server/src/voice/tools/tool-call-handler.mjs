@@ -338,7 +338,17 @@ export class ToolCallHandler {
         },
         turnId,
         existingId,
-        { createResponse: false },
+        {
+          response: {
+            instructions: [
+              '这个任务已经在本轮成功提交，不要再次调用工具。',
+              '结合本轮调用工具前已经对用户说过的内容，自主判断是否需要回应。',
+              '如果此前已经说明正在处理，不要重复、改写或补充确认，直接结束本次响应。',
+              '只有此前没有作出任何确认时，才用包含具体任务对象的短句说明已经开始处理。',
+              '不要把 accepted 或 duplicate 说成任务已经完成。',
+            ].join(' '),
+          },
+        },
       )
       return
     }
@@ -383,28 +393,19 @@ export class ToolCallHandler {
           },
       turnId,
       task.id,
-      task.reused
-        ? { createResponse: false }
-        : (
-            callContext.hasAudio
-            || callContext.transcriptDone
-            || callContext.pendingTranscripts?.some(item => (
-              String(item?.content || '').trim()
-            ))
-          )
-          ? { createResponse: false }
-        : {
-            // Let Realtime decide whether the user still needs an acknowledgement,
-            // based on what it already said before invoking the tool.
-            response: {
-              instructions: [
-                '结合本轮调用工具前你已经对用户说过的内容，自主判断是否还需要回应。',
-                '如果已经说明正在处理，不要重复或换一种说法再次确认。',
-                '如果此前没有确认，可以用包含具体任务对象的短句确认；避免“好的、收到”等通用承接语。',
-                'accepted 不代表已经完成。',
-              ].join(' '),
-            },
-          },
+      {
+        // Always let Realtime close the tool-call turn itself. Whether it
+        // should say anything is a semantic decision based on what it already
+        // said before invoking the tool.
+        response: {
+          instructions: [
+            '结合本轮调用工具前已经对用户说过的内容，自主判断是否需要回应。',
+            '如果此前已经说明正在处理，不要重复、改写或补充确认，直接结束本次响应。',
+            '只有此前没有作出任何确认时，才用包含具体任务对象的短句说明已经开始处理；避免“好的、收到”等通用承接语。',
+            'accepted 或 duplicate 只代表任务已经提交，不代表已经完成。',
+          ].join(' '),
+        },
+      },
     )
   }
 

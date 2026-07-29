@@ -2,9 +2,11 @@ import assert from 'node:assert/strict'
 import {
   chmodSync,
   existsSync,
+  lstatSync,
   mkdtempSync,
   mkdirSync,
   readFileSync,
+  readlinkSync,
   rmSync,
   writeFileSync,
 } from 'node:fs'
@@ -65,6 +67,7 @@ function execute(script, target, env = {}, args = []) {
     encoding: 'utf8',
     env: {
       ...process.env,
+      HOME: target.directory,
       PATH: `${target.bin}:/usr/bin:/bin`,
       CAPTURE: target.capture,
       QWEN_AUDIO_AGENT_ENV_LOADED: '1',
@@ -105,37 +108,54 @@ test('OpenCode auto mode prefers the user-installed command', {
   }
 })
 
-test('OpenCode auto mode does not download a missing backend', {
+test('OpenCode auto mode downloads a pinned package when missing', {
   skip: process.platform === 'win32',
 }, () => {
   const target = fixture()
   try {
     command(resolve(target.bin, 'npx'))
-    const result = execute('scripts/opencode-server', target, {
+    assert.deepEqual(run('scripts/opencode-server', target, {
       OPENCODE_RUNTIME: 'auto',
-    })
-    assert.notEqual(result.status, 0)
-    assert.match(result.stderr, /OpenCode is not installed/)
-    assert.equal(existsSync(target.capture), false)
+      OPENCODE_PORT: '4321',
+      DASHSCOPE_API_KEY: 'test-key',
+      QWEN_AUDIO_AGENT_BACKEND_MODEL: 'qwen3.7-max',
+    }), [
+      'npx',
+      '--yes',
+      'opencode-ai@1.18.5',
+      'serve',
+      '--hostname',
+      '127.0.0.1',
+      '--port',
+      '4321',
+    ])
   } finally {
     target.close()
   }
 })
 
-test('OpenCode auto mode rejects an incompatible installed version', {
+test('OpenCode auto mode replaces an incompatible version with the pinned package', {
   skip: process.platform === 'win32',
 }, () => {
   const target = fixture()
   try {
     command(resolve(target.bin, 'opencode'), { version: '1.1.53' })
     command(resolve(target.bin, 'npx'))
-    const result = execute('scripts/opencode-server', target, {
+    assert.deepEqual(run('scripts/opencode-server', target, {
       OPENCODE_RUNTIME: 'auto',
       OPENCODE_PORT: '4321',
-    })
-    assert.notEqual(result.status, 0)
-    assert.match(result.stderr, /older than the supported minimum/)
-    assert.equal(existsSync(target.capture), false)
+      DASHSCOPE_API_KEY: 'test-key',
+      QWEN_AUDIO_AGENT_BACKEND_MODEL: 'qwen3.7-max',
+    }), [
+      'npx',
+      '--yes',
+      'opencode-ai@1.18.5',
+      'serve',
+      '--hostname',
+      '127.0.0.1',
+      '--port',
+      '4321',
+    ])
   } finally {
     target.close()
   }
@@ -151,9 +171,13 @@ test('OpenClaw auto mode prefers the user-installed command', {
       captureModels: true,
     })
     command(resolve(target.bin, 'npx'))
+    const userConfig = resolve(target.directory, 'user-openclaw.json')
+    writeFileSync(userConfig, JSON.stringify({
+      models: { providers: {} },
+    }))
     assert.deepEqual(run('scripts/openclaw', target, {
       OPENCLAW_RUNTIME: 'auto',
-      OPENCLAW_CONFIG_PATH: '/user/openclaw.json',
+      OPENCLAW_CONFIG_PATH: userConfig,
     }, ['gateway', 'run']).slice(0, 3), [
       'openclaw',
       'gateway',
@@ -161,11 +185,17 @@ test('OpenClaw auto mode prefers the user-installed command', {
     ])
     assert.equal(
       readFileSync(target.capture, 'utf8').trim().split('\n').at(-2),
-      'OPENCLAW_CONFIG_PATH=/user/openclaw.json',
+      `OPENCLAW_CONFIG_PATH=${resolve(
+        target.directory,
+        'config/backends/openclaw/state/gateway-18789/openclaw.json',
+      )}`,
     )
     assert.equal(
       readFileSync(target.capture, 'utf8').trim().split('\n').at(-1),
-      'OPENCLAW_STATE_DIR=',
+      `OPENCLAW_STATE_DIR=${resolve(
+        target.directory,
+        'config/backends/openclaw/state/gateway-18789',
+      )}`,
     )
     assert.equal(
       existsSync(resolve(
@@ -227,6 +257,10 @@ test('OpenClaw auto mode preserves the user-installed version', {
     assert.deepEqual(run('scripts/openclaw', target, {
       OPENCLAW_RUNTIME: 'auto',
       FAKE_OPENCLAW_PACKAGE_BIN: packageBinary,
+      DASHSCOPE_API_KEY: 'test-key',
+      QWEN_AUDIO_AGENT_BACKEND_MODEL: 'qwen3.7-max',
+      DASHSCOPE_API_KEY: 'test-key',
+      QWEN_AUDIO_AGENT_BACKEND_MODEL: 'qwen3.7-max',
     }, ['acp']), [
       'openclaw',
       'acp',
@@ -236,18 +270,53 @@ test('OpenClaw auto mode preserves the user-installed version', {
   }
 })
 
-test('OpenClaw auto mode does not download a missing backend', {
+test('automatic fallback requires explicit Bailian setup', {
+  skip: process.platform === 'win32',
+}, () => {
+  const openCode = fixture()
+  const openClaw = fixture()
+  try {
+    command(resolve(openCode.bin, 'npx'))
+    command(resolve(openClaw.bin, 'npx'))
+    const openCodeResult = execute('scripts/opencode-server', openCode, {
+      OPENCODE_RUNTIME: 'auto',
+    })
+    assert.notEqual(openCodeResult.status, 0)
+    assert.match(openCodeResult.stderr, /requires DASHSCOPE_API_KEY/)
+
+    const openClawResult = execute('scripts/openclaw', openClaw, {
+      OPENCLAW_RUNTIME: 'auto',
+    }, ['acp'])
+    assert.notEqual(openClawResult.status, 0)
+    assert.match(openClawResult.stderr, /requires DASHSCOPE_API_KEY/)
+  } finally {
+    openCode.close()
+    openClaw.close()
+  }
+})
+
+test('OpenClaw auto mode downloads a pinned package when missing', {
   skip: process.platform === 'win32',
 }, () => {
   const target = fixture()
   try {
-    command(resolve(target.bin, 'npx'))
-    const result = execute('scripts/openclaw', target, {
+    const packageBinary = resolve(target.bin, 'openclaw-package')
+    command(packageBinary)
+    writeFileSync(resolve(target.bin, 'npx'), [
+      '#!/bin/sh',
+      'printf "%s\\n" "$FAKE_OPENCLAW_PACKAGE_BIN"',
+      '',
+    ].join('\n'))
+    chmodSync(resolve(target.bin, 'npx'), 0o755)
+    assert.deepEqual(run('scripts/openclaw', target, {
       OPENCLAW_RUNTIME: 'auto',
-    }, ['acp'])
-    assert.notEqual(result.status, 0)
-    assert.match(result.stderr, /OpenClaw is not installed/)
-    assert.equal(existsSync(target.capture), false)
+      FAKE_OPENCLAW_PACKAGE_BIN: packageBinary,
+      DASHSCOPE_API_KEY: 'test-key',
+      QWEN_AUDIO_AGENT_BACKEND_MODEL: 'qwen3.7-max',
+    }, ['acp']), [
+      'openclaw-package',
+      'acp',
+    ])
   } finally {
     target.close()
   }
@@ -408,7 +477,7 @@ test('external ACP adapters require the user backend to be installed', {
   }
 })
 
-test('does not translate the unified model into backend process variables', {
+test('automatically configures explicit Bailian models for OpenCode and OpenClaw', {
   skip: process.platform === 'win32',
 }, () => {
   const openCode = fixture()
@@ -422,26 +491,123 @@ test('does not translate the unified model into backend process variables', {
       version: 'OpenClaw 2026.6.33',
       captureModels: true,
     })
-    assert.deepEqual(run('scripts/opencode-server', openCode, {
+    const openCodeOutput = run('scripts/opencode-server', openCode, {
+      DASHSCOPE_API_KEY: 'test-key',
       QWEN_AUDIO_AGENT_BACKEND_MODEL: 'qwen-custom',
-    }).slice(-5), [
+    })
+    assert.equal(openCodeOutput.at(-5), 'OPENCODE_MODEL=alibaba-cn/qwen-custom')
+
+    const openClawOutput = run('scripts/openclaw', openClaw, {
+      DASHSCOPE_API_KEY: 'test-key',
+      QWEN_AUDIO_AGENT_BACKEND_MODEL: 'qwen-custom',
+    }, ['gateway', 'run'])
+    assert.deepEqual(openClawOutput.slice(-5), [
       'OPENCODE_MODEL=',
-      'OPENCLAW_MODEL=',
-      'OPENCLAW_MODEL_ID=',
-      'OPENCLAW_CONFIG_PATH=',
-      'OPENCLAW_STATE_DIR=',
+      'OPENCLAW_MODEL=bailian/qwen-custom',
+      'OPENCLAW_MODEL_ID=qwen-custom',
+      `OPENCLAW_CONFIG_PATH=${resolve(
+        openClaw.directory,
+        'config/backends/openclaw/openclaw.json5',
+      )}`,
+      `OPENCLAW_STATE_DIR=${resolve(
+        openClaw.directory,
+        'config/backends/openclaw/state/gateway-18789',
+      )}`,
     ])
+    assert.equal(existsSync(resolve(
+      openClaw.directory,
+      'config/backends/openclaw/openclaw.json5',
+    )), true)
+  } finally {
+    openCode.close()
+    openClaw.close()
+  }
+})
+
+test('preserves native OpenCode and OpenClaw configuration without a model override', {
+  skip: process.platform === 'win32',
+}, () => {
+  const openCode = fixture()
+  const openClaw = fixture()
+  try {
+    command(resolve(openCode.bin, 'opencode'), {
+      version: '1.20.0',
+      captureModels: true,
+    })
+    command(resolve(openClaw.bin, 'openclaw'), {
+      version: 'OpenClaw 2026.6.33',
+      captureModels: true,
+    })
+    assert.equal(
+      run('scripts/opencode-server', openCode, {
+        DASHSCOPE_API_KEY: 'test-key',
+      }).at(-5),
+      'OPENCODE_MODEL=',
+    )
     assert.deepEqual(run('scripts/openclaw', openClaw, {
-      QWEN_AUDIO_AGENT_BACKEND_MODEL: 'qwen-custom',
+      DASHSCOPE_API_KEY: 'test-key',
     }, ['gateway', 'run']).slice(-5), [
       'OPENCODE_MODEL=',
       'OPENCLAW_MODEL=',
       'OPENCLAW_MODEL_ID=',
       'OPENCLAW_CONFIG_PATH=',
-      'OPENCLAW_STATE_DIR=',
+      `OPENCLAW_STATE_DIR=${resolve(
+        openClaw.directory,
+        'config/backends/openclaw/state/gateway-18789',
+      )}`,
     ])
   } finally {
     openCode.close()
     openClaw.close()
+  }
+})
+
+test('isolates OpenClaw sessions while reusing user capability configuration', {
+  skip: process.platform === 'win32',
+}, () => {
+  const target = fixture()
+  try {
+    command(resolve(target.bin, 'openclaw'), {
+      version: 'OpenClaw 2026.6.33',
+      captureModels: true,
+    })
+    const userState = resolve(target.directory, '.openclaw')
+    mkdirSync(resolve(userState, 'extensions'), { recursive: true })
+    mkdirSync(resolve(userState, 'skills'), { recursive: true })
+    writeFileSync(resolve(userState, 'openclaw.json'), JSON.stringify({
+      models: { providers: { user: { models: [] } } },
+    }))
+
+    const output = run('scripts/openclaw', target, {
+      DASHSCOPE_API_KEY: 'test-key',
+      OPENCLAW_PORT: '43210',
+    }, ['gateway', 'run'])
+    const runtimeState = resolve(
+      target.directory,
+      'config/backends/openclaw/state/gateway-43210',
+    )
+    assert.equal(
+      output.at(-2),
+      `OPENCLAW_CONFIG_PATH=${resolve(
+        runtimeState,
+        'openclaw.json',
+      )}`,
+    )
+    assert.equal(output.at(-1), `OPENCLAW_STATE_DIR=${runtimeState}`)
+    const isolatedConfig = JSON.parse(readFileSync(
+      resolve(runtimeState, 'openclaw.json'),
+      'utf8',
+    ))
+    assert.deepEqual(isolatedConfig.models, {
+      providers: { user: { models: [] } },
+    })
+    assert.equal('channels' in isolatedConfig, false)
+    for (const directory of ['extensions', 'skills']) {
+      const link = resolve(runtimeState, directory)
+      assert.equal(lstatSync(link).isSymbolicLink(), true)
+      assert.equal(readlinkSync(link), resolve(userState, directory))
+    }
+  } finally {
+    target.close()
   }
 })

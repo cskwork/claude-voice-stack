@@ -52,13 +52,13 @@ Agent 也应该始终在场。
 
 | 后台 Agent | 接入方式 | 接入准备 | 推荐指数 |
 | --- | --- | --- | --- |
-| OpenCode | 原生 ACP | 需要用户安装和配置 | ★★★★★ |
-| OpenClaw | 内置 ACP 桥接 | 需要用户安装和配置 | ★★★★★ |
-| Qoder | 原生 ACP | 需要用户安装和认证 | ★★★★★ |
-| Hermes | 原生 ACP | 需要用户安装和配置模型 | ★★★★☆ |
-| CodeBuddy | 原生 ACP | 需要用户安装和认证 | ★★★★☆ |
-| Codex | 外部 ACP 适配 | 需要用户安装和认证 | ★★★★☆ |
-| Claude Code | 外部 ACP 适配 | 需要用户安装和认证 | ★★★★☆ |
+| OpenCode | 原生 ACP | 支持自动安装和百炼配置 | ★★★★★ |
+| OpenClaw | 内置 ACP 桥接 | 支持自动安装和百炼配置 | ★★★★★ |
+| Qoder | 原生 ACP | 用户自行安装和配置 | ★★★★★ |
+| Hermes | 原生 ACP | 用户自行安装和配置 | ★★★★☆ |
+| CodeBuddy | 原生 ACP | 用户自行安装和配置 | ★★★★☆ |
+| Codex | 外部 ACP 适配 | 用户自行安装和配置 | ★★★★☆ |
+| Claude Code | 外部 ACP 适配 | 用户自行安装和配置 | ★★★★☆ |
 
 推荐指数综合反映当前集成完整度、兼容性和实际验证程度：五星表示已经过充分测试的
 推荐集成，四星表示正在开发或尚未完成同等范围验证。
@@ -126,6 +126,7 @@ qwenaudio config
 ```dotenv
 DASHSCOPE_API_KEY=your-key
 AGENT_PROTOCOL=openclaw
+QWEN_AUDIO_AGENT_BACKEND_MODEL=qwen3.7-max
 ```
 
 3. 只读检查后台 Agent 是否已经准备好：
@@ -215,9 +216,10 @@ qwenaudio gateway uninstall
 
 ## 选择后台 Agent
 
-通过 `AGENT_PROTOCOL` 选择后台 Agent（必填，没有默认值）。所选 Agent 需要已经
-安装并完成原生配置；qwen-audio-agent 默认复用它已有的用户级模型、工具、MCP、Skill
-和认证。使用 OpenClaw：
+通过 `AGENT_PROTOCOL` 选择后台 Agent（必填，没有默认值）。OpenCode 和 OpenClaw
+支持自动下载；配置 `DASHSCOPE_API_KEY` 和 `QWEN_AUDIO_AGENT_BACKEND_MODEL`
+后即可自动接入百炼模型。未指定后台模型且用户已经安装并配置对应 Agent 时，则
+完整复用用户环境。使用 OpenClaw：
 
 ```dotenv
 AGENT_PROTOCOL=openclaw
@@ -241,6 +243,9 @@ Hermes、CodeBuddy、Codex 和 Claude Code 也可直接选择：
 AGENT_PROTOCOL=hermes
 # 或 codebuddy、codex、claude
 ```
+
+以上其他后台暂时需要用户自行安装并完成原生配置；qwen-audio-agent 会复用其
+用户级模型、工具、MCP、Skill 和认证。
 
 使用其他支持 ACP stdio 的 Agent：
 

@@ -13,8 +13,10 @@ let exitTimer
 
 function stop(signal = 'SIGTERM') {
   if (stopPromise) return stopPromise
-  backendRuntime?.close(signal)
-  stopPromise = Promise.resolve(agentClient?.close()).catch(error => {
+  stopPromise = Promise.all([
+    backendRuntime?.stop(signal),
+    agentClient?.close(),
+  ]).catch(error => {
     process.stderr.write(`后台 Agent 停止失败：${error.message}\n`)
   })
   return stopPromise
@@ -55,6 +57,11 @@ try {
   process.once('SIGTERM', () => {
     stopAndExit('SIGTERM')
   })
+  if (process.connected) {
+    process.once('disconnect', () => {
+      stopAndExit('SIGTERM')
+    })
+  }
   process.once('exit', () => {
     backendRuntime?.close()
     agentClient?.close()

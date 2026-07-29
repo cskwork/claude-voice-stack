@@ -30,8 +30,9 @@ qwenaudio setup
 ```
 
 它会检查后台可执行文件、ACP 接入方式和必要的 Adapter，并明确显示当前选择。
-检查不会安装或下载后台 Agent，不会触发登录，也不会读取凭据或修改模型配置。
-认证状态由各后台 Agent 自己管理，请先确认该 Agent 在原生终端中可以正常工作。
+检查命令本身不会安装或下载后台 Agent，不会触发登录，也不会输出或验证凭据、修改模型
+配置。它会提示 OpenCode/OpenClaw 是否能在正式启动时自动下载和配置；其他后台
+的认证状态由 Agent 自己管理。
 
 只检查指定后台或获取机器可读结果：
 
@@ -44,21 +45,17 @@ JSON 输出与 CLI 使用同一个共享检测模块，可供桌面版和其他�
 
 ## 最小配置
 
-最小配置需要填写实时语音凭据，并显式选择一个已经安装、配置完成的后台 Agent
-（以 OpenClaw 为例）：
+最小配置需要填写实时语音凭据，并显式选择后台 Agent（以 OpenClaw 为例）：
 
 ```dotenv
 DASHSCOPE_API_KEY=your-key
 AGENT_PROTOCOL=openclaw
-```
-
-Gateway 默认不指定后台模型，也不会调用 ACP Session 模型设置接口，直接使用所选
-Agent 用户级配置中的模型、Provider、工具、MCP、Skill 和认证。只有需要由
-qwen-audio-agent 强制覆盖其管理的全部 Session 时，才设置：
-
-```dotenv
 QWEN_AUDIO_AGENT_BACKEND_MODEL=qwen3.7-max
 ```
+
+OpenCode 和 OpenClaw 在以上配置下可以自动下载兼容版本并配置百炼模型，实现
+一键启动。若未指定后台模型，则优先使用用户已经安装和配置的 Agent，不覆盖其
+模型、Provider、工具、MCP、Skill 和认证。其他后台暂时需要用户自行安装配置。
 
 这是 qwen-audio-agent 唯一的后台模型配置入口。Gateway 会把该值映射为所选后台
 使用的模型标识；模型 ID 仍由各 Agent 定义，并不由 ACP 统一命名。后台自身的
@@ -112,13 +109,17 @@ OPENCLAW_BASE_URL=http://127.0.0.1:18789
 OPENCLAW_GATEWAY_TOKEN=
 ```
 
-默认启动用户环境中的 `openclaw`，不设置 `OPENCLAW_STATE_DIR`，因此会继承其
-原生配置、模型和认证。若原配置启用了 Gateway
-Token，需要通过 `OPENCLAW_GATEWAY_TOKEN` 提供同一个 Token；也可以设置
-`OPENCLAW_CONFIG_PATH` 明确指定另一份 OpenClaw 配置。
+默认优先启动用户环境中的 `openclaw`。同时提供 `DASHSCOPE_API_KEY` 和
+`QWEN_AUDIO_AGENT_BACKEND_MODEL` 时，会为 qwen-audio-agent 进程生成独立的
+百炼配置和状态目录，不修改用户原生配置。未指定后台模型时则继承用户的原生
+配置、模型和认证，但不会在独立实例中启用钉钉等外部消息渠道。若原配置启用了
+Gateway Token，会自动读取并用于本地 ACP 连接；也可以通过
+`OPENCLAW_GATEWAY_TOKEN` 覆盖，或设置 `OPENCLAW_CONFIG_PATH` 明确指定另一份
+OpenClaw 配置。
 
 OpenCode：Gateway 通过 `opencode acp` 与它交互，并管理用于打开原生 Session
-界面的本地服务。需要先安装兼容版本，用户不需要另行启动服务：
+界面的本地服务。没有兼容安装时会自动使用固定 npm 包，用户不需要另行安装或
+启动服务：
 
 ```dotenv
 AGENT_PROTOCOL=opencode
@@ -282,21 +283,6 @@ OpenClaw 的执行授权同时受 exec approvals、elevated 和执行 host 等�
 需要按 OpenClaw 自身方式单独配置。最高权限会放大误操作风险，只应在可信项目和
 可信提示词环境中启用。
 
-连接用户现有的 OpenClaw Gateway 时开启 `OPENCLAW_ATTACH_EXISTING`。
-qwen-audio-agent 不会修改或重启该 Gateway，而是通过 `openclaw acp` 桥接：
-
-```dotenv
-OPENCLAW_ATTACH_EXISTING=true
-# 可选；省略时自动发现默认 Agent
-QWEN_AUDIO_AGENT_BACKEND_AGENT=
-```
-
-```bash
-qwenaudio gateway --backend openclaw \
-  --attach-openclaw \
-  --backend-url http://127.0.0.1:18789
-```
-
 桌面版、CLI 和 WebUI 可以复用同一个 Gateway，但同一用户同时只有一个活跃语音
 入口。CLI 默认不抢占现有桌面语音；需要明确接管时使用：
 
@@ -331,10 +317,11 @@ QWEN_AUDIO_AGENT_ALLOWED_ORIGINS=https://voice.example.com
 ## Gateway 运行方式
 
 Gateway 默认启动并管理所选 Agent 的 ACP 进程。若 OpenCode 或 OpenClaw 的本地
-服务端口已被其他进程占用，会选择空闲端口，不会接管或关闭用户进程。只有明确设置
-`OPENCLAW_ATTACH_EXISTING=true`（或 CLI 使用 `--attach-openclaw`）时，OpenClaw
-Adapter 才会连接现有 Gateway；该地址不可用时会直接报错。OpenCode 的 ACP 进程
-始终复用其原生配置和 Session 存储，原生界面不可用不影响 ACP 任务执行。
+服务端口已被其他进程占用，会选择空闲端口，不会接管或关闭用户进程。OpenClaw
+始终由 qwen-audio-agent 启动独立 Gateway，并使用隔离的运行状态和 Session
+存储；它可以读取用户已有的模型与能力配置，但不会与用户常驻 Gateway 共享
+Session，也不会重复连接用户配置的外部消息渠道。OpenCode 的 ACP 进程始终
+复用其原生配置和 Session 存储，原生界面不可用不影响 ACP 任务执行。
 
 `qwenaudio`、`qwenaudio gateway` 和 `qwenaudio gateway run` 都在前台运行。
 需要后台常驻时使用：
@@ -362,7 +349,7 @@ OpenCode 和 OpenClaw 使用一致的用户环境优先顺序：
 1. `OPENCODE_BIN` / `OPENCLAW_BIN` 明确指定的可执行文件。
 2. `OPENCODE_SOURCE_DIR` / `OPENCLAW_SOURCE_DIR` 明确指定的源码目录。
 3. PATH 中用户已经安装的 `opencode` / `openclaw`。
-4. 找不到时明确提示安装，不会在后台自动下载或替换用户版本。
+4. 找不到兼容安装时，通过 `npx` 自动使用当前版本验证过的固定 npm 包。
 
 源码目录只在用户明确配置后使用，不再推测相邻项目目录。需要强制选择某种启动
 方式时可配置：
@@ -373,17 +360,16 @@ OPENCODE_RUNTIME=auto
 OPENCLAW_RUNTIME=auto
 ```
 
-`package` 是用户主动选择的高级模式，不是默认回退。需要临时验证固定包版本或
-内部镜像时，可以显式覆盖完整 package specifier：
+需要临时验证其他固定包版本或内部镜像时，可以显式覆盖完整 package specifier：
 
 ```dotenv
 OPENCODE_PACKAGE=opencode-ai@1.18.5
 OPENCLAW_PACKAGE=openclaw@2026.6.33
 ```
 
-OpenCode ACP 接入当前要求 OpenCode `1.18.0` 或更高版本。`auto` 和 `installed`
-模式发现更旧版本时都会给出清晰错误，不会升级或替换用户安装。最低版本可由
-`OPENCODE_MIN_VERSION` 覆盖，用于验证其他兼容版本。
+OpenCode ACP 接入当前要求 OpenCode `1.18.0` 或更高版本。`auto` 模式发现更旧
+版本时会使用固定兼容包，不修改用户安装；显式设置 `installed` 时直接报错。
+最低版本可由 `OPENCODE_MIN_VERSION` 覆盖，用于验证其他兼容版本。
 
 qwen-audio-agent 启动的 OpenCode 默认继承用户原有的全局配置（通常是
 `~/.config/opencode/opencode.json`），因此已经安装的 MCP、Skill、权限、模型和
@@ -410,7 +396,6 @@ QWEN_AUDIO_AGENT_OPENCODE_ISOLATE_USER_CONFIG=true
 | `OPENCODE_WORKSPACE` | 用户配置目录下的 `workspaces/opencode` |
 | `QODER_WORKSPACE` | 用户配置目录下的 `workspaces/qoder` |
 | `QWEN_AUDIO_AGENT_BACKEND_MODEL` | 空；使用后台 Agent 原有模型 |
-| `OPENCLAW_ATTACH_EXISTING` | `false`；由 Adapter 启动 OpenClaw Gateway |
 | `QWEN_AUDIO_AGENT_BACKEND_PERMISSION_MODE` | `native` |
 | `QWEN_AUDIO_REALTIME_MODEL` | `qwen-audio-3.0-realtime-plus` |
 | `QWEN_AUDIO_REALTIME_PROVIDER` | `dashscope` |

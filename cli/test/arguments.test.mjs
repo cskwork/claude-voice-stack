@@ -13,7 +13,6 @@ test('requires an explicit backend for running the Gateway', () => {
   assert.equal(options.gatewayAction, 'run')
   assert.equal(options.url, 'http://127.0.0.1:3101')
   assert.equal(options.backend, 'openclaw')
-  assert.equal(options.attachOpenClaw, false)
   assert.equal(options.backendPermissionMode, 'native')
   assert.equal(options.backendUrl, 'http://127.0.0.1:18789')
 })
@@ -62,16 +61,14 @@ test('parses read-only backend setup options', () => {
   )
 })
 
-test('parses Gateway backend ownership settings', () => {
+test('parses Gateway backend settings', () => {
   const options = parseArguments([
     'gateway',
     '--backend', 'openclaw',
-    '--attach-openclaw',
     '--backend-agent', 'build',
     '--backend-url', 'http://localhost:18888/path',
   ], {})
   assert.equal(options.backend, 'openclaw')
-  assert.equal(options.attachOpenClaw, true)
   assert.equal(options.backendAgent, 'build')
   assert.equal(options.backendUrl, 'http://localhost:18888')
 })
@@ -82,14 +79,12 @@ test('accepts Qoder as a Gateway-owned backend without a URL', () => {
     '--backend', 'qoder',
   ], {})
   assert.equal(options.backend, 'qoder')
-  assert.equal(options.attachOpenClaw, false)
   assert.equal(options.backendUrl, '')
 })
 
 test('accepts a generic ACP backend without an HTTP URL', () => {
   const options = parseArguments(['gateway', '--backend', 'acp'], {})
   assert.equal(options.backend, 'acp')
-  assert.equal(options.attachOpenClaw, false)
   assert.equal(options.backendUrl, '')
 })
 
@@ -121,12 +116,6 @@ test('parses supported backend permission modes', () => {
     '--backend', 'openclaw',
     '--backend-permission-mode', 'full',
   ], {}), /OpenClaw/)
-  assert.throws(() => parseArguments([
-    'gateway',
-    '--backend', 'openclaw',
-    '--attach-openclaw',
-    '--backend-permission-mode', 'full',
-  ], {}), /只支持由 Gateway 启动/)
 })
 
 test('parses foreground and service Gateway commands', () => {
@@ -185,7 +174,7 @@ test('documents the service and client commands', () => {
   assert.match(text, /qwenaudio config/)
   assert.match(text, /qwenaudio setup/)
   assert.match(text, /--json/)
-  assert.match(text, /--attach-openclaw/)
+  assert.doesNotMatch(text, /--attach-openclaw/)
   assert.doesNotMatch(text, /--backend-mode/)
   assert.match(text, /--backend-permission-mode MODE/)
   assert.match(text, /--audio-mode MODE/)

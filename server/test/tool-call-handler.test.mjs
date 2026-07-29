@@ -97,16 +97,14 @@ test('submits one nonblocking coordinator work item with organized intent', asyn
   }, { turnId: 'turn-one', turnGeneration: 1 })
 
   assert.equal(kit.outputs[0][1].status, 'accepted')
-  assert.deepEqual(kit.outputs[0][3], {
-    response: {
-      instructions: [
-        '结合本轮调用工具前你已经对用户说过的内容，自主判断是否还需要回应。',
-        '如果已经说明正在处理，不要重复或换一种说法再次确认。',
-        '如果此前没有确认，可以用包含具体任务对象的短句确认；避免“好的、收到”等通用承接语。',
-        'accepted 不代表已经完成。',
-      ].join(' '),
-    },
-  })
+  assert.match(
+    kit.outputs[0][3].response.instructions,
+    /如果此前已经说明正在处理.*直接结束本次响应/,
+  )
+  assert.match(
+    kit.outputs[0][3].response.instructions,
+    /accepted 或 duplicate 只代表任务已经提交/,
+  )
   assert.equal(kit.manager.list({ ownerId: 'owner' }).length, 1)
   await kit.manager.wait(kit.outputs[0][1].work_id)
   assert.equal(received.originalRequest, '继续改刚才那个页面')
@@ -114,7 +112,7 @@ test('submits one nonblocking coordinator work item with organized intent', asyn
   assert.equal(received.conversationContext[0].content, '之前在改首页')
 })
 
-test('does not generate a second acknowledgement after speaking before delegation', async () => {
+test('lets realtime avoid a repeated acknowledgement after speaking before delegation', async () => {
   const kit = harness()
   kit.transcripts.record('turn-one', '给项目添加特殊食物')
   await kit.handler.handle({
@@ -128,7 +126,11 @@ test('does not generate a second acknowledgement after speaking before delegatio
   })
 
   assert.equal(kit.outputs[0][1].status, 'accepted')
-  assert.deepEqual(kit.outputs[0][3], { createResponse: false })
+  assert.equal(kit.outputs[0][3].createResponse, undefined)
+  assert.match(
+    kit.outputs[0][3].response.instructions,
+    /不要重复、改写或补充确认/,
+  )
   await kit.manager.wait(kit.outputs[0][1].work_id)
 })
 
@@ -147,7 +149,11 @@ test('deduplicates repeated tool calls from one realtime turn', async () => {
   })
   assert.equal(kit.manager.list({ ownerId: 'owner' }).length, 1)
   assert.equal(kit.outputs.at(-1)[1].status, 'duplicate')
-  assert.deepEqual(kit.outputs.at(-1)[3], { createResponse: false })
+  assert.equal(kit.outputs.at(-1)[3].createResponse, undefined)
+  assert.match(
+    kit.outputs.at(-1)[3].response.instructions,
+    /不要再次调用工具/,
+  )
 })
 
 test('rejects delegated work immediately when no backend Agent is connected', async () => {

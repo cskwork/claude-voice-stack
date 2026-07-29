@@ -22,6 +22,14 @@ if [ "${QWEN_AUDIO_AGENT_ENV_LOADED:-}" != "1" ]; then
   export QWEN_AUDIO_AGENT_ENV_LOADED=1
 fi
 
+BACKEND_MODEL=${QWEN_AUDIO_AGENT_BACKEND_MODEL:-}
+if [ -z "${OPENCODE_MODEL:-}" ] \
+  && [ -n "$BACKEND_MODEL" ] \
+  && [ "$(printf '%s' "$BACKEND_MODEL" | tr '[:upper:]' '[:lower:]')" != "auto" ]; then
+  MODEL_ID=${BACKEND_MODEL#*/}
+  export OPENCODE_MODEL="alibaba-cn/$MODEL_ID"
+fi
+
 # Preserve the user's native OpenCode configuration. Isolation remains
 # available as an explicit troubleshooting option for conflicting user config.
 if [ -n "${QWEN_AUDIO_AGENT_OPENCODE_XDG_CONFIG_HOME:-}" ]; then
@@ -87,6 +95,19 @@ run_package() {
       "$@"
   fi
   exec npx --yes "$OPENCODE_PACKAGE" "$OPENCODE_COMMAND" "$@"
+}
+
+run_managed_package() {
+  if [ -z "${DASHSCOPE_API_KEY:-}" ]; then
+    echo "Automatic OpenCode setup requires DASHSCOPE_API_KEY." >&2
+    exit 1
+  fi
+  if [ -z "$BACKEND_MODEL" ] \
+    || [ "$(printf '%s' "$BACKEND_MODEL" | tr '[:upper:]' '[:lower:]')" = "auto" ]; then
+    echo "Automatic OpenCode setup requires QWEN_AUDIO_AGENT_BACKEND_MODEL." >&2
+    exit 1
+  fi
+  run_package "$@"
 }
 
 installed_version() {
@@ -165,9 +186,7 @@ if command -v opencode >/dev/null 2>&1; then
     fi
     exec opencode "$OPENCODE_COMMAND" "$@"
   fi
-  echo "Installed OpenCode $VERSION is older than the supported minimum $OPENCODE_MIN_VERSION." >&2
-  exit 1
+  echo "Installed OpenCode $VERSION is older than the supported minimum; using $OPENCODE_PACKAGE." >&2
 fi
 
-echo "OpenCode is not installed. Install OpenCode or set OPENCODE_BIN." >&2
-exit 1
+run_managed_package "$@"

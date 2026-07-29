@@ -2,7 +2,9 @@ import assert from 'node:assert/strict'
 import { EventEmitter } from 'node:events'
 import test from 'node:test'
 import { PACKAGE_VERSION } from '../src/core/package-version.mjs'
-import { OpenClawAcpDelegationAdapter } from '../src/agent/openclaw-adapter.mjs'
+import {
+  OpenClawAcpDelegationAdapter,
+} from '../src/agent/openclaw-adapter.mjs'
 
 class FakeWebSocket extends EventEmitter {
   static CONNECTING = 0
@@ -33,6 +35,15 @@ class FakeWebSocket extends EventEmitter {
         messages: [
           { role: 'assistant', content: 'authoritative child result' },
         ],
+      }
+    }
+    if (request.method === 'sessions.patch') {
+      const [modelProvider, ...modelParts] = request.params.model.split('/')
+      payload = {
+        resolved: {
+          modelProvider,
+          model: modelParts.join('/'),
+        },
       }
     }
     queueMicrotask(() => this.emit('message', JSON.stringify({
@@ -85,6 +96,13 @@ test('waits for the exact OpenClaw run and reads its Session history', async () 
     FakeWebSocket.requests[0].params.client.version,
     PACKAGE_VERSION,
   )
+  assert.equal(FakeWebSocket.requests[0].params.minProtocol, 3)
+  assert.equal(FakeWebSocket.requests[0].params.maxProtocol, 4)
+  assert.deepEqual(FakeWebSocket.requests[0].params.scopes, [
+    'operator.read',
+    'operator.write',
+    'operator.admin',
+  ])
 })
 
 test('cancels an OpenClaw child by run and Session identity', async () => {
@@ -103,5 +121,26 @@ test('cancels an OpenClaw child by run and Session identity', async () => {
   assert.deepEqual(abort.params, {
     runId: 'run-two',
     sessionKey: 'agent:child:two',
+  })
+})
+
+test('sets and verifies an OpenClaw Session model through Gateway RPC', async () => {
+  FakeWebSocket.requests = []
+  const adapter = new OpenClawAcpDelegationAdapter({
+    baseUrl: 'http://127.0.0.1:18789',
+    WebSocketImpl: FakeWebSocket,
+  })
+
+  await adapter.setSessionModel({
+    sessionKey: 'agent:voice:coordinator',
+    model: 'bailian/qwen3.7-plus',
+  })
+
+  const patch = FakeWebSocket.requests.find(item => (
+    item.method === 'sessions.patch'
+  ))
+  assert.deepEqual(patch.params, {
+    key: 'agent:voice:coordinator',
+    model: 'bailian/qwen3.7-plus',
   })
 })
