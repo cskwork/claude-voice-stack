@@ -43,6 +43,13 @@ function openClawFixture() {
   }
 }
 
+function assertPrivateMode(filePath) {
+  // Windows secures files through ACLs and does not expose POSIX mode bits.
+  if (process.platform !== 'win32') {
+    assert.equal(statSync(filePath).mode & 0o777, 0o600)
+  }
+}
+
 test('reads the configured OpenClaw Gateway credential', () => {
   const fixture = openClawFixture()
   writeFileSync(fixture.configPath, `{
@@ -65,7 +72,7 @@ test('writes the resolved credential to the private ACP file', () => {
     targetPath: fixture.tokenPath,
   }), true)
   assert.equal(readFileSync(fixture.tokenPath, 'utf8'), 'resolved-value\n')
-  assert.equal(statSync(fixture.tokenPath).mode & 0o777, 0o600)
+  assertPrivateMode(fixture.tokenPath)
 })
 
 test('prefers an explicit OpenClaw Gateway credential', () => {
@@ -94,7 +101,7 @@ test('copies OpenClaw capabilities without external message channels', () => {
   assert.equal(isolated.agents.defaults.model, 'user/default')
   assert.deepEqual(isolated.plugins.allow, ['example'])
   assert.equal('channels' in isolated, false)
-  assert.equal(statSync(isolatedPath).mode & 0o777, 0o600)
+  assertPrivateMode(isolatedPath)
 })
 
 test('Gateway-owned backend moves away from occupied ports', async () => {
