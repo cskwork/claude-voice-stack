@@ -26,7 +26,8 @@ const USER_CONFIG_TEMPLATE = [
   '# OPENCLAW_ATTACH_EXISTING=true',
   '# 权限模式：native（后台自行询问）或 full（最高权限；仅支持安全映射的后端）',
   '# QWEN_AUDIO_AGENT_BACKEND_PERMISSION_MODE=native',
-  '# QWEN_AUDIO_AGENT_BACKEND_MODEL=qwen3.7-max',
+  '# 可选：显式覆盖后台模型；留空时使用 Agent 原有模型',
+  '# QWEN_AUDIO_AGENT_BACKEND_MODEL=',
   '# 可选：QWEN_AUDIO_AGENT_BACKEND_AGENT=协调 Agent ID',
   '# 通用 ACP：ACP_COMMAND=your-agent，ACP_ARGS=["--acp"]',
   '',
@@ -162,12 +163,12 @@ function ensureManagedWorkspace(directory, templatePath) {
   return directory
 }
 
-function codeBuddyModelName(env, fallback) {
+function codeBuddyModelName(env) {
   const configured = String(
     env.CODEBUDDY_MODEL
     || env.QWEN_AUDIO_AGENT_BACKEND_MODEL
-    || fallback,
-  ).trim() || fallback
+    || '',
+  ).trim()
   const separator = configured.indexOf('/')
   return separator >= 0 ? configured.slice(separator + 1) : configured
 }
@@ -199,9 +200,30 @@ function codeBuddyTemplateContent(templatePath, model) {
 
 function ensureCodeBuddyTemplate(templatePath, targetPath, env) {
   mkdirSync(dirname(targetPath), { recursive: true, mode: 0o700 })
-  const template = JSON.parse(readFileSync(templatePath, 'utf8'))
-  const fallback = String(template.models?.[0]?.id || '').trim()
-  const model = codeBuddyModelName(env, fallback)
+  const model = codeBuddyModelName(env)
+  if (!model) {
+    let current
+    try {
+      current = readFileSync(targetPath, 'utf8')
+    } catch (error) {
+      if (error.code === 'ENOENT') return null
+      throw error
+    }
+    try {
+      const currentModel = String(
+        JSON.parse(current).models?.[0]?.id || '',
+      ).trim()
+      if (
+        currentModel
+        && current === codeBuddyTemplateContent(templatePath, currentModel)
+      ) {
+        unlinkSync(targetPath)
+      }
+    } catch {
+      // Preserve malformed or manually edited user configuration.
+    }
+    return null
+  }
   const desired = codeBuddyTemplateContent(templatePath, model)
   try {
     writeFileSync(targetPath, desired, {
@@ -296,8 +318,8 @@ export function loadRuntimeEnvironment({
   const openClawWorkspace = env.QWEN_AUDIO_AGENT_OPENCLAW_WORKSPACE
     ? resolve(root, env.QWEN_AUDIO_AGENT_OPENCLAW_WORKSPACE)
     : resolve(configDirectory, 'workspaces/openclaw')
-  const openClawStateDirectory = env.OPENCLAW_STATE_DIR
-    ? resolve(root, env.OPENCLAW_STATE_DIR)
+  const openClawStateDirectory = env.QWEN_AUDIO_AGENT_OPENCLAW_STATE_DIR
+    ? resolve(root, env.QWEN_AUDIO_AGENT_OPENCLAW_STATE_DIR)
     : resolve(configDirectory, 'backends/openclaw/state')
   const defaultQoderWorkspace = !env.QODER_WORKSPACE
   const qoderWorkspace = env.QODER_WORKSPACE
@@ -381,7 +403,7 @@ export function loadRuntimeEnvironment({
     mkdirSync(openClawStateDirectory, { recursive: true, mode: 0o700 })
     env.OPENCODE_WORKSPACE = openCodeWorkspace
     env.QWEN_AUDIO_AGENT_OPENCLAW_WORKSPACE = openClawWorkspace
-    env.OPENCLAW_STATE_DIR = openClawStateDirectory
+    env.QWEN_AUDIO_AGENT_OPENCLAW_STATE_DIR = openClawStateDirectory
     env.QODER_WORKSPACE = qoderWorkspace
     env.HERMES_WORKSPACE = hermesWorkspace
     env.CODEBUDDY_WORKSPACE = codeBuddyWorkspace

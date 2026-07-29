@@ -80,6 +80,14 @@ test('maps one backend model name to each managed backend provider', () => {
   })
 })
 
+test('preserves backend-native models when no override is configured', () => {
+  assert.deepEqual(resolveBackendModels({}), {
+    common: '',
+    openCode: '',
+    openClaw: '',
+  })
+})
+
 test('preserves backend-native model overrides', () => {
   assert.deepEqual(resolveBackendModels({
     QWEN_AUDIO_AGENT_BACKEND_MODEL: 'qwen3.7-max',

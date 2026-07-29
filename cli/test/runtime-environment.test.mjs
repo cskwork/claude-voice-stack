@@ -188,22 +188,23 @@ test('keeps managed backend data outside the installation directory', () => {
     env.QWEN_AUDIO_AGENT_OPENCLAW_WORKSPACE,
     result.openClawWorkspace,
   )
-  assert.equal(env.OPENCLAW_STATE_DIR, result.openClawStateDirectory)
+  assert.equal(
+    env.QWEN_AUDIO_AGENT_OPENCLAW_STATE_DIR,
+    result.openClawStateDirectory,
+  )
+  assert.equal(env.OPENCLAW_STATE_DIR, undefined)
   assert.equal(env.QODER_WORKSPACE, result.qoderWorkspace)
   assert.equal(env.HERMES_WORKSPACE, result.hermesWorkspace)
   assert.equal(env.CODEBUDDY_WORKSPACE, result.codeBuddyWorkspace)
   assert.equal(env.CODEX_WORKSPACE, result.codexWorkspace)
   assert.equal(env.CLAUDE_WORKSPACE, result.claudeWorkspace)
   assert.equal(env.ACP_WORKSPACE, result.acpWorkspace)
-  assert.deepEqual(
-    JSON.parse(readFileSync(
-      resolve(result.codeBuddyWorkspace, '.codebuddy/models.json'),
-      'utf8',
+  assert.equal(
+    existsSync(resolve(
+      result.codeBuddyWorkspace,
+      '.codebuddy/models.json',
     )),
-    {
-      models: [{ id: 'qwen3.7-max', name: 'Qwen 3.7 Max' }],
-      availableModels: ['qwen3.7-max'],
-    },
+    false,
   )
   assert.match(
     readFileSync(resolve(result.openCodeWorkspace, 'AGENTS.md'), 'utf8'),
@@ -243,6 +244,29 @@ test('keeps the generated CodeBuddy model aligned with backend settings', () => 
   })
 })
 
+test('removes only a generated CodeBuddy override when no model is configured', () => {
+  const target = fixture()
+  const first = loadRuntimeEnvironment({
+    root: target.root,
+    homeDirectory: target.homeDirectory,
+    env: { QWEN_AUDIO_AGENT_BACKEND_MODEL: 'qwen3.7-plus' },
+    generateSecret: false,
+  })
+  const modelPath = resolve(
+    first.codeBuddyWorkspace,
+    '.codebuddy/models.json',
+  )
+  assert.equal(existsSync(modelPath), true)
+
+  loadRuntimeEnvironment({
+    root: target.root,
+    homeDirectory: target.homeDirectory,
+    env: {},
+    generateSecret: false,
+  })
+  assert.equal(existsSync(modelPath), false)
+})
+
 test('preserves a user-edited CodeBuddy model configuration', () => {
   const target = fixture()
   const env = {
@@ -262,6 +286,14 @@ test('preserves a user-edited CodeBuddy model configuration', () => {
     models: [{ id: 'custom-model', url: 'https://example.com/v1' }],
   }, null, 2)}\n`
   writeFileSync(modelPath, customized)
+
+  loadRuntimeEnvironment({
+    root: target.root,
+    homeDirectory: target.homeDirectory,
+    env: {},
+    generateSecret: false,
+  })
+  assert.equal(readFileSync(modelPath, 'utf8'), customized)
 
   loadRuntimeEnvironment({
     root: target.root,

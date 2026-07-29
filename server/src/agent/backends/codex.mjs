@@ -28,11 +28,12 @@ export const codexBackendDriver = {
   }) {
     return {
       label: this.label,
-      command: cliPath || resolve(root, 'scripts/codex-acp'),
+      command: resolve(root, 'scripts/codex-acp'),
       args: [],
       cwd: directory,
       env: {
         ...baseEnvironment(),
+        ...(clean(cliPath) ? { CODEX_ACP_BIN: clean(cliPath) } : {}),
         ...(clean(modelUrl)
           ? {
               MODEL_PROVIDER: CODEX_PROVIDER,

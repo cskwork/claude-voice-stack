@@ -63,13 +63,13 @@ module walkthrough.
 
 | Backend Agent | Integration | Setup | Rating |
 | --- | --- | --- | --- |
-| OpenCode | Native ACP | Automatic installation supported | ★★★★★ |
-| OpenClaw | Built-in ACP Bridge | Automatic installation supported | ★★★★★ |
+| OpenCode | Native ACP | User installation and configuration required | ★★★★★ |
+| OpenClaw | Built-in ACP Bridge | User installation and configuration required | ★★★★★ |
 | Qoder | Native ACP | Requires user installation and authentication | ★★★★★ |
 | Hermes | Native ACP | Requires user installation and model configuration | ★★★★☆ |
 | CodeBuddy | Native ACP | Requires user installation and authentication | ★★★★☆ |
-| Codex | External ACP Adapter | Automatic installation supported | ★★★★☆ |
-| Claude Code | External ACP Adapter | Automatic installation supported; user authentication required | ★★★★☆ |
+| Codex | External ACP Adapter | Requires user installation and authentication | ★★★★☆ |
+| Claude Code | External ACP Adapter | Requires user installation and authentication | ★★★★☆ |
 
 Ratings reflect the current integration completeness, compatibility, and
 extent of real-world validation. Five stars identify recommended integrations
@@ -228,7 +228,9 @@ qwenaudio gateway uninstall
 ## Choose a Backend Agent
 
 Select the backend Agent with `AGENT_PROTOCOL` (required, no default value).
-Use OpenClaw:
+The selected Agent must already be installed and configured.
+qwen-audio-agent reuses its existing user-level model, tools, MCP servers, Skills, and
+authentication by default. Use OpenClaw:
 
 ```dotenv
 AGENT_PROTOCOL=openclaw

@@ -8,10 +8,9 @@ OPENCODE_PACKAGE=${OPENCODE_PACKAGE:-opencode-ai@1.18.5}
 OPENCODE_MIN_VERSION=${OPENCODE_MIN_VERSION:-1.18.0}
 OPENCODE_COMMAND=${OPENCODE_COMMAND:-serve}
 QWEN_AUDIO_AGENT_NODE=${QWEN_AUDIO_AGENT_NODE:-node}
-BACKEND_MODEL=${QWEN_AUDIO_AGENT_BACKEND_MODEL:-qwen3.7-max}
 
-if [ -z "${OPENCODE_MODEL:-}" ]; then
-  MODEL_ID=${BACKEND_MODEL#*/}
+if [ -z "${OPENCODE_MODEL:-}" ] && [ -n "${QWEN_AUDIO_AGENT_BACKEND_MODEL:-}" ]; then
+  MODEL_ID=${QWEN_AUDIO_AGENT_BACKEND_MODEL#*/}
   export OPENCODE_MODEL="alibaba-cn/$MODEL_ID"
 fi
 
@@ -171,7 +170,9 @@ if command -v opencode >/dev/null 2>&1; then
     fi
     exec opencode "$OPENCODE_COMMAND" "$@"
   fi
-  echo "Skipping incompatible OpenCode $VERSION; using $OPENCODE_PACKAGE instead." >&2
+  echo "Installed OpenCode $VERSION is older than the supported minimum $OPENCODE_MIN_VERSION." >&2
+  exit 1
 fi
 
-run_package "$@"
+echo "OpenCode is not installed. Install OpenCode or set OPENCODE_BIN." >&2
+exit 1

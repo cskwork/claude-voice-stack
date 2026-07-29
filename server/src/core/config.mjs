@@ -109,27 +109,23 @@ export function resolveAcpArgs(value) {
   return source.split(/\s+/)
 }
 
-const DEFAULT_BACKEND_MODEL = 'qwen3.7-max'
-
 function backendModelName(value) {
-  const model = String(value || DEFAULT_BACKEND_MODEL).trim()
+  const model = String(value || '').trim()
   const separator = model.indexOf('/')
   return separator >= 0 ? model.slice(separator + 1) : model
 }
 
 export function resolveBackendModels(env = process.env) {
-  const common = String(
-    env.QWEN_AUDIO_AGENT_BACKEND_MODEL || DEFAULT_BACKEND_MODEL,
-  ).trim() || DEFAULT_BACKEND_MODEL
+  const common = String(env.QWEN_AUDIO_AGENT_BACKEND_MODEL || '').trim()
   return {
     common,
     openCode: String(
       env.OPENCODE_MODEL
-      || `alibaba-cn/${backendModelName(common)}`,
+      || (common ? `alibaba-cn/${backendModelName(common)}` : ''),
     ).trim(),
     openClaw: String(
       env.OPENCLAW_MODEL
-      || `bailian/${backendModelName(common)}`,
+      || (common ? `bailian/${backendModelName(common)}` : ''),
     ).trim(),
   }
 }
@@ -222,7 +218,6 @@ export const config = {
   openClawToken: (
     process.env.OPENCLAW_GATEWAY_TOKEN
     || process.env.AGENT_API_KEY
-    || process.env.QWEN_AUDIO_AGENT_AUTH_SECRET
     || ''
   ),
   openClawTokenFile: (
@@ -236,7 +231,6 @@ export const config = {
       process.env.OPENCLAW_COORDINATOR_AGENT,
       'voice-coordinator',
     )
-    || (backendOwnership === 'owned' ? 'qwen-audio-agent-backend' : '')
   ),
   openCodeBaseUrl: (
     process.env.OPENCODE_BASE_URL
@@ -260,11 +254,11 @@ export const config = {
   ).trim(),
   codeBuddyModelUrl: (
     process.env.CODEBUDDY_MODEL_URL
-    || (
+    || (backendModels.common ? (
       process.env.DASHSCOPE_WORKSPACE_ID
         ? `https://${process.env.DASHSCOPE_WORKSPACE_ID}.cn-beijing.maas.aliyuncs.com/compatible-mode/v1/chat/completions`
         : 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'
-    )
+    ) : '')
   ),
   codexDirectory: resolveCodexWorkspace(),
   codexCliPath: String(process.env.CODEX_ACP_BIN || '').trim(),
@@ -273,11 +267,11 @@ export const config = {
   ).trim(),
   codexModelUrl: (
     process.env.CODEX_BASE_URL
-    || (
+    || (backendModels.common ? (
       process.env.DASHSCOPE_WORKSPACE_ID
         ? `https://${process.env.DASHSCOPE_WORKSPACE_ID}.cn-beijing.maas.aliyuncs.com/compatible-mode/v1`
         : 'https://dashscope.aliyuncs.com/compatible-mode/v1'
-    )
+    ) : '')
   ).replace(/\/+$/, ''),
   claudeDirectory: resolveClaudeWorkspace(),
   claudeCliPath: String(process.env.CLAUDE_CODE_ACP_BIN || '').trim(),

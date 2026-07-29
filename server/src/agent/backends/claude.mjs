@@ -26,11 +26,14 @@ export const claudeBackendDriver = {
   }) {
     return {
       label: this.label,
-      command: cliPath || resolve(root, 'scripts/claude-code-acp'),
+      command: resolve(root, 'scripts/claude-code-acp'),
       args: [],
       cwd: directory,
       env: {
         ...baseEnvironment(),
+        ...(clean(cliPath)
+          ? { CLAUDE_CODE_ACP_BIN: clean(cliPath) }
+          : {}),
         ...(clean(claudeExecutable)
           ? { CLAUDE_CODE_EXECUTABLE: clean(claudeExecutable) }
           : {}),

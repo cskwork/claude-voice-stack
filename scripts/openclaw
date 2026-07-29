@@ -27,21 +27,15 @@ else
   echo "OpenClaw requires QWAUDIO_CONFIG_DIR, XDG_CONFIG_HOME, or HOME." >&2
   exit 1
 fi
-export OPENCLAW_STATE_DIR=${OPENCLAW_STATE_DIR:-"$QWEN_AUDIO_AGENT_USER_DIR/backends/openclaw/state"}
+export QWEN_AUDIO_AGENT_OPENCLAW_STATE_DIR=${QWEN_AUDIO_AGENT_OPENCLAW_STATE_DIR:-"$QWEN_AUDIO_AGENT_USER_DIR/backends/openclaw/state"}
 export QWEN_AUDIO_AGENT_OPENCLAW_WORKSPACE=${QWEN_AUDIO_AGENT_OPENCLAW_WORKSPACE:-"$QWEN_AUDIO_AGENT_USER_DIR/workspaces/openclaw"}
-mkdir -p "$OPENCLAW_STATE_DIR" "$QWEN_AUDIO_AGENT_OPENCLAW_WORKSPACE"
+mkdir -p "$QWEN_AUDIO_AGENT_OPENCLAW_STATE_DIR" "$QWEN_AUDIO_AGENT_OPENCLAW_WORKSPACE"
 if [ ! -f "$QWEN_AUDIO_AGENT_OPENCLAW_WORKSPACE/AGENTS.md" ]; then
   cp "$QWEN_AUDIO_AGENT_ROOT/config/openclaw/workspace/AGENTS.md" "$QWEN_AUDIO_AGENT_OPENCLAW_WORKSPACE/AGENTS.md"
 fi
-if [ -z "${OPENCLAW_CONFIG_PATH:-}" ]; then
-  QWEN_AUDIO_AGENT_OPENCLAW_CONFIG_DIR="$QWEN_AUDIO_AGENT_USER_DIR/backends/openclaw"
-  mkdir -p "$QWEN_AUDIO_AGENT_OPENCLAW_CONFIG_DIR"
-  cp "$QWEN_AUDIO_AGENT_ROOT/config/openclaw/openclaw.json5" "$QWEN_AUDIO_AGENT_OPENCLAW_CONFIG_DIR/openclaw.json5"
-  export OPENCLAW_CONFIG_PATH="$QWEN_AUDIO_AGENT_OPENCLAW_CONFIG_DIR/openclaw.json5"
-fi
 
-export OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN:-${AGENT_API_KEY:-${QWEN_AUDIO_AGENT_AUTH_SECRET:-}}}
-OPENCLAW_GATEWAY_TOKEN_FILE=${OPENCLAW_GATEWAY_TOKEN_FILE:-"$OPENCLAW_STATE_DIR/gateway-token"}
+export OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN:-${AGENT_API_KEY:-}}
+OPENCLAW_GATEWAY_TOKEN_FILE=${OPENCLAW_GATEWAY_TOKEN_FILE:-"$QWEN_AUDIO_AGENT_OPENCLAW_STATE_DIR/gateway-token"}
 if [ -n "$OPENCLAW_GATEWAY_TOKEN" ]; then
   OPENCLAW_GATEWAY_TOKEN_TMP="$OPENCLAW_GATEWAY_TOKEN_FILE.tmp.$$"
   umask 077
@@ -53,26 +47,6 @@ export OPENCLAW_GATEWAY_TOKEN_FILE
 OPENCLAW_RUNTIME=${OPENCLAW_RUNTIME:-auto}
 OPENCLAW_PACKAGE=${OPENCLAW_PACKAGE:-openclaw@2026.6.33}
 OPENCLAW_BUNDLE_BIN=${OPENCLAW_BUNDLE_BIN-${HOME:+$HOME/.openclaw-bundle/wrapper/openclaw}}
-COMMON_BACKEND_MODEL=${QWEN_AUDIO_AGENT_BACKEND_MODEL:-qwen3.7-max}
-
-if [ -n "${OPENCLAW_MODEL:-}" ]; then
-  BACKEND_MODEL=$OPENCLAW_MODEL
-else
-  BACKEND_MODEL="bailian/${COMMON_BACKEND_MODEL#*/}"
-fi
-
-case "$BACKEND_MODEL" in
-  */*)
-    QWEN_AUDIO_AGENT_OPENCLAW_MODEL="$BACKEND_MODEL"
-    QWEN_AUDIO_AGENT_OPENCLAW_MODEL_ID=${BACKEND_MODEL#*/}
-    ;;
-  *)
-    QWEN_AUDIO_AGENT_OPENCLAW_MODEL="bailian/$BACKEND_MODEL"
-    QWEN_AUDIO_AGENT_OPENCLAW_MODEL_ID="$BACKEND_MODEL"
-    ;;
-esac
-export QWEN_AUDIO_AGENT_OPENCLAW_MODEL
-export QWEN_AUDIO_AGENT_OPENCLAW_MODEL_ID
 
 run_binary() {
   exec "$OPENCLAW_BIN" "$@"
@@ -88,17 +62,6 @@ run_bundle() {
 
 bundle_available() {
   [ -n "$OPENCLAW_BUNDLE_BIN" ] && [ -x "$OPENCLAW_BUNDLE_BIN" ]
-}
-
-installed_matches_package() {
-  OPENCLAW_EXPECTED_VERSION=${OPENCLAW_PACKAGE##*@}
-  OPENCLAW_INSTALLED_VERSION=$(
-    openclaw --version 2>/dev/null || true
-  )
-  case "$OPENCLAW_INSTALLED_VERSION" in
-    *"$OPENCLAW_EXPECTED_VERSION"*) return 0 ;;
-    *) return 1 ;;
-  esac
 }
 
 run_source() {
@@ -187,8 +150,9 @@ if bundle_available; then
   run_bundle "$@"
 fi
 
-if command -v openclaw >/dev/null 2>&1 && installed_matches_package; then
+if command -v openclaw >/dev/null 2>&1; then
   run_installed "$@"
 fi
 
-run_package "$@"
+echo "OpenClaw is not installed. Install OpenClaw or set OPENCLAW_BIN." >&2
+exit 1

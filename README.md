@@ -52,13 +52,13 @@ Agent 也应该始终在场。
 
 | 后台 Agent | 接入方式 | 接入准备 | 推荐指数 |
 | --- | --- | --- | --- |
-| OpenCode | 原生 ACP | 可自动安装 | ★★★★★ |
-| OpenClaw | 内置 ACP 桥接 | 可自动安装 | ★★★★★ |
+| OpenCode | 原生 ACP | 需要用户安装和配置 | ★★★★★ |
+| OpenClaw | 内置 ACP 桥接 | 需要用户安装和配置 | ★★★★★ |
 | Qoder | 原生 ACP | 需要用户安装和认证 | ★★★★★ |
 | Hermes | 原生 ACP | 需要用户安装和配置模型 | ★★★★☆ |
 | CodeBuddy | 原生 ACP | 需要用户安装和认证 | ★★★★☆ |
-| Codex | 外部 ACP 适配 | 可自动安装 | ★★★★☆ |
-| Claude Code | 外部 ACP 适配 | 可自动安装，需要用户认证 | ★★★★☆ |
+| Codex | 外部 ACP 适配 | 需要用户安装和认证 | ★★★★☆ |
+| Claude Code | 外部 ACP 适配 | 需要用户安装和认证 | ★★★★☆ |
 
 推荐指数综合反映当前集成完整度、兼容性和实际验证程度：五星表示已经过充分测试的
 推荐集成，四星表示正在开发或尚未完成同等范围验证。
@@ -201,7 +201,9 @@ qwenaudio gateway uninstall
 
 ## 选择后台 Agent
 
-通过 `AGENT_PROTOCOL` 选择后台 Agent（必填，没有默认值）。使用 OpenClaw：
+通过 `AGENT_PROTOCOL` 选择后台 Agent（必填，没有默认值）。所选 Agent 需要已经
+安装并完成原生配置；qwen-audio-agent 默认复用它已有的用户级模型、工具、MCP、Skill
+和认证。使用 OpenClaw：
 
 ```dotenv
 AGENT_PROTOCOL=openclaw

@@ -31,7 +31,6 @@
     "cli/src/",
     "cli/package.json",
     "config/frontend-agent/",
-    "config/openclaw/openclaw.json5",
     "config/openclaw/workspace/AGENTS.md",
     "config/hermes/workspace/AGENTS.md",
     "config/codebuddy/workspace/AGENTS.md",
