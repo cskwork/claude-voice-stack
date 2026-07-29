@@ -14,14 +14,36 @@ export function projectSessionKey(protocol, sessionId) {
   return `${protocol}:${clean(sessionId)}`
 }
 
+export function parseCoordinatorPayload(content) {
+  let candidate = clean(content)
+  for (let depth = 0; depth < 3 && candidate; depth += 1) {
+    candidate = candidate.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1]?.trim()
+      || candidate
+    try {
+      const parsed = JSON.parse(candidate)
+      if (typeof parsed === 'string') {
+        candidate = clean(parsed)
+        continue
+      }
+      return parsed && typeof parsed === 'object' ? parsed : null
+    } catch {
+      const start = candidate.indexOf('{')
+      const end = candidate.lastIndexOf('}')
+      if (start < 0 || end <= start) return null
+      const objectCandidate = candidate.slice(start, end + 1)
+      if (objectCandidate === candidate) return null
+      candidate = objectCandidate
+    }
+  }
+  return null
+}
+
 export function normalizeCoordinatorContent(content) {
   const text = clean(content)
-  const candidate = text.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1]?.trim()
-    || text
-  try {
-    const parsed = JSON.parse(candidate)
-    const inline = parsed?.presentation?.inline
-    if (typeof inline !== 'string') return text
+  const parsed = parseCoordinatorPayload(text)
+  if (!parsed) return text
+  const inline = parsed?.presentation?.inline
+  if (typeof inline === 'string') {
     parsed.presentation.inline = clean(inline)
       ? {
           title: 'Agent 结果',
@@ -29,27 +51,18 @@ export function normalizeCoordinatorContent(content) {
           content: inline,
         }
       : null
-    return JSON.stringify(parsed)
-  } catch {
-    return text
   }
+  return JSON.stringify(parsed)
 }
 
 export function coordinatorPresentation(content) {
-  const candidate = clean(content).match(
-    /```(?:json)?\s*([\s\S]*?)```/i,
-  )?.[1] || clean(content)
-  try {
-    const presentation = JSON.parse(candidate)?.presentation
-    if (!presentation || typeof presentation !== 'object') return null
-    return {
-      speech: clean(presentation.speech),
-      inline: presentation.inline && typeof presentation.inline === 'object'
-        ? presentation.inline
-        : null,
-    }
-  } catch {
-    return null
+  const presentation = parseCoordinatorPayload(content)?.presentation
+  if (!presentation || typeof presentation !== 'object') return null
+  return {
+    speech: clean(presentation.speech),
+    inline: presentation.inline && typeof presentation.inline === 'object'
+      ? presentation.inline
+      : null,
   }
 }
 

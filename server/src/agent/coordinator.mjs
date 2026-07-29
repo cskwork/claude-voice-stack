@@ -1,4 +1,5 @@
 import { agent } from './agent-client.mjs'
+import { parseCoordinatorPayload } from './acp-backend-session-utils.mjs'
 
 const INLINE_SCHEMA = {
   anyOf: [
@@ -69,22 +70,8 @@ function clean(value) {
   return String(value || '').trim()
 }
 
-function jsonCandidate(content) {
-  const text = clean(content)
-  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1]
-  if (fenced) return fenced.trim()
-  const start = text.indexOf('{')
-  const end = text.lastIndexOf('}')
-  return start >= 0 && end > start ? text.slice(start, end + 1) : ''
-}
-
 function coordinatorPayload(content) {
-  try {
-    const candidate = jsonCandidate(content)
-    return candidate ? JSON.parse(candidate) : null
-  } catch {
-    return null
-  }
+  return parseCoordinatorPayload(content)
 }
 
 export function coordinatorResponseState(content) {
@@ -220,6 +207,7 @@ export function buildCoordinatorPrompt({
     '返回一个 JSON 对象：',
     '{"work_id":"request_id","state":"completed","mode":"respond","presentation":{"speech":"适合语音表达的最终结果","inline":null}}',
     'work_id 对应 request_id。presentation 是本轮用户要求的最终结果；inline 可承载适合屏幕查看的 Markdown、代码或链接。',
+    '用户明确要求“独立任务”或“后台处理”时，必须使用当前后端提供的第三层 Session 委派工具，不得在协调 Session 中直接执行该任务。',
     '调用 session_start 或 session_send 并得到 started 后，可以根据用户原话、目标项目和工具返回，自行组织一次自然、有信息量的创建或提交成功说明，然后返回 state=delegated、mode=delegate、准确的 delegation_id、target_session_id 和 presentation。presentation.speech 就是要立刻告诉用户的说明；可以解释已经开始推进什么以及准备怎么做，但不要把尚未完成的工作说成已经完成。此后结束本轮，不要查询状态或自行重复执行；系统会等待目标 Session 完成。',
     'session_status 只用于查询既有第三层任务状态。如果它调用失败，只能如实说明暂时无法取得状态；禁止改用 bash、read、glob、grep 或其他工具扫描目标项目，也禁止凭协调会话记忆代替目标 Session 回答原任务。',
     '这里只接受最终完成结果。不要返回 active、进度、受理确认、未来计划或“正在处理/稍等”；如果工作尚未完成，请继续处理，完成后再返回。',
@@ -250,6 +238,9 @@ export class Coordinator {
         })
       : Promise.reject(new Error('Coordinator backend is unavailable'))
     let result = await run(prompt)
+    if (!clean(result?.content)) {
+      throw new Error('Coordinator backend returned an empty response')
+    }
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const state = coordinatorResponseState(result.content)
       if (!state || state === 'completed') break

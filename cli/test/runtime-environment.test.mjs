@@ -54,6 +54,27 @@ function assertPrivateMode(filePath) {
   }
 }
 
+test('loads setup configuration without creating or changing user files', () => {
+  const target = fixture()
+  writeFileSync(resolve(target.root, '.env'), [
+    'AGENT_PROTOCOL=codex',
+    'CODEX_PATH=/tools/codex',
+  ].join('\n'))
+  const env = {}
+  const result = loadRuntimeEnvironment({
+    root: target.root,
+    homeDirectory: target.homeDirectory,
+    env,
+    readOnly: true,
+  })
+  assert.equal(env.AGENT_PROTOCOL, 'codex')
+  assert.equal(env.CODEX_PATH, '/tools/codex')
+  assert.equal(existsSync(result.configDirectory), false)
+  assert.equal(existsSync(result.configPath), false)
+  assert.equal(env.CODEX_WORKSPACE, undefined)
+  assert.equal(env.QWEN_AUDIO_AGENT_AUTH_SECRET, undefined)
+})
+
 test('loads environment, project and user config in documented priority order', () => {
   const target = fixture()
   const configDirectory = resolve(target.homeDirectory, '.config/qwaudio')
@@ -188,22 +209,23 @@ test('keeps managed backend data outside the installation directory', () => {
     env.QWEN_AUDIO_AGENT_OPENCLAW_WORKSPACE,
     result.openClawWorkspace,
   )
-  assert.equal(env.OPENCLAW_STATE_DIR, result.openClawStateDirectory)
+  assert.equal(
+    env.QWEN_AUDIO_AGENT_OPENCLAW_STATE_DIR,
+    result.openClawStateDirectory,
+  )
+  assert.equal(env.OPENCLAW_STATE_DIR, undefined)
   assert.equal(env.QODER_WORKSPACE, result.qoderWorkspace)
   assert.equal(env.HERMES_WORKSPACE, result.hermesWorkspace)
   assert.equal(env.CODEBUDDY_WORKSPACE, result.codeBuddyWorkspace)
   assert.equal(env.CODEX_WORKSPACE, result.codexWorkspace)
   assert.equal(env.CLAUDE_WORKSPACE, result.claudeWorkspace)
   assert.equal(env.ACP_WORKSPACE, result.acpWorkspace)
-  assert.deepEqual(
-    JSON.parse(readFileSync(
-      resolve(result.codeBuddyWorkspace, '.codebuddy/models.json'),
-      'utf8',
+  assert.equal(
+    existsSync(resolve(
+      result.codeBuddyWorkspace,
+      '.codebuddy/models.json',
     )),
-    {
-      models: [{ id: 'qwen3.7-max', name: 'Qwen 3.7 Max' }],
-      availableModels: ['qwen3.7-max'],
-    },
+    false,
   )
   assert.match(
     readFileSync(resolve(result.openCodeWorkspace, 'AGENTS.md'), 'utf8'),
@@ -234,7 +256,7 @@ test('keeps the generated CodeBuddy model aligned with backend settings', () => 
   loadRuntimeEnvironment({
     root: target.root,
     homeDirectory: target.homeDirectory,
-    env: { CODEBUDDY_MODEL: 'qwen3.7-max' },
+    env: { QWEN_AUDIO_AGENT_BACKEND_MODEL: 'qwen3.7-max' },
     generateSecret: false,
   })
   assert.deepEqual(JSON.parse(readFileSync(modelPath, 'utf8')), {
@@ -243,10 +265,33 @@ test('keeps the generated CodeBuddy model aligned with backend settings', () => 
   })
 })
 
+test('removes only a generated CodeBuddy override when no model is configured', () => {
+  const target = fixture()
+  const first = loadRuntimeEnvironment({
+    root: target.root,
+    homeDirectory: target.homeDirectory,
+    env: { QWEN_AUDIO_AGENT_BACKEND_MODEL: 'qwen3.7-plus' },
+    generateSecret: false,
+  })
+  const modelPath = resolve(
+    first.codeBuddyWorkspace,
+    '.codebuddy/models.json',
+  )
+  assert.equal(existsSync(modelPath), true)
+
+  loadRuntimeEnvironment({
+    root: target.root,
+    homeDirectory: target.homeDirectory,
+    env: {},
+    generateSecret: false,
+  })
+  assert.equal(existsSync(modelPath), false)
+})
+
 test('preserves a user-edited CodeBuddy model configuration', () => {
   const target = fixture()
   const env = {
-    CODEBUDDY_MODEL: 'qwen3.7-plus',
+    QWEN_AUDIO_AGENT_BACKEND_MODEL: 'qwen3.7-plus',
   }
   const first = loadRuntimeEnvironment({
     root: target.root,
@@ -266,7 +311,15 @@ test('preserves a user-edited CodeBuddy model configuration', () => {
   loadRuntimeEnvironment({
     root: target.root,
     homeDirectory: target.homeDirectory,
-    env: { CODEBUDDY_MODEL: 'qwen3.7-max' },
+    env: {},
+    generateSecret: false,
+  })
+  assert.equal(readFileSync(modelPath, 'utf8'), customized)
+
+  loadRuntimeEnvironment({
+    root: target.root,
+    homeDirectory: target.homeDirectory,
+    env: { QWEN_AUDIO_AGENT_BACKEND_MODEL: 'qwen3.7-max' },
     generateSecret: false,
   })
   assert.equal(readFileSync(modelPath, 'utf8'), customized)

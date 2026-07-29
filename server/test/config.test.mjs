@@ -77,17 +77,61 @@ test('maps one backend model name to each managed backend provider', () => {
     common: 'qwen3.7-plus',
     openCode: 'alibaba-cn/qwen3.7-plus',
     openClaw: 'bailian/qwen3.7-plus',
+    qoder: 'qwen3.7-plus',
+    hermes: 'qwen3.7-plus',
+    codeBuddy: 'qwen3.7-plus',
+    codex: 'qwen3.7-plus',
+    claude: 'qwen3.7-plus',
+    acp: 'qwen3.7-plus',
   })
 })
 
-test('preserves backend-native model overrides', () => {
+test('ignores backend-native model variables as Gateway overrides', () => {
+  assert.deepEqual(resolveBackendModels({
+    OPENCODE_MODEL: 'custom-open/code-model',
+    QODER_MODEL: 'qoder-model',
+  }), {
+    common: '',
+    openCode: '',
+    openClaw: '',
+    qoder: '',
+    hermes: '',
+    codeBuddy: '',
+    codex: '',
+    claude: '',
+    acp: '',
+  })
+})
+
+test('treats legacy auto as no backend model override', () => {
+  assert.deepEqual(resolveBackendModels({
+    QWEN_AUDIO_AGENT_BACKEND_MODEL: 'AUTO',
+  }), {
+    common: '',
+    openCode: '',
+    openClaw: '',
+    qoder: '',
+    hermes: '',
+    codeBuddy: '',
+    codex: '',
+    claude: '',
+    acp: '',
+  })
+})
+
+test('uses only the unified backend model override', () => {
   assert.deepEqual(resolveBackendModels({
     QWEN_AUDIO_AGENT_BACKEND_MODEL: 'qwen3.7-max',
     OPENCODE_MODEL: 'custom-open/code-model',
-    OPENCLAW_MODEL: 'custom-claw/model',
   }), {
     common: 'qwen3.7-max',
-    openCode: 'custom-open/code-model',
-    openClaw: 'custom-claw/model',
+    openCode: 'alibaba-cn/qwen3.7-max',
+    openClaw: 'bailian/qwen3.7-max',
+    qoder: 'qwen3.7-max',
+    hermes: 'qwen3.7-max',
+    codeBuddy: 'qwen3.7-max',
+    codex: 'qwen3.7-max',
+    claude: 'qwen3.7-max',
+    acp: 'qwen3.7-max',
   })
 })

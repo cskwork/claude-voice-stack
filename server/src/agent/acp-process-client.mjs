@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process'
 import { Readable, Writable } from 'node:stream'
+import { stripVTControlCharacters } from 'node:util'
 import * as acp from '@agentclientprotocol/sdk'
 import { PACKAGE_VERSION } from '../core/package-version.mjs'
 import { AgentError, requestSignal } from './backend-adapter.mjs'
@@ -8,6 +9,30 @@ const MAX_STDERR_CHARS = 12_000
 
 function clean(value) {
   return String(value || '').trim()
+}
+
+function cleanProcessOutput(value, sanitizeProcessOutput) {
+  const stripped = stripVTControlCharacters(String(value || '')).trim()
+  return clean(sanitizeProcessOutput?.(stripped) ?? stripped)
+}
+
+function requestErrorDetails(error) {
+  const details = error?.data?.details
+  if (typeof details === 'string' && details.trim()) return details.trim()
+  if (typeof error?.data === 'string' && error.data.trim()) {
+    return error.data.trim()
+  }
+  return ''
+}
+
+function requestErrorMessage(error, formatRequestError) {
+  const message = clean(error?.message || error)
+  const details = requestErrorDetails(error)
+  const formatted = clean(formatRequestError?.({ error, message, details }))
+  if (formatted) return formatted
+  return details && !message.includes(details)
+    ? `${message}（${details}）`
+    : message
 }
 
 function textFromUpdate(update) {
@@ -36,6 +61,8 @@ export class AcpProcessClient {
     spawnImpl = spawn,
     onPermission,
     onUpdate,
+    sanitizeProcessOutput,
+    formatRequestError,
   }) {
     this.label = label
     this.command = command
@@ -46,6 +73,8 @@ export class AcpProcessClient {
     this.spawn = spawnImpl
     this.onPermission = onPermission
     this.onUpdate = onUpdate
+    this.sanitizeProcessOutput = sanitizeProcessOutput
+    this.formatRequestError = formatRequestError
     this.child = null
     this.connection = null
     this.context = null
@@ -65,9 +94,10 @@ export class AcpProcessClient {
   }
 
   appendStderr(chunk) {
-    this.stderr = `${this.stderr}${String(chunk || '')}`.slice(
-      -MAX_STDERR_CHARS,
-    )
+    this.stderr = cleanProcessOutput(
+      `${this.stderr}${String(chunk || '')}`,
+      this.sanitizeProcessOutput,
+    ).slice(-MAX_STDERR_CHARS)
   }
 
   async start() {
@@ -218,12 +248,18 @@ export class AcpProcessClient {
       })
     } catch (error) {
       if (signal?.aborted) throw signal.reason
+      const isRequestError = error?.name === 'RequestError'
+      const stderr = isRequestError
+        ? ''
+        : cleanProcessOutput(this.stderr, this.sanitizeProcessOutput)
       throw new AgentError(
-        `${this.label} ACP ${method} 失败：${error?.message || error}${
-          this.stderr ? `：${clean(this.stderr)}` : ''
+        `${this.label} ACP ${method} 失败：${
+          requestErrorMessage(error, this.formatRequestError)
+        }${
+          stderr ? `：${stderr}` : ''
         }`,
         {
-          body: clean(this.stderr),
+          body: stderr || requestErrorDetails(error),
           protocol: 'acp',
         },
       )
@@ -261,6 +297,7 @@ export class AcpProcessClient {
     })
     return this.rememberSession(response.sessionId, {
       cwd,
+      meta,
       ownerId,
       role,
       mcpServers,
@@ -296,6 +333,7 @@ export class AcpProcessClient {
     }
     return this.rememberSession(sessionId, {
       cwd,
+      meta,
       ownerId,
       role,
       mcpServers,
@@ -412,6 +450,17 @@ export class AcpProcessClient {
         sessionId: String(sessionId),
         configId: String(configId),
         value: String(value),
+      },
+      { timeoutMs: 15_000 },
+    )
+  }
+
+  async setLegacySessionModel(sessionId, modelId) {
+    return this.request(
+      'session/set_model',
+      {
+        sessionId: String(sessionId),
+        modelId: String(modelId),
       },
       { timeoutMs: 15_000 },
     )

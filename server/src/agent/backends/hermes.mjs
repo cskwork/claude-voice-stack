@@ -7,7 +7,7 @@ export const hermesBackendDriver = {
   resolveOptions(options) {
     return {
       baseUrl: '',
-      model: '',
+      model: options.hermesModel,
       directory: options.hermesDirectory,
       cliPath: options.hermesCliPath,
       coordinatorAgent: options.coordinatorAgent,

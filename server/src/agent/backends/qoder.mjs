@@ -1,7 +1,4 @@
-import {
-  baseEnvironment,
-  clean,
-} from './shared.mjs'
+import { baseEnvironment } from './shared.mjs'
 
 export const qoderBackendDriver = {
   id: 'qoder',
@@ -22,16 +19,12 @@ export const qoderBackendDriver = {
     cliPath,
     configDirectory,
     permissionMode,
-    model,
   }) {
     return {
       label: this.label,
       command: cliPath || 'qodercli',
       args: [
         '--acp',
-        ...(clean(model) && clean(model) !== 'auto'
-          ? ['--model', clean(model)]
-          : []),
         ...(permissionMode === 'full'
           ? ['--dangerously-skip-permissions']
           : []),

@@ -2,6 +2,10 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { loadRuntimeEnvironment } from '../../shared/runtime-environment.mjs'
 import { backendDefinition } from '../../shared/backend-catalog.mjs'
+import {
+  formatBackendSetup,
+  inspectBackendSetups,
+} from '../../shared/backend-setup.mjs'
 import { helpText, parseArguments } from './arguments.mjs'
 import {
   ensureRuntime,
@@ -29,18 +33,13 @@ async function runMinimal(options) {
 
 function applyGatewayOptions(env, options) {
   env.AGENT_PROTOCOL = options.backend
-  if (options.attachOpenClaw) {
-    env.OPENCLAW_ATTACH_EXISTING = 'true'
-  } else {
-    delete env.OPENCLAW_ATTACH_EXISTING
-  }
+  const definition = backendDefinition(options.backend)
   env.QWEN_AUDIO_AGENT_BACKEND_PERMISSION_MODE = options.backendPermissionMode
   if (options.backendAgent) {
     env.QWEN_AUDIO_AGENT_BACKEND_AGENT = options.backendAgent
   } else {
     delete env.QWEN_AUDIO_AGENT_BACKEND_AGENT
   }
-  const definition = backendDefinition(options.backend)
   if (definition?.baseUrlEnvironment) {
     env[definition.baseUrlEnvironment] = options.backendUrl
   }
@@ -72,7 +71,15 @@ export async function main(argv, {
   env = process.env,
   stdout = process.stdout,
   signalSource = process,
-  prepareEnvironment = () => loadRuntimeEnvironment({ root, env }),
+  prepareEnvironment = ({ readOnly = false } = {}) => loadRuntimeEnvironment({
+    root,
+    env,
+    readOnly,
+  }),
+  inspectSetups = options => inspectBackendSetups({
+    env,
+    backend: options.backendSpecified ? options.backend : '',
+  }),
   runMinimalTui = runMinimal,
   prepareRuntime = options => ensureRuntime(options, { root, env }),
   inspectGateway = url => readGatewayHealth(url),
@@ -82,7 +89,8 @@ export async function main(argv, {
   runWebUi = options => launchWebUi(options),
   acquireInstance = directory => acquireCliInstance(directory),
 } = {}) {
-  const environment = prepareEnvironment()
+  const setupCommand = argv[0] === 'setup'
+  const environment = prepareEnvironment({ readOnly: setupCommand })
   const options = parseArguments(argv, env)
   if (options.help) {
     stdout.write(`${helpText()}\n`)
@@ -92,6 +100,15 @@ export async function main(argv, {
     stdout.write(`${environment.configPath
       || resolve(environment.configDirectory, 'config.env')}\n`)
     return 0
+  }
+  if (options.command === 'setup') {
+    const report = inspectSetups(options)
+    stdout.write(options.json
+      ? `${JSON.stringify(report, null, 2)}\n`
+      : `${formatBackendSetup(report)}\n`)
+    const selected = report.backends.find(item => item.selected)
+      || (options.backendSpecified ? report.backends[0] : null)
+    return selected && !selected.ready ? 1 : 0
   }
 
   if (

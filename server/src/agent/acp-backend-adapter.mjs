@@ -30,8 +30,66 @@ function clean(value) {
   return String(value || '').trim()
 }
 
+function explicitModel(value) {
+  const model = clean(value)
+  return model.toLowerCase() === 'auto' ? '' : model
+}
+
+function modelKey(value) {
+  return clean(value).toLowerCase()
+}
+
+function optionChoices(entries = []) {
+  return entries.flatMap(entry => {
+    if (Array.isArray(entry?.options)) return optionChoices(entry.options)
+    const value = clean(entry?.value)
+    if (!value) return []
+    return [{
+      value,
+      names: [entry?.name, entry?.label]
+        .map(clean)
+        .filter(Boolean),
+    }]
+  })
+}
+
+function matchingOptionValue(entries, desired) {
+  const desiredKey = modelKey(desired)
+  const choice = optionChoices(entries).find(item => (
+    modelKey(item.value) === desiredKey
+    || item.names.some(name => modelKey(name) === desiredKey)
+  ))
+  return choice?.value || ''
+}
+
 function bounded(value, max = 300) {
   return clean(value).replace(/\s+/g, ' ').slice(0, max)
+}
+
+function optionValues(entries = []) {
+  return optionChoices(entries).map(entry => entry.value)
+}
+
+function modelConfigOption(options = []) {
+  return options.find(option => clean(option?.category).toLowerCase() === 'model')
+    || options.find(option => (
+      ['model', 'models'].includes(clean(option?.id).toLowerCase())
+    ))
+    || null
+}
+
+function legacyModelState(response) {
+  const models = response?.models
+  if (!models || !Array.isArray(models.availableModels)) return null
+  return {
+    currentValue: clean(models.currentModelId),
+    choices: models.availableModels
+      .map(item => ({
+        value: clean(item?.modelId),
+        names: [item?.name].map(clean).filter(Boolean),
+      }))
+      .filter(item => item.value),
+  }
 }
 
 function deferred() {
@@ -44,9 +102,28 @@ function deferred() {
   return { promise, resolve: resolvePromise, reject: rejectPromise }
 }
 
+function waitForRetry(delayMs, signal) {
+  if (signal?.aborted) {
+    return Promise.reject(signal.reason || new Error('任务已取消'))
+  }
+  return new Promise((resolvePromise, rejectPromise) => {
+    const finish = () => {
+      signal?.removeEventListener('abort', abort)
+      resolvePromise()
+    }
+    const timer = setTimeout(finish, delayMs)
+    const abort = () => {
+      clearTimeout(timer)
+      signal?.removeEventListener('abort', abort)
+      rejectPromise(signal.reason || new Error('任务已取消'))
+    }
+    signal?.addEventListener('abort', abort, { once: true })
+  })
+}
+
 export class AcpBackendAdapter {
   constructor({
-    protocol = 'opencode',
+    protocol = 'acp',
     root = process.cwd(),
     ownership = 'owned',
     permissionMode = 'native',
@@ -72,7 +149,10 @@ export class AcpBackendAdapter {
     this.root = root
     this.ownership = ownership === 'external' ? 'external' : 'owned'
     this.permissionMode = permissionMode === 'full' ? 'full' : 'native'
-    this.model = clean(model)
+    // An empty model means the Agent owns model selection for both new and
+    // resumed Sessions. `auto` is retained only as a legacy configuration
+    // spelling and is normalized to the same no-override state here.
+    this.model = explicitModel(model)
     this.timeoutMs = timeoutMs
     this.directory = directory
     this.baseUrl = clean(baseUrl) || null
@@ -113,6 +193,8 @@ export class AcpBackendAdapter {
       onPermission: (params, context) => (
         this.handlePermission(params, context)
       ),
+      sanitizeProcessOutput: this.profile.sanitizeProcessOutput,
+      formatRequestError: this.profile.formatRequestError,
     })
   }
 
@@ -212,7 +294,17 @@ export class AcpBackendAdapter {
             ownerId,
             role: 'coordinator',
           })
-          session.isNew = false
+          const accepted = this.profile.acceptResumedSession?.({
+            session,
+            role: 'coordinator',
+            coordinatorAgent: this.coordinatorAgent,
+          }) !== false
+          if (!accepted) {
+            this.registry.delete(key)
+            session = null
+          } else {
+            session.isNew = false
+          }
         } catch {
           this.registry.delete(key)
         }
@@ -244,25 +336,153 @@ export class AcpBackendAdapter {
     const options = Array.isArray(session?.response?.configOptions)
       ? session.response.configOptions
       : []
-    const desired = [
-      ...(role === 'coordinator' && this.coordinatorAgent
-        ? [['mode', this.coordinatorAgent]]
-        : []),
-      ...(this.model && this.model !== 'auto'
-        ? [['model', this.model]]
-        : []),
-    ]
-    for (const [configId, value] of desired) {
-      const option = options.find(item => item.id === configId)
+    if (role === 'coordinator' && this.coordinatorAgent) {
+      const configId = 'mode'
+      const value = this.coordinatorAgent
+      const option = options.find(item => clean(item?.id) === configId)
       const supported = option?.type !== 'select'
         || option.options?.some(item => item.value === value)
-      if (!option || !supported || option.currentValue === value) continue
-      await this.client.setSessionConfigOption(
-        session.sessionId,
-        configId,
-        value,
+      if (option && supported && option.currentValue !== value) {
+        await this.client.setSessionConfigOption(
+          session.sessionId,
+          configId,
+          value,
+        )
+        option.currentValue = value
+      }
+    }
+    if (this.model) {
+      await this.forceSessionModel(session, options)
+    }
+  }
+
+  async forceSessionModel(session, options) {
+    const desired = this.model
+    const option = modelConfigOption(options)
+    if (!option) {
+      if (this.nativeDelegationAdapter?.setSessionModel) {
+        try {
+          await this.nativeDelegationAdapter.setSessionModel({
+            sessionKey: clean(session?.meta?.sessionKey)
+              || clean(session?.sessionId),
+            model: desired,
+          })
+          return
+        } catch (error) {
+          throw new AgentError(
+            `${this.label} 无法把 Session 模型设置为 ${desired}：${
+              clean(error?.message) || '未知错误'
+            }`,
+            {
+              status: error.status || 502,
+              protocol: error.protocol || `${this.protocol}-native`,
+            },
+          )
+        }
+      }
+      const legacy = legacyModelState(session?.response)
+      if (legacy && this.client.setLegacySessionModel) {
+        const selected = matchingOptionValue(
+          legacy.choices.map(choice => ({
+            value: choice.value,
+            name: choice.names[0],
+          })),
+          desired,
+        )
+        if (!selected) {
+          const availableModels = legacy.choices.map(choice => (
+            choice.names[0] || choice.value
+          ))
+          const available = availableModels.length
+            ? `；可选模型：${availableModels.slice(0, 12).join('、')}`
+            : ''
+          throw new AgentError(
+            `${this.label} 当前 Session 不支持模型 ${desired}${available}`,
+            { status: 422, protocol: 'acp' },
+          )
+        }
+        if (modelKey(legacy.currentValue) === modelKey(selected)) return
+        try {
+          await this.client.setLegacySessionModel(
+            session.sessionId,
+            selected,
+          )
+        } catch (error) {
+          throw new AgentError(
+            `${this.label} 无法把 Session 模型设置为 ${desired}：${
+              clean(error?.message) || '未知错误'
+            }`,
+            {
+              status: error.status || 502,
+              protocol: 'acp',
+            },
+          )
+        }
+        session.response.models.currentModelId = selected
+        return
+      }
+      throw new AgentError(
+        `${this.label} 没有通过 ACP 提供 Session 模型配置，`
+        + `无法强制使用模型 ${desired}`,
+        { status: 422, protocol: 'acp' },
       )
-      option.currentValue = value
+    }
+    const values = optionValues(option.options)
+    const selected = option.type === 'select'
+      ? matchingOptionValue(option.options, desired)
+      : desired
+    if (option.type === 'select' && !selected) {
+      const available = values.length
+        ? `；可选模型：${values.slice(0, 12).join('、')}`
+        : ''
+      throw new AgentError(
+        `${this.label} 当前 Session 不支持模型 ${desired}${available}`,
+        { status: 422, protocol: 'acp' },
+      )
+    }
+    if (modelKey(option.currentValue) === modelKey(selected)) return
+    let response
+    try {
+      response = await this.client.setSessionConfigOption(
+        session.sessionId,
+        option.id,
+        selected,
+      )
+    } catch (error) {
+      throw new AgentError(
+        `${this.label} 无法把 Session 模型设置为 ${desired}：${
+          clean(error?.message) || '未知错误'
+        }`,
+        {
+          status: error.status || 502,
+          protocol: 'acp',
+        },
+      )
+    }
+    const updatedOptions = Array.isArray(response?.configOptions)
+      ? response.configOptions
+      : null
+    if (!updatedOptions) {
+      throw new AgentError(
+        `${this.label} 设置模型后没有返回 ACP configOptions，`
+        + `无法确认模型 ${desired} 已生效`,
+        { status: 502, protocol: 'acp' },
+      )
+    }
+    const updated = updatedOptions.find(item => (
+      clean(item?.id) === clean(option.id)
+    ))
+      || modelConfigOption(updatedOptions)
+    if (modelKey(updated?.currentValue) !== modelKey(selected)) {
+      throw new AgentError(
+        `${this.label} 未确认模型覆盖生效：要求 ${desired}，`
+        + `实际 ${clean(updated?.currentValue) || '未知'}`,
+        { status: 502, protocol: 'acp' },
+      )
+    }
+    session.response = {
+      ...(session.response || {}),
+      configOptions: updatedOptions,
     }
   }
 
@@ -393,6 +613,7 @@ export class AcpBackendAdapter {
   }
 
   onSessionUpdate(run, update) {
+    run.receivedUpdate = true
     run.toolCalls ||= new Map()
     const activity = activityFromUpdate(update, run.toolCalls)
     if (activity) run.onEvent?.({ type: 'backend.activity', activity })
@@ -695,6 +916,37 @@ export class AcpBackendAdapter {
     ].join('\n')
   }
 
+  async promptCoordinator(session, prompt, run, {
+    signal,
+    onUpdate,
+  } = {}) {
+    let attempt = 0
+    while (true) {
+      try {
+        return await this.client.prompt(
+          session.sessionId,
+          this.coordinatorInstructions(prompt),
+          {
+            signal,
+            timeoutMs: this.timeoutMs,
+            onUpdate,
+          },
+        )
+      } catch (error) {
+        const retryIsSafe = !run.receivedUpdate
+          && !run.delegation
+          && run.nativeToolCalls.size === 0
+          && run.toolCalls.size === 0
+        const delayMs = retryIsSafe
+          ? this.profile.promptRetryDelay?.({ error, attempt })
+          : null
+        if (!Number.isFinite(delayMs) || delayMs < 0) throw error
+        attempt += 1
+        await waitForRetry(delayMs, signal)
+      }
+    }
+  }
+
   async coordinatorTurn(message, {
     ownerId,
     coordinationRunId,
@@ -709,6 +961,7 @@ export class AcpBackendAdapter {
       nativeToolCalls: new Map(),
       toolCalls: new Map(),
       initialPromptDone: false,
+      receivedUpdate: false,
     }
     const ownerKey = clean(ownerId)
     const pendingFacts = this.pendingCoordinatorFacts.get(ownerKey) || []
@@ -749,15 +1002,21 @@ export class AcpBackendAdapter {
           role: 'coordinator',
         })
       }
-      const result = await this.client.prompt(
-        session.sessionId,
-        this.coordinatorInstructions(prompt),
-        {
-          signal,
-          timeoutMs: this.timeoutMs,
-          onUpdate: update => this.onSessionUpdate(run, update),
-        },
-      )
+      const result = await this.promptCoordinator(session, prompt, run, {
+        signal,
+        onUpdate: update => this.onSessionUpdate(run, update),
+      })
+      if (!clean(result?.content)) {
+        const error = new AgentError(
+          `${this.profile.label} ACP Session 未返回任何内容`,
+          { status: 502, protocol: this.protocol },
+        )
+        error.recoverWithFreshCoordinator = !run.receivedUpdate
+          && !run.delegation
+          && run.nativeToolCalls.size === 0
+          && run.toolCalls.size === 0
+        throw error
+      }
       run.initialPromptDone = true
       session.isNew = false
       if (pendingFacts.length) this.pendingCoordinatorFacts.delete(ownerKey)
@@ -880,6 +1139,25 @@ export class AcpBackendAdapter {
     }
   }
 
+  discardCoordinatorSession(ownerId, sessionId = '') {
+    const key = coordinatorKey(ownerId, this.protocol)
+    const current = this.coordinatorSessions.get(key)
+    if (!sessionId || current?.sessionId === sessionId) {
+      this.coordinatorSessions.delete(key)
+    }
+    this.registry.delete(key)
+  }
+
+  async coordinatorTurnWithRecovery(message, options = {}) {
+    try {
+      return await this.coordinatorTurn(message, options)
+    } catch (error) {
+      if (!error?.recoverWithFreshCoordinator) throw error
+      this.discardCoordinatorSession(options.ownerId)
+      return this.coordinatorTurn(message, options)
+    }
+  }
+
   async runCoordinator(message, {
     ownerId,
     coordinationRunId,
@@ -889,7 +1167,7 @@ export class AcpBackendAdapter {
     const key = coordinatorKey(ownerId, this.protocol)
     const initial = await this.serialize(
       `coordinator:${key}`,
-      () => this.coordinatorTurn(message, {
+      () => this.coordinatorTurnWithRecovery(message, {
         ownerId,
         coordinationRunId,
         signal,
@@ -921,7 +1199,7 @@ export class AcpBackendAdapter {
       })
       const final = await this.serialize(
         `coordinator:${key}`,
-        () => this.coordinatorTurn(
+        () => this.coordinatorTurnWithRecovery(
           this.delegationResultPrompt(target, coordinationRunId),
           {
             ownerId,

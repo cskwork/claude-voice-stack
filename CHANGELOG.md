@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.11.0
+
+- 统一后台 Setup：OpenCode 和 OpenClaw 优先使用用户安装，并提供固定 npm 包
+  自动下载兜底；配置百炼 API Key 和后台模型后可自动完成模型接入。其他 Agent
+  暂时要求用户自行安装配置。新增只读 `qwenaudio setup` 检查及可复用的 JSON 输出。
+- 统一 ACP Session 模型覆盖：默认不发送模型设置；显式配置时按标准
+  `category: model` 强制设置并验证全部受管 Session，失败时明确报错；新建和
+  恢复 Session 的默认模型选择完全交由后台 Agent。后台模型只保留统一配置入口
+  `QWEN_AUDIO_AGENT_BACKEND_MODEL`，不再提供各 Agent 专属的模型变量；模型 ID
+  和显示名称匹配不区分大小写，并使用后台返回的规范 ID 完成设置，兼容 Qoder
+  等使用不透明模型 ID 的 ACP 后端。
+- 统一后台进程归属：所有后台实例均由 qwen-audio-agent 启动和回收；OpenClaw
+  始终使用独立 Gateway、运行状态和 Session 存储，同时复用用户已有能力配置，
+  不再连接或影响用户常驻 Gateway。
+- 加强协调 Session 与结果交付：恢复失效时自动建立新的协调 Session，任务完成后
+  主动触发语音回复，并避免工具受理确认、最终结果和播放通知互相阻塞或重复。
+- 修复 OpenClaw 连续消息或第三层任务完成回传紧邻下一轮请求时，可能触发
+  reply Session 初始化竞争的问题；仅在尚未产生回复或工具活动时原 Session 重试。
+
 ## 0.10.0
 
 - 新增基于 `@zed-industries/claude-code-acp` 的 Claude Code 后端，支持独立协调

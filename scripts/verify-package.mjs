@@ -39,7 +39,6 @@ if (packages.length !== 1) throw new Error('npm pack 返回了意外的包数量
 const files = new Set(packages[0].files.map(file => file.path))
 const required = [
   'cli/bin/qwenaudio.mjs',
-  'config/openclaw/openclaw.json5',
   'config/openclaw/workspace/AGENTS.md',
   'config/hermes/workspace/AGENTS.md',
   'config/codebuddy/workspace/AGENTS.md',

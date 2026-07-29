@@ -18,6 +18,12 @@ export function removeDeliveredTask(tasks, taskId) {
   return tasks.filter(task => task.id !== taskId)
 }
 
+export function removeTaskInPhase(tasks, taskId, phase) {
+  return tasks.filter(task => (
+    task.id !== taskId || task.phase !== phase
+  ))
+}
+
 export function taskLabel(task) {
   if (task.authorization?.status === 'pending') return '等待你的确认'
   if (task.phase === 'failed') return '处理失败'

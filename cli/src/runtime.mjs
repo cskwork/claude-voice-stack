@@ -38,14 +38,7 @@ export function resolveBackend(options = {}, env = process.env) {
   if (!definition) throw new Error(
     `不支持的后台 Agent：${protocol}（可选 ${backendNames().join('、')}）`,
   )
-  const attachOpenClaw = (
-    options.attachOpenClaw === true
-    || String(env.OPENCLAW_ATTACH_EXISTING || '').toLowerCase() === 'true'
-  )
-  if (attachOpenClaw && protocol !== 'openclaw') {
-    throw new Error('连接已有 OpenClaw Gateway 只适用于 OpenClaw')
-  }
-  const ownership = attachOpenClaw ? 'external' : 'owned'
+  const ownership = 'owned'
   const permissionMode = String(
     options.backendPermissionMode
     || env.QWEN_AUDIO_AGENT_BACKEND_PERMISSION_MODE
@@ -66,7 +59,6 @@ export function resolveBackend(options = {}, env = process.env) {
   return {
     protocol,
     ownership,
-    attachOpenClaw,
     permissionMode,
     agentId: String(
       options.backendAgent || env.QWEN_AUDIO_AGENT_BACKEND_AGENT || '',
@@ -177,18 +169,15 @@ function waitForReadiness(child, readiness, label) {
 }
 
 function backendEnvironment(env, backend) {
+  const definition = backendDefinition(backend.protocol)
   const next = {
     ...env,
     AGENT_PROTOCOL: backend.protocol,
-    ...(backend.attachOpenClaw
-      ? { OPENCLAW_ATTACH_EXISTING: 'true' }
-      : {}),
     QWEN_AUDIO_AGENT_BACKEND_PERMISSION_MODE: backend.permissionMode,
     ...(backend.agentId
       ? { QWEN_AUDIO_AGENT_BACKEND_AGENT: backend.agentId }
       : {}),
   }
-  const definition = backendDefinition(backend.protocol)
   if (!definition?.baseUrlEnvironment) return next
   const target = new URL(backend.baseUrl)
   next[definition.baseUrlEnvironment] = backend.baseUrl
@@ -218,7 +207,9 @@ function gatewaySpawn(root, platform, env, target, options) {
         PORT: String(options.listenPort || target.port || '80'),
       },
       detached: platform !== 'win32',
-      stdio: 'inherit',
+      // Keep a private IPC channel so the Gateway can detect an npm/CLI
+      // launcher that disappears before its JavaScript signal handlers run.
+      stdio: ['inherit', 'inherit', 'inherit', 'ipc'],
     },
   }
 }
@@ -243,7 +234,7 @@ export class ManagedRuntime {
         if (this.platform !== 'win32' && Number.isInteger(child.pid)) {
           try {
             // Managed services are spawned as process-group leaders. Signalling
-            // the group also stops npm's Node/OpenCode descendants.
+            // the group also stops package-manager and backend descendants.
             this.killImpl(-child.pid, signal)
             continue
           } catch {
@@ -294,6 +285,8 @@ export async function ensureRuntime(options, {
   const runtime = new ManagedRuntime([], { platform })
   const local = isLocalGateway(options.url)
   const backend = resolveBackend(options, env)
+  const backendLabel = backendDefinition(backend.protocol)?.label
+    || backend.protocol
   let health = await readGatewayHealth(options.url, fetchImpl)
   const existingGateway = Boolean(health)
 
@@ -350,7 +343,7 @@ export async function ensureRuntime(options, {
     if (health.backend?.ok !== true && options.waitForBackend !== false) {
       throw new Error(
         backend.ownership === 'external'
-          ? `未连接到已有 OpenClaw Gateway，请先启动并检查 ${backend.baseUrl}`
+          ? `未连接到已有 ${backendLabel} 后台服务，请先启动并检查 ${backend.baseUrl}`
           : `Gateway 启动的后台 Agent 未就绪：${health.backend?.baseUrl || backend.baseUrl}`,
       )
     }

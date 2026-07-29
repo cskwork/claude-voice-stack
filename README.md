@@ -52,13 +52,13 @@ Agent 也应该始终在场。
 
 | 后台 Agent | 接入方式 | 接入准备 | 推荐指数 |
 | --- | --- | --- | --- |
-| OpenCode | 原生 ACP | 可自动安装 | ★★★★★ |
-| OpenClaw | 内置 ACP 桥接 | 可自动安装 | ★★★★★ |
-| Qoder | 原生 ACP | 需要用户安装和认证 | ★★★★★ |
-| Hermes | 原生 ACP | 需要用户安装和配置模型 | ★★★★☆ |
-| CodeBuddy | 原生 ACP | 需要用户安装和认证 | ★★★★☆ |
-| Codex | 外部 ACP 适配 | 可自动安装 | ★★★★☆ |
-| Claude Code | 外部 ACP 适配 | 可自动安装，需要用户认证 | ★★★★☆ |
+| OpenCode | 原生 ACP | 支持自动安装和百炼配置 | ★★★★★ |
+| OpenClaw | 内置 ACP 桥接 | 支持自动安装和百炼配置 | ★★★★★ |
+| Qoder | 原生 ACP | 用户自行安装和配置 | ★★★★★ |
+| Hermes | 原生 ACP | 用户自行安装和配置 | ★★★★☆ |
+| CodeBuddy | 原生 ACP | 用户自行安装和配置 | ★★★★☆ |
+| Codex | 外部 ACP 适配 | 用户自行安装和配置 | ★★★★☆ |
+| Claude Code | 外部 ACP 适配 | 用户自行安装和配置 | ★★★★☆ |
 
 推荐指数综合反映当前集成完整度、兼容性和实际验证程度：五星表示已经过充分测试的
 推荐集成，四星表示正在开发或尚未完成同等范围验证。
@@ -126,15 +126,30 @@ qwenaudio config
 ```dotenv
 DASHSCOPE_API_KEY=your-key
 AGENT_PROTOCOL=openclaw
+QWEN_AUDIO_AGENT_BACKEND_MODEL=qwen3.7-max
 ```
 
-3. 在一个终端中启动 Gateway：
+3. 只读检查后台 Agent 是否已经准备好：
+
+```bash
+qwenaudio setup
+```
+
+该命令不会安装 Agent、触发登录或修改配置。也可以只检查一个后台，或输出供
+桌面版和脚本使用的结构化结果：
+
+```bash
+qwenaudio setup --backend openclaw
+qwenaudio setup --json
+```
+
+4. 在一个终端中启动 Gateway：
 
 ```bash
 qwenaudio
 ```
 
-4. 另开一个终端，启动 TUI：
+5. 另开一个终端，启动 TUI：
 
 ```bash
 qwenaudio tui
@@ -201,7 +216,10 @@ qwenaudio gateway uninstall
 
 ## 选择后台 Agent
 
-通过 `AGENT_PROTOCOL` 选择后台 Agent（必填，没有默认值）。使用 OpenClaw：
+通过 `AGENT_PROTOCOL` 选择后台 Agent（必填，没有默认值）。OpenCode 和 OpenClaw
+支持自动下载；配置 `DASHSCOPE_API_KEY` 和 `QWEN_AUDIO_AGENT_BACKEND_MODEL`
+后即可自动接入百炼模型。未指定后台模型且用户已经安装并配置对应 Agent 时，则
+完整复用用户环境。使用 OpenClaw：
 
 ```dotenv
 AGENT_PROTOCOL=openclaw
@@ -217,7 +235,6 @@ AGENT_PROTOCOL=opencode
 
 ```dotenv
 AGENT_PROTOCOL=qoder
-QODER_MODEL=auto
 ```
 
 Hermes、CodeBuddy、Codex 和 Claude Code 也可直接选择：
@@ -227,6 +244,9 @@ AGENT_PROTOCOL=hermes
 # 或 codebuddy、codex、claude
 ```
 
+以上其他后台暂时需要用户自行安装并完成原生配置；qwen-audio-agent 会复用其
+用户级模型、工具、MCP、Skill 和认证。
+
 使用其他支持 ACP stdio 的 Agent：
 
 ```dotenv
@@ -235,7 +255,16 @@ ACP_COMMAND=your-agent
 ACP_ARGS=["--acp"]
 ```
 
-通用 ACP 入口不需要修改 Gateway 代码。命令、参数、显示名称、模型和工作目录可分别通过 `ACP_COMMAND`、`ACP_ARGS`、`ACP_LABEL`、`ACP_MODEL` 和 `ACP_WORKSPACE` 配置。
+通用 ACP 入口不需要修改 Gateway 代码。命令、参数、显示名称和工作目录可分别通过 `ACP_COMMAND`、`ACP_ARGS`、`ACP_LABEL` 和 `ACP_WORKSPACE` 配置。
+
+后台模型遵循以下规则：
+
+- 未指定模型：Gateway 不传模型、不调用 ACP 模型设置接口，也不猜测默认模型。
+- 新建 Session：完全由所选 Agent 根据用户自己的配置选择模型。
+- 恢复 Session：完全由所选 Agent 保留该 Session 原来的模型。
+- 显式设置唯一的后台模型变量 `QWEN_AUDIO_AGENT_BACKEND_MODEL`：Gateway 才通过
+  ACP 强制覆盖 qwen-audio-agent 管理的 Session，并验证设置结果；不支持或无法
+  确认生效时会明确报错。
 
 后台权限默认使用 `native`，由后台 Agent 在需要时询问。只有在可信项目中，并且
 明确接受自动执行命令和修改文件时，才应启用：

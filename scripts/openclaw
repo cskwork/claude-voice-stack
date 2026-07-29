@@ -27,52 +27,91 @@ else
   echo "OpenClaw requires QWAUDIO_CONFIG_DIR, XDG_CONFIG_HOME, or HOME." >&2
   exit 1
 fi
-export OPENCLAW_STATE_DIR=${OPENCLAW_STATE_DIR:-"$QWEN_AUDIO_AGENT_USER_DIR/backends/openclaw/state"}
+export QWEN_AUDIO_AGENT_OPENCLAW_STATE_DIR=${QWEN_AUDIO_AGENT_OPENCLAW_STATE_DIR:-"$QWEN_AUDIO_AGENT_USER_DIR/backends/openclaw/state"}
 export QWEN_AUDIO_AGENT_OPENCLAW_WORKSPACE=${QWEN_AUDIO_AGENT_OPENCLAW_WORKSPACE:-"$QWEN_AUDIO_AGENT_USER_DIR/workspaces/openclaw"}
-mkdir -p "$OPENCLAW_STATE_DIR" "$QWEN_AUDIO_AGENT_OPENCLAW_WORKSPACE"
+mkdir -p "$QWEN_AUDIO_AGENT_OPENCLAW_STATE_DIR" "$QWEN_AUDIO_AGENT_OPENCLAW_WORKSPACE"
 if [ ! -f "$QWEN_AUDIO_AGENT_OPENCLAW_WORKSPACE/AGENTS.md" ]; then
   cp "$QWEN_AUDIO_AGENT_ROOT/config/openclaw/workspace/AGENTS.md" "$QWEN_AUDIO_AGENT_OPENCLAW_WORKSPACE/AGENTS.md"
 fi
-if [ -z "${OPENCLAW_CONFIG_PATH:-}" ]; then
+
+COMMON_BACKEND_MODEL=${QWEN_AUDIO_AGENT_BACKEND_MODEL:-}
+NORMALIZED_BACKEND_MODEL=$(printf '%s' "$COMMON_BACKEND_MODEL" | tr '[:upper:]' '[:lower:]')
+QWEN_AUDIO_AGENT_MANAGED_OPENCLAW=0
+if [ -z "${OPENCLAW_CONFIG_PATH:-}" ] \
+  && [ -n "${DASHSCOPE_API_KEY:-}" ] \
+  && [ -n "$COMMON_BACKEND_MODEL" ] \
+  && [ "$NORMALIZED_BACKEND_MODEL" != "auto" ]; then
+  QWEN_AUDIO_AGENT_MANAGED_OPENCLAW=1
   QWEN_AUDIO_AGENT_OPENCLAW_CONFIG_DIR="$QWEN_AUDIO_AGENT_USER_DIR/backends/openclaw"
   mkdir -p "$QWEN_AUDIO_AGENT_OPENCLAW_CONFIG_DIR"
-  cp "$QWEN_AUDIO_AGENT_ROOT/config/openclaw/openclaw.json5" "$QWEN_AUDIO_AGENT_OPENCLAW_CONFIG_DIR/openclaw.json5"
+  cp "$QWEN_AUDIO_AGENT_ROOT/config/openclaw/openclaw.json5" \
+    "$QWEN_AUDIO_AGENT_OPENCLAW_CONFIG_DIR/openclaw.json5"
   export OPENCLAW_CONFIG_PATH="$QWEN_AUDIO_AGENT_OPENCLAW_CONFIG_DIR/openclaw.json5"
+  QWEN_AUDIO_AGENT_OPENCLAW_MODEL="bailian/${COMMON_BACKEND_MODEL#*/}"
+  QWEN_AUDIO_AGENT_OPENCLAW_MODEL_ID=${COMMON_BACKEND_MODEL#*/}
+  export QWEN_AUDIO_AGENT_OPENCLAW_MODEL
+  export QWEN_AUDIO_AGENT_OPENCLAW_MODEL_ID
 fi
 
-export OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN:-${AGENT_API_KEY:-${QWEN_AUDIO_AGENT_AUTH_SECRET:-}}}
-OPENCLAW_GATEWAY_TOKEN_FILE=${OPENCLAW_GATEWAY_TOKEN_FILE:-"$OPENCLAW_STATE_DIR/gateway-token"}
+if [ "${1:-}" = "gateway" ]; then
+  if [ "$QWEN_AUDIO_AGENT_MANAGED_OPENCLAW" != "1" ] \
+    && [ -z "${OPENCLAW_CONFIG_PATH:-}" ] \
+    && [ -n "${HOME:-}" ] \
+    && [ -f "$HOME/.openclaw/openclaw.json" ]; then
+    export OPENCLAW_CONFIG_PATH="$HOME/.openclaw/openclaw.json"
+  fi
+  OPENCLAW_RUNTIME_STATE_DIR="$QWEN_AUDIO_AGENT_OPENCLAW_STATE_DIR/gateway-${OPENCLAW_PORT:-18789}"
+  mkdir -p "$OPENCLAW_RUNTIME_STATE_DIR"
+  export OPENCLAW_STATE_DIR="$OPENCLAW_RUNTIME_STATE_DIR"
+
+  # Reuse user-installed OpenClaw capabilities without sharing mutable
+  # Gateway/Session state or external message channels with another instance.
+  if [ "$QWEN_AUDIO_AGENT_MANAGED_OPENCLAW" != "1" ] \
+    && [ -n "${OPENCLAW_CONFIG_PATH:-}" ]; then
+    OPENCLAW_USER_CONFIG_PATH=$OPENCLAW_CONFIG_PATH
+    OPENCLAW_USER_STATE_DIR=$(dirname -- "$OPENCLAW_USER_CONFIG_PATH")
+    OPENCLAW_RUNTIME_CONFIG_PATH="$OPENCLAW_RUNTIME_STATE_DIR/openclaw.json"
+    "${QWEN_AUDIO_AGENT_NODE:-node}" \
+      "$QWEN_AUDIO_AGENT_ROOT/scripts/prepare-openclaw-config.mjs" \
+      "$OPENCLAW_USER_CONFIG_PATH" \
+      "$OPENCLAW_RUNTIME_CONFIG_PATH"
+    export OPENCLAW_CONFIG_PATH="$OPENCLAW_RUNTIME_CONFIG_PATH"
+    for SHARED_CAPABILITY_DIR in extensions skills plugin-skills service-env; do
+      if [ -d "$OPENCLAW_USER_STATE_DIR/$SHARED_CAPABILITY_DIR" ] \
+        && [ ! -e "$OPENCLAW_RUNTIME_STATE_DIR/$SHARED_CAPABILITY_DIR" ]; then
+        ln -s "$OPENCLAW_USER_STATE_DIR/$SHARED_CAPABILITY_DIR" \
+          "$OPENCLAW_RUNTIME_STATE_DIR/$SHARED_CAPABILITY_DIR"
+      fi
+    done
+  fi
+fi
+
+if [ -z "${OPENCLAW_GATEWAY_TOKEN:-}" ]; then
+  if [ -n "${AGENT_API_KEY:-}" ]; then
+    OPENCLAW_GATEWAY_TOKEN=$AGENT_API_KEY
+  elif [ "$QWEN_AUDIO_AGENT_MANAGED_OPENCLAW" = "1" ]; then
+    OPENCLAW_GATEWAY_TOKEN=${QWEN_AUDIO_AGENT_AUTH_SECRET:-}
+  else
+    OPENCLAW_GATEWAY_TOKEN=
+  fi
+fi
+export OPENCLAW_GATEWAY_TOKEN
+OPENCLAW_GATEWAY_TOKEN_FILE=${OPENCLAW_GATEWAY_TOKEN_FILE:-"$QWEN_AUDIO_AGENT_OPENCLAW_STATE_DIR/gateway-token"}
 if [ -n "$OPENCLAW_GATEWAY_TOKEN" ]; then
   OPENCLAW_GATEWAY_TOKEN_TMP="$OPENCLAW_GATEWAY_TOKEN_FILE.tmp.$$"
   umask 077
   printf '%s\n' "$OPENCLAW_GATEWAY_TOKEN" > "$OPENCLAW_GATEWAY_TOKEN_TMP"
   chmod 600 "$OPENCLAW_GATEWAY_TOKEN_TMP"
   mv -f "$OPENCLAW_GATEWAY_TOKEN_TMP" "$OPENCLAW_GATEWAY_TOKEN_FILE"
+elif [ "${1:-}" = "gateway" ]; then
+  "${QWEN_AUDIO_AGENT_NODE:-node}" \
+    "$QWEN_AUDIO_AGENT_ROOT/scripts/sync-openclaw-gateway-token.mjs" \
+    "$OPENCLAW_GATEWAY_TOKEN_FILE"
 fi
 export OPENCLAW_GATEWAY_TOKEN_FILE
 OPENCLAW_RUNTIME=${OPENCLAW_RUNTIME:-auto}
 OPENCLAW_PACKAGE=${OPENCLAW_PACKAGE:-openclaw@2026.6.33}
 OPENCLAW_BUNDLE_BIN=${OPENCLAW_BUNDLE_BIN-${HOME:+$HOME/.openclaw-bundle/wrapper/openclaw}}
-COMMON_BACKEND_MODEL=${QWEN_AUDIO_AGENT_BACKEND_MODEL:-qwen3.7-max}
-
-if [ -n "${OPENCLAW_MODEL:-}" ]; then
-  BACKEND_MODEL=$OPENCLAW_MODEL
-else
-  BACKEND_MODEL="bailian/${COMMON_BACKEND_MODEL#*/}"
-fi
-
-case "$BACKEND_MODEL" in
-  */*)
-    QWEN_AUDIO_AGENT_OPENCLAW_MODEL="$BACKEND_MODEL"
-    QWEN_AUDIO_AGENT_OPENCLAW_MODEL_ID=${BACKEND_MODEL#*/}
-    ;;
-  *)
-    QWEN_AUDIO_AGENT_OPENCLAW_MODEL="bailian/$BACKEND_MODEL"
-    QWEN_AUDIO_AGENT_OPENCLAW_MODEL_ID="$BACKEND_MODEL"
-    ;;
-esac
-export QWEN_AUDIO_AGENT_OPENCLAW_MODEL
-export QWEN_AUDIO_AGENT_OPENCLAW_MODEL_ID
 
 run_binary() {
   exec "$OPENCLAW_BIN" "$@"
@@ -88,17 +127,6 @@ run_bundle() {
 
 bundle_available() {
   [ -n "$OPENCLAW_BUNDLE_BIN" ] && [ -x "$OPENCLAW_BUNDLE_BIN" ]
-}
-
-installed_matches_package() {
-  OPENCLAW_EXPECTED_VERSION=${OPENCLAW_PACKAGE##*@}
-  OPENCLAW_INSTALLED_VERSION=$(
-    openclaw --version 2>/dev/null || true
-  )
-  case "$OPENCLAW_INSTALLED_VERSION" in
-    *"$OPENCLAW_EXPECTED_VERSION"*) return 0 ;;
-    *) return 1 ;;
-  esac
 }
 
 run_source() {
@@ -135,6 +163,19 @@ run_package() {
   # lifetime. Resolve the pinned package once, then exec its binary directly
   # to avoid retaining an extra Node/npm process for both Gateway and ACP.
   exec "$OPENCLAW_PACKAGE_BIN" "$@"
+}
+
+run_managed_package() {
+  if [ -z "${DASHSCOPE_API_KEY:-}" ]; then
+    echo "Automatic OpenClaw setup requires DASHSCOPE_API_KEY." >&2
+    exit 1
+  fi
+  if [ -z "$COMMON_BACKEND_MODEL" ] \
+    || [ "$NORMALIZED_BACKEND_MODEL" = "auto" ]; then
+    echo "Automatic OpenClaw setup requires QWEN_AUDIO_AGENT_BACKEND_MODEL." >&2
+    exit 1
+  fi
+  run_package "$@"
 }
 
 case "$OPENCLAW_RUNTIME" in
@@ -187,8 +228,8 @@ if bundle_available; then
   run_bundle "$@"
 fi
 
-if command -v openclaw >/dev/null 2>&1 && installed_matches_package; then
+if command -v openclaw >/dev/null 2>&1; then
   run_installed "$@"
 fi
 
-run_package "$@"
+run_managed_package "$@"

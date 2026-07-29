@@ -102,6 +102,10 @@ test('starts only the Gateway and waits for its managed backend', async () => {
   assert.equal(calls[0][0], process.execPath)
   assert.deepEqual(calls[0][1], [resolve(root, 'server/src/index.mjs')])
   assert.equal(calls[0][2].env.OPENCODE_BASE_URL, 'http://127.0.0.1:4096')
+  assert.deepEqual(
+    calls[0][2].stdio,
+    ['inherit', 'inherit', 'inherit', 'ipc'],
+  )
   assert.equal(runtime.ownsProcesses, true)
 })
 
@@ -156,13 +160,11 @@ test('requires an explicit backend selection', () => {
 test('derives selected backend configuration', () => {
   assert.deepEqual(resolveBackend({
     backend: 'openclaw',
-    attachOpenClaw: true,
     backendAgent: 'build',
     backendUrl: 'http://localhost:18789/path',
   }, {}), {
     protocol: 'openclaw',
-    ownership: 'external',
-    attachOpenClaw: true,
+    ownership: 'owned',
     permissionMode: 'native',
     agentId: 'build',
     baseUrl: 'http://localhost:18789',
@@ -175,7 +177,6 @@ test('derives Qoder without an HTTP backend', () => {
   }, {}), {
     protocol: 'qoder',
     ownership: 'owned',
-    attachOpenClaw: false,
     permissionMode: 'native',
     agentId: '',
     baseUrl: null,
@@ -188,7 +189,6 @@ test('derives generic ACP without an HTTP backend', () => {
   }, {}), {
     protocol: 'acp',
     ownership: 'owned',
-    attachOpenClaw: false,
     permissionMode: 'native',
     agentId: '',
     baseUrl: null,
@@ -202,7 +202,6 @@ test('derives named local ACP backends without an HTTP URL', () => {
     }, {}), {
       protocol: backend,
       ownership: 'owned',
-      attachOpenClaw: false,
       permissionMode: 'native',
       agentId: '',
       baseUrl: null,

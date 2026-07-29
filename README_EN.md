@@ -63,13 +63,13 @@ module walkthrough.
 
 | Backend Agent | Integration | Setup | Rating |
 | --- | --- | --- | --- |
-| OpenCode | Native ACP | Automatic installation supported | ★★★★★ |
-| OpenClaw | Built-in ACP Bridge | Automatic installation supported | ★★★★★ |
-| Qoder | Native ACP | Requires user installation and authentication | ★★★★★ |
-| Hermes | Native ACP | Requires user installation and model configuration | ★★★★☆ |
-| CodeBuddy | Native ACP | Requires user installation and authentication | ★★★★☆ |
-| Codex | External ACP Adapter | Automatic installation supported | ★★★★☆ |
-| Claude Code | External ACP Adapter | Automatic installation supported; user authentication required | ★★★★☆ |
+| OpenCode | Native ACP | Automatic installation and Bailian setup supported | ★★★★★ |
+| OpenClaw | Built-in ACP Bridge | Automatic installation and Bailian setup supported | ★★★★★ |
+| Qoder | Native ACP | User installation and configuration required | ★★★★★ |
+| Hermes | Native ACP | User installation and configuration required | ★★★★☆ |
+| CodeBuddy | Native ACP | User installation and configuration required | ★★★★☆ |
+| Codex | External ACP Adapter | User installation and configuration required | ★★★★☆ |
+| Claude Code | External ACP Adapter | User installation and configuration required | ★★★★☆ |
 
 Ratings reflect the current integration completeness, compatibility, and
 extent of real-world validation. Five stars identify recommended integrations
@@ -147,15 +147,31 @@ qwenaudio config
 ```dotenv
 DASHSCOPE_API_KEY=your-key
 AGENT_PROTOCOL=openclaw
+QWEN_AUDIO_AGENT_BACKEND_MODEL=qwen3.7-max
 ```
 
-3. Start the Gateway in one terminal:
+3. Check that the backend Agent is ready without changing it:
+
+```bash
+qwenaudio setup
+```
+
+This command does not install an Agent, start authentication, or modify
+configuration. You can inspect one backend or produce structured output for
+the desktop app and scripts:
+
+```bash
+qwenaudio setup --backend openclaw
+qwenaudio setup --json
+```
+
+4. Start the Gateway in one terminal:
 
 ```bash
 qwenaudio
 ```
 
-4. Open another terminal and start the TUI:
+5. Open another terminal and start the TUI:
 
 ```bash
 qwenaudio tui
@@ -228,7 +244,11 @@ qwenaudio gateway uninstall
 ## Choose a Backend Agent
 
 Select the backend Agent with `AGENT_PROTOCOL` (required, no default value).
-Use OpenClaw:
+OpenCode and OpenClaw can be downloaded automatically. Configure
+`DASHSCOPE_API_KEY` and `QWEN_AUDIO_AGENT_BACKEND_MODEL` to connect them to a
+Bailian model automatically. When no backend model is specified and the Agent
+is already installed and configured, qwen-audio-agent fully reuses the user's
+existing environment. Use OpenClaw:
 
 ```dotenv
 AGENT_PROTOCOL=openclaw
@@ -244,7 +264,6 @@ Use Qoder:
 
 ```dotenv
 AGENT_PROTOCOL=qoder
-QODER_MODEL=auto
 ```
 
 Hermes, CodeBuddy, Codex, and Claude Code can also be selected directly:
@@ -254,6 +273,10 @@ AGENT_PROTOCOL=hermes
 # Or codebuddy, codex, or claude
 ```
 
+These other backends currently require the user to install and configure the
+native Agent first. qwen-audio-agent reuses its user-level model, tools, MCP
+servers, Skills, and authentication.
+
 Use another Agent that supports ACP over stdio:
 
 ```dotenv
@@ -262,7 +285,20 @@ ACP_COMMAND=your-agent
 ACP_ARGS=["--acp"]
 ```
 
-The generic ACP entry point requires no Gateway code changes. Configure its command, arguments, display label, model, and workspace with `ACP_COMMAND`, `ACP_ARGS`, `ACP_LABEL`, `ACP_MODEL`, and `ACP_WORKSPACE`.
+The generic ACP entry point requires no Gateway code changes. Configure its command, arguments, display label, and workspace with `ACP_COMMAND`, `ACP_ARGS`, `ACP_LABEL`, and `ACP_WORKSPACE`.
+
+Backend model selection follows these rules:
+
+- With no model configured, the Gateway sends no model, never calls the ACP
+  model-setting interface, and does not guess a default.
+- For a new Session, the selected Agent chooses the model entirely from the
+  user's own configuration.
+- For a resumed Session, the selected Agent preserves that Session's existing
+  model.
+- Only the single backend model setting, `QWEN_AUDIO_AGENT_BACKEND_MODEL`,
+  makes the Gateway force the model for Sessions managed by qwen-audio-agent
+  and verify the result. A clear error is returned when the Agent does not
+  support the model or the override cannot be verified.
 
 Backend permissions default to `native`, so the backend Agent asks when
 permission is required. Enable the following option only in trusted projects

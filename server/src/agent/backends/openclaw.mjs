@@ -1,6 +1,31 @@
-import { resolve } from 'node:path'
+import { dirname, resolve } from 'node:path'
 import { OpenClawAcpDelegationAdapter } from '../openclaw-adapter.mjs'
 import { baseEnvironment, clean, websocketUrl } from './shared.mjs'
+
+function sanitizeProcessOutput(value) {
+  return String(value || '')
+    .split(/\r?\n/)
+    .filter(line => !line.includes('🦞 [openclaw-bundle]'))
+    .join('\n')
+    .trim()
+}
+
+function formatRequestError({ details }) {
+  const missingScope = details.match(
+    /\bmissing scope:\s*([a-z0-9._-]+)/i,
+  )?.[1]
+  return missingScope
+    ? `需要在 OpenClaw 中批准 ACP 设备权限（缺少 ${missingScope}）`
+    : ''
+}
+
+function promptRetryDelay({ error, attempt }) {
+  const diagnostic = `${error?.message || ''}\n${error?.body || ''}`
+  if (
+    !/reply session initialization conflicted for \S+/i.test(diagnostic)
+  ) return null
+  return [150, 500, 1000][attempt] ?? null
+}
 
 export const openClawBackendDriver = {
   id: 'openclaw',
@@ -31,7 +56,7 @@ export const openClawBackendDriver = {
         'acp',
         '--url',
         websocketUrl(baseUrl),
-        ...(clean(token) && clean(tokenFile)
+        ...(clean(tokenFile)
           ? ['--token-file', clean(tokenFile)]
           : []),
         '--verbose',
@@ -40,10 +65,20 @@ export const openClawBackendDriver = {
       env: {
         ...baseEnvironment(),
         ...(token ? { OPENCLAW_GATEWAY_TOKEN: token } : {}),
+        // Keep the ACP bridge's device identity separate from the user's
+        // normal OpenClaw CLI identity. A loopback bridge presenting the
+        // Gateway's shared token can then use OpenClaw's silent local pairing
+        // instead of inheriting a stale, narrowly scoped user device token.
+        ...(clean(tokenFile)
+          ? { OPENCLAW_STATE_DIR: dirname(clean(tokenFile)) }
+          : {}),
       },
       externalMcp: false,
       nativeDelegation: true,
       backendUi: true,
+      sanitizeProcessOutput,
+      formatRequestError,
+      promptRetryDelay,
       readinessMessage: 'OpenClaw Gateway 正在启动',
       coordinatorMeta(ownerId) {
         if (!clean(coordinatorAgent)) return null

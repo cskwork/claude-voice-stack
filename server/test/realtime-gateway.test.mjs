@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
+  acceptsPlaybackReceipt,
   confirmsTaskNotificationOnPlaybackStart,
   rejectUnsupportedRealtimeUpgrade,
 } from '../src/voice/realtime-gateway.mjs'
@@ -45,5 +46,28 @@ test('confirms task notifications when client playback starts', () => {
   }), true)
   assert.equal(confirmsTaskNotificationOnPlaybackStart({
     origin: 'model',
+  }), false)
+})
+
+test('accepts playback receipts only from the active output client for a known response', () => {
+  assert.equal(acceptsPlaybackReceipt({
+    outputEnabled: true,
+    active: true,
+    responseKnown: true,
+  }), true)
+  assert.equal(acceptsPlaybackReceipt({
+    outputEnabled: true,
+    active: false,
+    responseKnown: true,
+  }), false)
+  assert.equal(acceptsPlaybackReceipt({
+    outputEnabled: false,
+    active: true,
+    responseKnown: true,
+  }), false)
+  assert.equal(acceptsPlaybackReceipt({
+    outputEnabled: true,
+    active: true,
+    responseKnown: false,
   }), false)
 })

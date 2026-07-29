@@ -5,6 +5,8 @@ import { PACKAGE_VERSION } from '../core/package-version.mjs'
 import { AgentError, requestSignal } from './backend-adapter.mjs'
 
 const WAIT_SLICE_MS = 30_000
+const MIN_GATEWAY_PROTOCOL = 3
+const MAX_GATEWAY_PROTOCOL = 4
 
 function clean(value) {
   return String(value || '').trim()
@@ -98,8 +100,8 @@ class OpenClawGatewayRpc {
           if (frame.event === 'connect.challenge' && !connected) {
             connected = true
             request('connect', {
-              minProtocol: 3,
-              maxProtocol: 3,
+              minProtocol: MIN_GATEWAY_PROTOCOL,
+              maxProtocol: MAX_GATEWAY_PROTOCOL,
               client: {
                 id: 'gateway-client',
                 displayName: 'qwen-audio-agent',
@@ -109,7 +111,11 @@ class OpenClawGatewayRpc {
               },
               caps: ['tool-events'],
               role: 'operator',
-              scopes: ['operator.read', 'operator.write'],
+              scopes: [
+                'operator.read',
+                'operator.write',
+                'operator.admin',
+              ],
               ...(this.token ? { auth: { token: this.token } } : {}),
             })
           }
@@ -233,6 +239,37 @@ export class OpenClawAcpDelegationAdapter {
       }
       return { content, completion }
     }
+  }
+
+  async setSessionModel({ sessionKey, model, signal }) {
+    const desired = clean(model)
+    const key = clean(sessionKey)
+    if (!key || !desired) {
+      throw new AgentError('OpenClaw Session 模型覆盖缺少 Session 或模型', {
+        protocol: 'openclaw-gateway',
+      })
+    }
+    const gateway = await this.gateway()
+    const result = await gateway.call('sessions.patch', {
+      key,
+      model: desired,
+    }, { signal, timeoutMs: 15_000 })
+    const provider = clean(result?.resolved?.modelProvider)
+    const resolvedModel = clean(result?.resolved?.model)
+    const resolved = provider && resolvedModel
+      ? `${provider}/${resolvedModel}`
+      : resolvedModel
+    if (
+      resolved !== desired
+      && resolvedModel !== desired
+    ) {
+      throw new AgentError(
+        `OpenClaw 未确认模型覆盖生效：要求 ${desired}，`
+        + `实际 ${resolved || '未知'}`,
+        { protocol: 'openclaw-gateway' },
+      )
+    }
+    return result
   }
 
   async cancel({ runId, sessionId, signal }) {

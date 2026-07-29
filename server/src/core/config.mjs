@@ -109,41 +109,42 @@ export function resolveAcpArgs(value) {
   return source.split(/\s+/)
 }
 
-const DEFAULT_BACKEND_MODEL = 'qwen3.7-max'
-
 function backendModelName(value) {
-  const model = String(value || DEFAULT_BACKEND_MODEL).trim()
+  const model = String(value || '').trim()
   const separator = model.indexOf('/')
   return separator >= 0 ? model.slice(separator + 1) : model
 }
 
 export function resolveBackendModels(env = process.env) {
-  const common = String(
-    env.QWEN_AUDIO_AGENT_BACKEND_MODEL || DEFAULT_BACKEND_MODEL,
-  ).trim() || DEFAULT_BACKEND_MODEL
+  const configured = String(
+    env.QWEN_AUDIO_AGENT_BACKEND_MODEL || '',
+  ).trim()
+  const common = configured.toLowerCase() === 'auto' ? '' : configured
+  const name = backendModelName(common)
   return {
     common,
-    openCode: String(
-      env.OPENCODE_MODEL
-      || `alibaba-cn/${backendModelName(common)}`,
-    ).trim(),
-    openClaw: String(
-      env.OPENCLAW_MODEL
-      || `bailian/${backendModelName(common)}`,
-    ).trim(),
+    openCode: common ? `alibaba-cn/${name}` : '',
+    openClaw: common ? `bailian/${name}` : '',
+    qoder: name,
+    hermes: common,
+    codeBuddy: name,
+    codex: name,
+    claude: common,
+    acp: common,
   }
 }
 
 const configuredAgentProtocol = String(
   process.env.AGENT_PROTOCOL || '',
 ).toLowerCase()
-const backendOwnership = (
-  configuredAgentProtocol === 'openclaw'
-  && String(
-    process.env.OPENCLAW_ATTACH_EXISTING || '',
-  ).toLowerCase() === 'true'
-) ? 'external' : 'owned'
+const backendOwnership = 'owned'
 const backendModels = resolveBackendModels()
+const managedOpenClawBailian = (
+  configuredAgentProtocol === 'openclaw'
+  && Boolean(backendModels.common)
+  && Boolean(process.env.DASHSCOPE_API_KEY)
+  && !process.env.OPENCLAW_CONFIG_PATH
+)
 const backendPermissionMode = String(
   process.env.QWEN_AUDIO_AGENT_BACKEND_PERMISSION_MODE || 'native',
 ).toLowerCase()
@@ -222,7 +223,9 @@ export const config = {
   openClawToken: (
     process.env.OPENCLAW_GATEWAY_TOKEN
     || process.env.AGENT_API_KEY
-    || process.env.QWEN_AUDIO_AGENT_AUTH_SECRET
+    || (managedOpenClawBailian
+      ? process.env.QWEN_AUDIO_AGENT_AUTH_SECRET
+      : '')
     || ''
   ),
   openClawTokenFile: (
@@ -236,7 +239,7 @@ export const config = {
       process.env.OPENCLAW_COORDINATOR_AGENT,
       'voice-coordinator',
     )
-    || (backendOwnership === 'owned' ? 'qwen-audio-agent-backend' : '')
+    || (managedOpenClawBailian ? 'qwen-audio-agent-backend' : '')
   ),
   openCodeBaseUrl: (
     process.env.OPENCODE_BASE_URL
@@ -250,39 +253,47 @@ export const config = {
   qoderCliPath: String(
     process.env.QODERCLI_PATH || process.env.QODER_CLI_PATH || '',
   ).trim(),
-  qoderModel: String(process.env.QODER_MODEL || 'auto').trim() || 'auto',
+  qoderModel: String(
+    backendModels.qoder,
+  ).trim(),
   hermesDirectory: resolveHermesWorkspace(),
   hermesCliPath: String(process.env.HERMES_BIN || '').trim(),
+  hermesModel: String(
+    backendModels.hermes,
+  ).trim(),
   codeBuddyDirectory: resolveCodeBuddyWorkspace(),
   codeBuddyCliPath: String(process.env.CODEBUDDY_BIN || '').trim(),
   codeBuddyModel: String(
-    process.env.CODEBUDDY_MODEL || backendModelName(backendModels.common),
+    backendModels.codeBuddy,
   ).trim(),
   codeBuddyModelUrl: (
     process.env.CODEBUDDY_MODEL_URL
-    || (
+    || (backendModels.common ? (
       process.env.DASHSCOPE_WORKSPACE_ID
         ? `https://${process.env.DASHSCOPE_WORKSPACE_ID}.cn-beijing.maas.aliyuncs.com/compatible-mode/v1/chat/completions`
         : 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'
-    )
+    ) : '')
   ),
   codexDirectory: resolveCodexWorkspace(),
   codexCliPath: String(process.env.CODEX_ACP_BIN || '').trim(),
   codexModel: String(
-    process.env.CODEX_MODEL || backendModelName(backendModels.common),
+    backendModels.codex,
   ).trim(),
   codexModelUrl: (
     process.env.CODEX_BASE_URL
-    || (
+    || (backendModels.common ? (
       process.env.DASHSCOPE_WORKSPACE_ID
         ? `https://${process.env.DASHSCOPE_WORKSPACE_ID}.cn-beijing.maas.aliyuncs.com/compatible-mode/v1`
         : 'https://dashscope.aliyuncs.com/compatible-mode/v1'
-    )
+    ) : '')
   ).replace(/\/+$/, ''),
   claudeDirectory: resolveClaudeWorkspace(),
   claudeCliPath: String(process.env.CLAUDE_CODE_ACP_BIN || '').trim(),
   claudeExecutable: String(
     process.env.CLAUDE_CODE_EXECUTABLE || '',
+  ).trim(),
+  claudeModel: String(
+    backendModels.claude,
   ).trim(),
   claudeConfigDirectory: process.env.CLAUDE_CONFIG_DIR
     ? resolve(process.env.CLAUDE_CONFIG_DIR)
@@ -291,17 +302,13 @@ export const config = {
   acpArgs: resolveAcpArgs(process.env.ACP_ARGS),
   acpLabel: String(process.env.ACP_LABEL || 'ACP Agent').trim() || 'ACP Agent',
   acpDirectory: resolveAcpWorkspace(),
-  acpModel: String(process.env.ACP_MODEL || 'auto').trim() || 'auto',
+  acpModel: String(
+    backendModels.acp,
+  ).trim(),
   acpCoordinatorAgent: String(process.env.ACP_COORDINATOR_AGENT || '').trim(),
-  openCodeModel: (
-    process.env.OPENCODE_MODEL
-    || (backendOwnership === 'owned' ? backendModels.openCode : '')
-  ),
-  openClawModel: (
-    process.env.OPENCLAW_MODEL
-    || (backendOwnership === 'owned' ? backendModels.openClaw : '')
-  ),
-  backendModel: backendOwnership === 'owned' ? backendModels.common : '',
+  openCodeModel: backendModels.openCode,
+  openClawModel: backendModels.openClaw,
+  backendModel: backendModels.common,
   openCodeCoordinatorAgent: resolveOpenCodeCoordinatorAgent(),
   announceIntoContext: (
     String(process.env.QWEN_AUDIO_AGENT_ANNOUNCE_INTO_CONTEXT || 'true').toLowerCase()
