@@ -105,17 +105,10 @@ jobs:
           RELEASE_TAG: ${{ needs.plan.outputs.tag }}
         run: |
           set -eu
-          EXISTING=$(
+          if EXISTING=$(
             gh api "repos/${GH_REPO}/git/ref/tags/${RELEASE_TAG}" \
-              --jq '.object.sha' 2>/dev/null || true
-          )
-          if [ -z "$EXISTING" ]; then
-            gh api \
-              --method POST \
-              "repos/${GH_REPO}/git/refs" \
-              -f "ref=refs/tags/${RELEASE_TAG}" \
-              -f "sha=${GITHUB_SHA}"
-          else
+              --jq '.object.sha' 2>/dev/null
+          ); then
             git fetch --force origin \
               "refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}"
             RESOLVED=$(git rev-list -n 1 "$RELEASE_TAG")
@@ -123,6 +116,12 @@ jobs:
               echo "${RELEASE_TAG} already points to ${RESOLVED}, not ${GITHUB_SHA}." >&2
               exit 1
             fi
+          else
+            gh api \
+              --method POST \
+              "repos/${GH_REPO}/git/refs" \
+              -f "ref=refs/tags/${RELEASE_TAG}" \
+              -f "sha=${GITHUB_SHA}"
           fi
 
   npm:
