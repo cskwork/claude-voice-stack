@@ -51,8 +51,13 @@ npm run version:major                 # 0.5.0 → 1.0.0，不兼容或稳定版
 npm run version:set -- 0.6.0-beta.1  # 指定预发布版本
 ```
 
-更新版本后必须同步维护 `CHANGELOG.md` 并运行 `npm run release:check`。版本标签必须
-与根 `package.json` 完全一致，例如 `v0.5.0`。标签触发发布工作流：
-先运行完整检查，再以 npm provenance 发布公共包，随后构建、签名、公证 macOS
-DMG 并创建 GitHub Release。仓库维护者需预先配置 `NPM_TOKEN`、Apple Developer
-签名证书和公证凭据。
+更新版本后必须同步维护 `CHANGELOG.md` 并运行 `npm run release:check`。发布改动
+应从专用分支提交，例如 `release/0.11.0` 或 `codex/release-0.11.0`。Release PR
+合并到 `main` 后，工作流会确认版本确实发生变化、版本对应的 Changelog 存在且
+完整检查通过，然后自动创建 `v0.11.0` 标签、以 npm provenance 发布公共包，
+并创建 GitHub Release。启用 macOS 正式发布时，还会构建、签名、公证并上传 DMG。
+
+普通 PR 合并或未改变版本号的 `main` 更新不会触发发布。若发布在创建标签、上传
+npm 或生成 Release 之间中断，可从 GitHub Actions 手动运行 Release 工作流，并
+输入当前 `package.json` 中的版本继续；已经完成的阶段会被安全复用。仓库维护者
+需预先配置 `NPM_TOKEN`，以及可选的 Apple Developer 签名证书和公证凭据。
