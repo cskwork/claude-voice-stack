@@ -54,6 +54,27 @@ function assertPrivateMode(filePath) {
   }
 }
 
+test('loads setup configuration without creating or changing user files', () => {
+  const target = fixture()
+  writeFileSync(resolve(target.root, '.env'), [
+    'AGENT_PROTOCOL=codex',
+    'CODEX_PATH=/tools/codex',
+  ].join('\n'))
+  const env = {}
+  const result = loadRuntimeEnvironment({
+    root: target.root,
+    homeDirectory: target.homeDirectory,
+    env,
+    readOnly: true,
+  })
+  assert.equal(env.AGENT_PROTOCOL, 'codex')
+  assert.equal(env.CODEX_PATH, '/tools/codex')
+  assert.equal(existsSync(result.configDirectory), false)
+  assert.equal(existsSync(result.configPath), false)
+  assert.equal(env.CODEX_WORKSPACE, undefined)
+  assert.equal(env.QWEN_AUDIO_AGENT_AUTH_SECRET, undefined)
+})
+
 test('loads environment, project and user config in documented priority order', () => {
   const target = fixture()
   const configDirectory = resolve(target.homeDirectory, '.config/qwaudio')

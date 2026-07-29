@@ -149,13 +149,28 @@ DASHSCOPE_API_KEY=your-key
 AGENT_PROTOCOL=openclaw
 ```
 
-3. Start the Gateway in one terminal:
+3. Check that the backend Agent is ready without changing it:
+
+```bash
+qwenaudio setup
+```
+
+This command does not install an Agent, start authentication, or modify
+configuration. You can inspect one backend or produce structured output for
+the desktop app and scripts:
+
+```bash
+qwenaudio setup --backend openclaw
+qwenaudio setup --json
+```
+
+4. Start the Gateway in one terminal:
 
 ```bash
 qwenaudio
 ```
 
-4. Open another terminal and start the TUI:
+5. Open another terminal and start the TUI:
 
 ```bash
 qwenaudio tui

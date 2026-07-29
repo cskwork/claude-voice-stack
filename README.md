@@ -128,13 +128,27 @@ DASHSCOPE_API_KEY=your-key
 AGENT_PROTOCOL=openclaw
 ```
 
-3. 在一个终端中启动 Gateway：
+3. 只读检查后台 Agent 是否已经准备好：
+
+```bash
+qwenaudio setup
+```
+
+该命令不会安装 Agent、触发登录或修改配置。也可以只检查一个后台，或输出供
+桌面版和脚本使用的结构化结果：
+
+```bash
+qwenaudio setup --backend openclaw
+qwenaudio setup --json
+```
+
+4. 在一个终端中启动 Gateway：
 
 ```bash
 qwenaudio
 ```
 
-4. 另开一个终端，启动 TUI：
+5. 另开一个终端，启动 TUI：
 
 ```bash
 qwenaudio tui

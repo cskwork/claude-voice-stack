@@ -20,6 +20,29 @@ function harness({ ownsProcesses = false } = {}) {
         configDirectory: '/home/user/.config/qwaudio',
         configPath: '/home/user/.config/qwaudio/config.env',
       }),
+      inspectSetups: options => {
+        calls.push(['setup', options])
+        return {
+          selected: options.backend,
+          readOnly: true,
+          backends: [{
+            id: options.backend || 'opencode',
+            label: 'OpenCode',
+            selected: true,
+            ready: true,
+            backend: {
+              ready: true,
+              source: 'installed',
+              path: '/bin/opencode',
+            },
+            adapter: { ready: true, source: 'native' },
+            integration: 'native',
+            configuration: 'preserved',
+            authentication: 'backend-managed',
+            issues: [],
+          }],
+        }
+      },
       acquireInstance: () => ({
         release: () => calls.push(['instance.release']),
       }),
@@ -257,4 +280,34 @@ test('prints status and configuration without starting a service', async () => {
     'stdout',
     '/home/user/.config/qwaudio/config.env\n',
   ]])
+})
+
+test('prints a reusable read-only backend setup report', async () => {
+  const target = harness()
+  let preparation
+  target.dependencies.prepareEnvironment = options => {
+    preparation = options
+    return {
+      configDirectory: '/home/user/.config/qwaudio',
+      configPath: '/home/user/.config/qwaudio/config.env',
+    }
+  }
+  assert.equal(
+    await main(['setup', '--backend', 'opencode'], target.dependencies),
+    0,
+  )
+  assert.deepEqual(preparation, { readOnly: true })
+  assert.deepEqual(target.calls.map(call => call[0]), ['setup', 'stdout'])
+  assert.match(target.calls[1][1], /默认不覆盖后台模型/)
+
+  const json = harness()
+  assert.equal(
+    await main([
+      'setup',
+      '--backend', 'opencode',
+      '--json',
+    ], json.dependencies),
+    0,
+  )
+  assert.equal(JSON.parse(json.calls[1][1]).readOnly, true)
 })

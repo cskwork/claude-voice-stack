@@ -42,6 +42,26 @@ test('parses independent TUI and WebUI client commands', () => {
   assert.equal(web.takeover, true)
 })
 
+test('parses read-only backend setup options', () => {
+  const all = parseArguments(['setup'], {})
+  assert.equal(all.command, 'setup')
+  assert.equal(all.backendSpecified, false)
+  assert.equal(all.json, false)
+
+  const selected = parseArguments([
+    'setup',
+    '--backend', 'codex',
+    '--json',
+  ], {})
+  assert.equal(selected.backend, 'codex')
+  assert.equal(selected.backendSpecified, true)
+  assert.equal(selected.json, true)
+  assert.throws(
+    () => parseArguments(['status', '--json'], {}),
+    /只适用于 setup/,
+  )
+})
+
 test('parses Gateway backend ownership settings', () => {
   const options = parseArguments([
     'gateway',
@@ -163,6 +183,8 @@ test('documents the service and client commands', () => {
   assert.match(text, /qwenaudio webui/)
   assert.match(text, /qwenaudio status/)
   assert.match(text, /qwenaudio config/)
+  assert.match(text, /qwenaudio setup/)
+  assert.match(text, /--json/)
   assert.match(text, /--attach-openclaw/)
   assert.doesNotMatch(text, /--backend-mode/)
   assert.match(text, /--backend-permission-mode MODE/)

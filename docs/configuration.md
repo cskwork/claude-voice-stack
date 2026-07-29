@@ -21,6 +21,27 @@ CLI 参数 > 进程环境变量 > .env.local > .env > 用户配置文件 > 内�
 qwenaudio config
 ```
 
+## 后台 Setup 检查
+
+配置后台 Agent 后，可运行统一的只读检查：
+
+```bash
+qwenaudio setup
+```
+
+它会检查后台可执行文件、ACP 接入方式和必要的 Adapter，并明确显示当前选择。
+检查不会安装或下载后台 Agent，不会触发登录，也不会读取凭据或修改模型配置。
+认证状态由各后台 Agent 自己管理，请先确认该 Agent 在原生终端中可以正常工作。
+
+只检查指定后台或获取机器可读结果：
+
+```bash
+qwenaudio setup --backend codex
+qwenaudio setup --json
+```
+
+JSON 输出与 CLI 使用同一个共享检测模块，可供桌面版和其他工具直接复用。
+
 ## 最小配置
 
 最小配置需要填写实时语音凭据，并显式选择一个已经安装、配置完成的后台 Agent
@@ -31,7 +52,7 @@ DASHSCOPE_API_KEY=your-key
 AGENT_PROTOCOL=openclaw
 ```
 
-Gateway 默认不指定后台模型，直接使用所选 Agent 原有配置中的模型、Provider、
+Gateway 默认不指定后台模型，直接使用所选 Agent 用户级配置中的模型、Provider、
 工具、MCP、Skill 和认证。只有需要由 qwen-audio-agent 显式覆盖模型时，才设置：
 
 ```dotenv

@@ -296,6 +296,7 @@ export function loadRuntimeEnvironment({
   homeDirectory = homedir(),
   generateSecret = true,
   prepareBackendRuntime = true,
+  readOnly = false,
 } = {}) {
   if (!root) throw new Error('loadRuntimeEnvironment requires root')
   const configDirectory = userConfigDirectory(env, homeDirectory)
@@ -305,9 +306,15 @@ export function loadRuntimeEnvironment({
     resolve(configDirectory, 'config.env'),
   ]
   const loadedFiles = candidates.filter(path => loadFile(path, env))
-  mkdirSync(configDirectory, { recursive: true, mode: 0o700 })
-  const configPath = ensureUserConfig(configDirectory)
-  const userProfilePath = ensureUserProfile(configDirectory)
+  if (!readOnly) {
+    mkdirSync(configDirectory, { recursive: true, mode: 0o700 })
+  }
+  const configPath = readOnly
+    ? resolve(configDirectory, 'config.env')
+    : ensureUserConfig(configDirectory)
+  const userProfilePath = readOnly
+    ? resolve(configDirectory, 'USER.md')
+    : ensureUserProfile(configDirectory)
   const frontendMemoryPath = resolve(configDirectory, 'frontend-memory.json')
   const taskStatePath = resolve(configDirectory, 'tasks.json')
   const defaultOpenCodeWorkspace = !env.OPENCODE_WORKSPACE
@@ -346,7 +353,7 @@ export function loadRuntimeEnvironment({
     ? resolve(root, env.ACP_WORKSPACE)
     : resolve(configDirectory, 'workspaces/acp')
   let migratedFiles = []
-  if (prepareBackendRuntime) {
+  if (prepareBackendRuntime && !readOnly) {
     if (defaultOpenCodeWorkspace) {
       ensureManagedWorkspace(
         openCodeWorkspace,
@@ -417,7 +424,7 @@ export function loadRuntimeEnvironment({
       migratePrivateFile(legacyPath, targetPath)
     )).map(([, targetPath]) => targetPath)
   }
-  const secret = generateSecret
+  const secret = generateSecret && !readOnly
     ? ensureGeneratedSecret(env, configDirectory)
     : { generated: false, statePath: null }
   return {

@@ -4,7 +4,14 @@ import {
   backendNames,
 } from '../../shared/backend-catalog.mjs'
 
-const COMMANDS = new Set(['gateway', 'tui', 'webui', 'status', 'config'])
+const COMMANDS = new Set([
+  'gateway',
+  'tui',
+  'webui',
+  'status',
+  'config',
+  'setup',
+])
 const GATEWAY_ACTIONS = new Set([
   'run',
   'install',
@@ -75,6 +82,8 @@ export function parseArguments(argv, env = process.env) {
     backendUrl: '',
     openBrowser: true,
     takeover: false,
+    json: false,
+    backendSpecified: false,
     gatewayConfigurationSpecified: false,
   }
   let audioModeSpecified = false
@@ -86,6 +95,7 @@ export function parseArguments(argv, env = process.env) {
       options.gatewayConfigurationSpecified = true
     } else if (argument === '--backend') {
       options.backend = nextValue(args, index++, '--backend').toLowerCase()
+      options.backendSpecified = true
       options.gatewayConfigurationSpecified = true
     } else if (argument === '--attach-openclaw') {
       options.attachOpenClaw = true
@@ -110,6 +120,7 @@ export function parseArguments(argv, env = process.env) {
       audioModeSpecified = true
     } else if (argument === '--no-open') options.openBrowser = false
     else if (argument === '--takeover') options.takeover = true
+    else if (argument === '--json') options.json = true
     else if (argument === '--help' || argument === '-h') options.help = true
     else throw new Error(`未知参数：${argument}`)
   }
@@ -133,6 +144,9 @@ export function parseArguments(argv, env = process.env) {
   }
   if (!['tui', 'webui'].includes(command) && options.takeover) {
     throw new Error('--takeover 只适用于 tui 或 webui')
+  }
+  if (command !== 'setup' && options.json) {
+    throw new Error('--json 只适用于 setup')
   }
   if (command !== 'tui' && audioModeSpecified) {
     throw new Error('--audio-mode 只适用于 tui')
@@ -159,17 +173,23 @@ export function parseArguments(argv, env = process.env) {
   options.backendUrl = definition?.baseUrlEnvironment
     ? cleanOrigin(options.backendUrl || configuredBackendUrl, '后台地址')
     : ''
-  if (options.attachOpenClaw && options.backend !== 'openclaw') {
+  if (
+    command !== 'setup'
+    && options.attachOpenClaw
+    && options.backend !== 'openclaw'
+  ) {
     throw new Error('--attach-openclaw 只适用于 OpenClaw')
   }
   if (
-    options.backendPermissionMode === 'full'
+    command !== 'setup'
+    && options.backendPermissionMode === 'full'
     && options.attachOpenClaw
   ) {
     throw new Error('最高权限模式只支持由 Gateway 启动的后台 Agent')
   }
   if (
-    definition
+    command !== 'setup'
+    && definition
     && options.backendPermissionMode === 'full'
     && !definition.supportsFullPermission
   ) {
@@ -208,6 +228,7 @@ export function helpText() {
     '  qwenaudio webui [选项]       打开现有 Gateway 的 WebUI',
     '  qwenaudio status [选项]      gateway status 的兼容别名',
     '  qwenaudio config             显示用户配置文件位置',
+    '  qwenaudio setup [选项]       只读检查后台 Agent 接入准备情况',
     '',
     'Gateway 选项：',
     '  --url URL              Gateway 地址（默认 http://127.0.0.1:3101）',
@@ -216,6 +237,10 @@ export function helpText() {
     '  --backend-permission-mode MODE  native（默认）或 full（最高权限）',
     '  --backend-url URL      后台 Server 地址',
     '  --backend-agent ID     指定协调 Agent',
+    '',
+    'Setup 选项：',
+    '  --backend NAME         只检查指定后台；默认检查全部后台',
+    '  --json                 输出供桌面版或脚本使用的 JSON',
     '',
     '界面选项：',
     '  --session ID           复用指定语音会话',
