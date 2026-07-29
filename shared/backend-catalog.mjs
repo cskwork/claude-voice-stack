@@ -34,6 +34,11 @@ const definitions = new Map([
     label: 'Codex',
     supportsFullPermission: true,
   }],
+  ['claude', {
+    id: 'claude',
+    label: 'Claude Code',
+    supportsFullPermission: true,
+  }],
   ['acp', {
     id: 'acp',
     label: 'ACP Agent',

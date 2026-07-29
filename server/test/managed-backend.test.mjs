@@ -129,7 +129,7 @@ test('generic ACP is managed as a Gateway child without a separate server', asyn
 })
 
 test('additional ACP backends run inside the Gateway without an HTTP server', async () => {
-  for (const protocol of ['hermes', 'codebuddy', 'codex']) {
+  for (const protocol of ['hermes', 'codebuddy', 'codex', 'claude']) {
     assert.deepEqual(resolveManagedBackend({
       AGENT_PROTOCOL: protocol,
     }), {
@@ -153,6 +153,7 @@ test('full permission mode configures managed OpenCode without discarding inline
   const env = {
     AGENT_PROTOCOL: 'opencode',
     QWEN_AUDIO_AGENT_BACKEND_PERMISSION_MODE: 'full',
+    OPENCODE_COORDINATOR_AGENT: 'custom-coordinator',
     OPENCODE_CONFIG_CONTENT: JSON.stringify({
       theme: 'system',
       agent: {
@@ -169,9 +170,10 @@ test('full permission mode configures managed OpenCode without discarding inline
   assert.equal(inline.agent.build.model, 'provider/model')
   assert.equal(inline.agent.build.permission, 'allow')
   assert.equal(
-    inline.agent['qwen-audio-agent-backend'].permission,
+    inline.agent['custom-coordinator'].permission,
     'allow',
   )
+  assert.equal(inline.agent['qwen-audio-agent-backend'], undefined)
 })
 
 test('full permission mode rejects backends that cannot support it safely', () => {

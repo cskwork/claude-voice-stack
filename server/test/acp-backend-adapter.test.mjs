@@ -345,6 +345,19 @@ test('uses one ACP profile family while preserving backend differences', () => {
     codexConfig.model_providers['qwen-audio-agent'].base_url,
     'https://example.com/compatible-mode/v1',
   )
+  const claude = acpBackendProfile({
+    protocol: 'claude',
+    root,
+    directory: '/work',
+    claudeExecutable: '/opt/claude',
+    configDirectory: '/config/claude',
+    permissionMode: 'full',
+  })
+  assert.equal(claude.command, resolve(root, 'scripts/claude-code-acp'))
+  assert.equal(claude.cwd, '/work')
+  assert.equal(claude.env.CLAUDE_CODE_EXECUTABLE, '/opt/claude')
+  assert.equal(claude.env.CLAUDE_CONFIG_DIR, '/config/claude')
+  assert.equal(claude.externalMcp, true)
 })
 
 for (const action of ['start', 'send']) {

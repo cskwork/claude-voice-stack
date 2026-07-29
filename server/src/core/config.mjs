@@ -64,6 +64,15 @@ export function resolveCodexWorkspace(
     : resolve(configDirectory, 'workspaces/codex')
 }
 
+export function resolveClaudeWorkspace(
+  env = process.env,
+  configDirectory = runtimeEnvironment.configDirectory,
+) {
+  return env.CLAUDE_WORKSPACE
+    ? resolve(root, env.CLAUDE_WORKSPACE)
+    : resolve(configDirectory, 'workspaces/claude')
+}
+
 export function resolveOpenClawWorkspace(
   env = process.env,
   configDirectory = runtimeEnvironment.configDirectory,
@@ -156,6 +165,18 @@ const sharedBackendAgent = String(
 function legacyBackendAgent(value, legacyDefault) {
   const selected = String(value || '').trim()
   return selected === legacyDefault ? 'qwen-audio-agent-backend' : selected
+}
+
+export function resolveOpenCodeCoordinatorAgent(env = process.env) {
+  const selected = String(
+    env.QWEN_AUDIO_AGENT_BACKEND_AGENT
+    || env.OPENCODE_COORDINATOR_AGENT
+    || '',
+  ).trim()
+  return [
+    'qwen-audio-agent-backend',
+    'qwen-audio-agent-coordinator',
+  ].includes(selected) ? '' : selected
 }
 
 export const config = {
@@ -258,6 +279,14 @@ export const config = {
         : 'https://dashscope.aliyuncs.com/compatible-mode/v1'
     )
   ).replace(/\/+$/, ''),
+  claudeDirectory: resolveClaudeWorkspace(),
+  claudeCliPath: String(process.env.CLAUDE_CODE_ACP_BIN || '').trim(),
+  claudeExecutable: String(
+    process.env.CLAUDE_CODE_EXECUTABLE || '',
+  ).trim(),
+  claudeConfigDirectory: process.env.CLAUDE_CONFIG_DIR
+    ? resolve(process.env.CLAUDE_CONFIG_DIR)
+    : '',
   acpCommand: String(process.env.ACP_COMMAND || '').trim(),
   acpArgs: resolveAcpArgs(process.env.ACP_ARGS),
   acpLabel: String(process.env.ACP_LABEL || 'ACP Agent').trim() || 'ACP Agent',
@@ -273,14 +302,7 @@ export const config = {
     || (backendOwnership === 'owned' ? backendModels.openClaw : '')
   ),
   backendModel: backendOwnership === 'owned' ? backendModels.common : '',
-  openCodeCoordinatorAgent: (
-    sharedBackendAgent
-    || legacyBackendAgent(
-      process.env.OPENCODE_COORDINATOR_AGENT,
-      'qwen-audio-agent-coordinator',
-    )
-    || (backendOwnership === 'owned' ? 'qwen-audio-agent-backend' : '')
-  ),
+  openCodeCoordinatorAgent: resolveOpenCodeCoordinatorAgent(),
   announceIntoContext: (
     String(process.env.QWEN_AUDIO_AGENT_ANNOUNCE_INTO_CONTEXT || 'true').toLowerCase()
     === 'true'

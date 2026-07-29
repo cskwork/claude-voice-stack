@@ -285,6 +285,34 @@ test('Codex ACP prefers an installed adapter and pins its package fallback', {
   }
 })
 
+test('Claude Code ACP prefers an installed adapter and pins its package fallback', {
+  skip: process.platform === 'win32',
+}, () => {
+  const binary = fixture()
+  const packageRuntime = fixture()
+  try {
+    command(resolve(binary.bin, 'claude-code-acp'))
+    command(resolve(packageRuntime.bin, 'npx'))
+    assert.deepEqual(run('scripts/claude-code-acp', binary, {
+      CLAUDE_CODE_ACP_RUNTIME: 'auto',
+    }, ['--help']), [
+      'claude-code-acp',
+      '--help',
+    ])
+    assert.deepEqual(run('scripts/claude-code-acp', packageRuntime, {
+      CLAUDE_CODE_ACP_RUNTIME: 'package',
+    }, ['--help']), [
+      'npx',
+      '-y',
+      '@zed-industries/claude-code-acp@0.16.2',
+      '--help',
+    ])
+  } finally {
+    binary.close()
+    packageRuntime.close()
+  }
+})
+
 test('maps one common backend model into each native backend model', {
   skip: process.platform === 'win32',
 }, () => {

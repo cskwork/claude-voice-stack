@@ -196,7 +196,7 @@ test('derives generic ACP without an HTTP backend', () => {
 })
 
 test('derives named local ACP backends without an HTTP URL', () => {
-  for (const backend of ['hermes', 'codebuddy', 'codex']) {
+  for (const backend of ['hermes', 'codebuddy', 'codex', 'claude']) {
     assert.deepEqual(resolveBackend({
       backend,
     }, {}), {

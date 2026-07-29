@@ -17,6 +17,18 @@ function inlineConfig(value) {
   return parsed
 }
 
+function configuredAgent(env) {
+  const selected = String(
+    env.QWEN_AUDIO_AGENT_BACKEND_AGENT
+    || env.OPENCODE_COORDINATOR_AGENT
+    || '',
+  ).trim()
+  return [
+    'qwen-audio-agent-backend',
+    'qwen-audio-agent-coordinator',
+  ].includes(selected) ? '' : selected
+}
+
 export const openCodeRuntimeDriver = {
   id: 'opencode',
   separateManagedProcess: true,
@@ -43,11 +55,7 @@ export const openCodeRuntimeDriver = {
         : {}),
     }
     const names = new Set([
-      String(
-        env.QWEN_AUDIO_AGENT_BACKEND_AGENT
-        || env.OPENCODE_COORDINATOR_AGENT
-        || 'qwen-audio-agent-backend',
-      ).trim(),
+      configuredAgent(env),
       String(env.OPENCODE_TASK_AGENT || 'build').trim(),
     ])
     for (const name of names) {

@@ -198,7 +198,35 @@ CODEX_MODEL=qwen3.7-max
 CODEX_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
 ```
 
-Hermes、CodeBuddy 和 Codex 均由 Gateway 直接管理 ACP 子进程，不接受
+### Claude Code
+
+Claude Code 通过 Zed 维护的
+[@zed-industries/claude-code-acp](https://github.com/zed-industries/claude-code-acp)
+接入。启动脚本优先使用已经安装的 `claude-code-acp`，否则通过 `npx` 使用固定
+版本；无需单独安装 ACP 适配器。
+
+```dotenv
+AGENT_PROTOCOL=claude
+QWEN_AUDIO_AGENT_BACKEND_PERMISSION_MODE=native
+```
+
+模型和凭据由 Claude Code 自己管理，不受
+`QWEN_AUDIO_AGENT_BACKEND_MODEL` 影响。默认复用 `~/.claude` 中已有的登录状态；
+也可以设置 `ANTHROPIC_API_KEY`。高级配置：
+
+```dotenv
+CLAUDE_CODE_ACP_BIN=
+CLAUDE_CODE_ACP_PACKAGE=@zed-industries/claude-code-acp@0.16.2
+CLAUDE_CODE_ACP_RUNTIME=auto
+CLAUDE_WORKSPACE=
+CLAUDE_CODE_EXECUTABLE=
+CLAUDE_CONFIG_DIR=
+```
+
+设置 `CLAUDE_CONFIG_DIR` 会改用独立配置目录，需要在该目录中单独完成认证。
+`CLAUDE_CODE_EXECUTABLE` 只用于覆盖适配器默认使用的 Claude Code 可执行文件。
+
+Hermes、CodeBuddy、Codex 和 Claude Code 均由 Gateway 直接管理 ACP 子进程，不接受
 `--backend-url`。
 
 ## 后台权限模式
@@ -208,8 +236,8 @@ Hermes、CodeBuddy 和 Codex 均由 Gateway 直接管理 ACP 子进程，不接�
 - `native`（默认）：权限由后台 Agent 自己判断和询问，Gateway 只负责原样转发。
 - `full`：启动时明确授予最高权限，后台可直接执行命令、读写文件，不再逐次确认。
 
-`full` 当前支持 OpenCode、Qoder、Hermes、CodeBuddy 和
-Codex。Gateway 会自动批准这些 ACP 后台发起的权限请求；此外 Qoder 和 CodeBuddy
+`full` 当前支持 OpenCode、Qoder、Hermes、CodeBuddy、Codex 和
+Claude Code。Gateway 会自动批准这些 ACP 后台发起的权限请求；此外 Qoder 和 CodeBuddy
 CLI 会使用 `--dangerously-skip-permissions`，OpenCode 会在受管进程的内联配置中为
 协调 Agent 和任务 Agent 设置 `permission: "allow"`，Codex 会使用
 `agent-full-access` 模式。
@@ -326,8 +354,8 @@ OpenCode ACP 接入当前要求 OpenCode `1.18.0` 或更高版本。`auto` 模�
 
 qwen-audio-agent 启动的 OpenCode 默认继承用户原有的全局配置（通常是
 `~/.config/opencode/opencode.json`），因此已经安装的 MCP、Skill、权限、模型和
-插件可以继续使用；qwen-audio-agent 的协调 Agent 配置以附加形式加载，第三层
-Session 工具则由 Gateway 通过 ACP 动态提供。
+插件可以继续使用。协调规则和第三层 Session 工具由 Gateway 在每轮请求中通过
+ACP 动态提供，不会额外安装或覆盖 OpenCode Agent。
 
 如果用户配置或第三方插件与 qwen-audio-agent 冲突，可以临时启用隔离模式排查：
 

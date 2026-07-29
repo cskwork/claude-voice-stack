@@ -1,4 +1,5 @@
 import { codeBuddyRuntimeDriver } from './codebuddy.mjs'
+import { claudeRuntimeDriver } from './claude.mjs'
 import { codexRuntimeDriver } from './codex.mjs'
 import { genericAcpRuntimeDriver } from './generic-acp.mjs'
 import { hermesRuntimeDriver } from './hermes.mjs'
@@ -13,6 +14,7 @@ const drivers = new Map([
   hermesRuntimeDriver,
   codeBuddyRuntimeDriver,
   codexRuntimeDriver,
+  claudeRuntimeDriver,
   genericAcpRuntimeDriver,
 ].map(driver => [driver.id, driver]))
 

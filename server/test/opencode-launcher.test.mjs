@@ -9,7 +9,7 @@ const launcher = readFileSync(
 )
 
 test('inherits the user OpenCode config unless isolation is explicitly enabled', () => {
-  assert.match(launcher, /export OPENCODE_CONFIG_DIR=/)
+  assert.doesNotMatch(launcher, /OPENCODE_CONFIG_DIR=/)
   assert.match(
     launcher,
     /QWEN_AUDIO_AGENT_OPENCODE_ISOLATE_USER_CONFIG:-false/,

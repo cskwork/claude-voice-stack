@@ -74,7 +74,7 @@ test('accepts a generic ACP backend without an HTTP URL', () => {
 })
 
 test('accepts named local ACP backends without an HTTP URL', () => {
-  for (const backend of ['hermes', 'codebuddy', 'codex']) {
+  for (const backend of ['hermes', 'codebuddy', 'codex', 'claude']) {
     const options = parseArguments(['gateway', '--backend', backend], {})
     assert.equal(options.backend, backend)
     assert.equal(options.backendUrl, '')

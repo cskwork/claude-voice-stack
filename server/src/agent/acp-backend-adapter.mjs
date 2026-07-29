@@ -55,6 +55,7 @@ export class AcpBackendAdapter {
     directory = process.cwd(),
     cliPath = '',
     configDirectory = '',
+    claudeExecutable = '',
     baseUrl = '',
     token = '',
     tokenFile = '',
@@ -86,6 +87,7 @@ export class AcpBackendAdapter {
       tokenFile,
       coordinatorAgent,
       configDirectory,
+      claudeExecutable,
       permissionMode: this.permissionMode,
       model: this.model,
     })
@@ -129,7 +131,7 @@ export class AcpBackendAdapter {
       ownership: this.ownership,
       permissionMode: this.permissionMode,
       transport: 'acp',
-      backendAgent: this.coordinatorAgent || 'qwen-audio-agent-backend',
+      backendAgent: this.coordinatorAgent || null,
       sessionModel: 'one-persistent-backend-agent',
       capabilities: {
         delegation: true,

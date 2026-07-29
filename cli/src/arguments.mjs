@@ -211,7 +211,7 @@ export function helpText() {
     '',
     'Gateway 选项：',
     '  --url URL              Gateway 地址（默认 http://127.0.0.1:3101）',
-    '  --backend NAME         必填：openclaw、opencode、qoder、hermes、codebuddy、codex 或 acp（也可在 config.env 设置 AGENT_PROTOCOL）',
+    '  --backend NAME         必填：openclaw、opencode、qoder、hermes、codebuddy、codex、claude 或 acp（也可在 config.env 设置 AGENT_PROTOCOL）',
     '  --attach-openclaw      连接用户已启动的 OpenClaw Gateway',
     '  --backend-permission-mode MODE  native（默认）或 full（最高权限）',
     '  --backend-url URL      后台 Server 地址',

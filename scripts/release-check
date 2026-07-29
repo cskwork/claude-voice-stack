@@ -85,6 +85,11 @@ if (!readFileSync('scripts/codex-acp', 'utf8').includes(
 )) {
   throw new Error('Codex ACP fallback package is not pinned')
 }
+if (!readFileSync('scripts/claude-code-acp', 'utf8').includes(
+  '@zed-industries/claude-code-acp@0.16.2',
+)) {
+  throw new Error('Claude Code ACP fallback package is not pinned')
+}
 if (
   manifest.devDependencies?.['electron-builder'] !== '26.15.7'
   || manifest.overrides?.['@electron/asar'] !== '4.2.1'

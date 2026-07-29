@@ -29,6 +29,7 @@ function fixture() {
     'hermes',
     'codebuddy',
     'codex',
+    'claude',
     'acp',
   ]) {
     const workspace = resolve(root, `config/${backend}/workspace`)
@@ -171,6 +172,10 @@ test('keeps managed backend data outside the installation directory', () => {
     resolve(result.configDirectory, 'workspaces/codex'),
   )
   assert.equal(
+    result.claudeWorkspace,
+    resolve(result.configDirectory, 'workspaces/claude'),
+  )
+  assert.equal(
     result.acpWorkspace,
     resolve(result.configDirectory, 'workspaces/acp'),
   )
@@ -188,6 +193,7 @@ test('keeps managed backend data outside the installation directory', () => {
   assert.equal(env.HERMES_WORKSPACE, result.hermesWorkspace)
   assert.equal(env.CODEBUDDY_WORKSPACE, result.codeBuddyWorkspace)
   assert.equal(env.CODEX_WORKSPACE, result.codexWorkspace)
+  assert.equal(env.CLAUDE_WORKSPACE, result.claudeWorkspace)
   assert.equal(env.ACP_WORKSPACE, result.acpWorkspace)
   assert.deepEqual(
     JSON.parse(readFileSync(
@@ -290,6 +296,7 @@ test('desktop client setup does not require packaged backend templates', () => {
   assert.equal(existsSync(result.hermesWorkspace), false)
   assert.equal(existsSync(result.codeBuddyWorkspace), false)
   assert.equal(existsSync(result.codexWorkspace), false)
+  assert.equal(existsSync(result.claudeWorkspace), false)
   assert.equal(existsSync(result.acpWorkspace), false)
   assert.equal(env.OPENCODE_WORKSPACE, undefined)
   assert.equal(env.QWEN_AUDIO_AGENT_OPENCLAW_WORKSPACE, undefined)
@@ -298,6 +305,7 @@ test('desktop client setup does not require packaged backend templates', () => {
   assert.equal(env.HERMES_WORKSPACE, undefined)
   assert.equal(env.CODEBUDDY_WORKSPACE, undefined)
   assert.equal(env.CODEX_WORKSPACE, undefined)
+  assert.equal(env.CLAUDE_WORKSPACE, undefined)
   assert.equal(env.ACP_WORKSPACE, undefined)
 })
 

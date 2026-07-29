@@ -7,6 +7,7 @@ import {
   resolveCodexWorkspace,
   resolveBackendModels,
   resolveHermesWorkspace,
+  resolveOpenCodeCoordinatorAgent,
   resolveOpenCodeWorkspace,
   resolveQoderWorkspace,
 } from '../src/core/config.mjs'
@@ -29,6 +30,20 @@ test('uses only the explicit OPENCODE_WORKSPACE setting', () => {
     }),
     resolve(root, 'projects/voice'),
   )
+})
+
+test('uses the default ACP Session mode unless a custom OpenCode Agent is explicit', () => {
+  assert.equal(resolveOpenCodeCoordinatorAgent({}), '')
+  assert.equal(resolveOpenCodeCoordinatorAgent({
+    OPENCODE_COORDINATOR_AGENT: 'qwen-audio-agent-backend',
+  }), '')
+  assert.equal(resolveOpenCodeCoordinatorAgent({
+    OPENCODE_COORDINATOR_AGENT: 'custom-coordinator',
+  }), 'custom-coordinator')
+  assert.equal(resolveOpenCodeCoordinatorAgent({
+    QWEN_AUDIO_AGENT_BACKEND_AGENT: 'shared-agent',
+    OPENCODE_COORDINATOR_AGENT: 'custom-coordinator',
+  }), 'shared-agent')
 })
 
 test('uses the user data directory for the default Qoder workspace', () => {

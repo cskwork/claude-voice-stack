@@ -28,9 +28,7 @@ if [ "${QWEN_AUDIO_AGENT_ENV_LOADED:-}" != "1" ]; then
   export QWEN_AUDIO_AGENT_ENV_LOADED=1
 fi
 
-export OPENCODE_CONFIG_DIR=${OPENCODE_CONFIG_DIR:-"$QWEN_AUDIO_AGENT_ROOT/config/opencode"}
-# OpenCode merges this qwen-audio-agent overlay with the user's normal global config,
-# preserving their MCP servers, skills, permissions and plugins. Isolation is
+# Preserve the user's native OpenCode configuration. Isolation remains
 # available as an explicit troubleshooting option for conflicting user config.
 if [ -n "${QWEN_AUDIO_AGENT_OPENCODE_XDG_CONFIG_HOME:-}" ]; then
   export XDG_CONFIG_HOME="$QWEN_AUDIO_AGENT_OPENCODE_XDG_CONFIG_HOME"

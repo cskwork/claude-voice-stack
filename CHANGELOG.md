@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.10.0
+
+- 新增基于 `@zed-industries/claude-code-acp` 的 Claude Code 后端，支持独立协调
+  工作区、原生权限确认、第三层项目 Session 和固定版本回退启动。
+- 清理 OpenCode 旧版命名 Agent Prompt，统一由 Gateway 通过 ACP 动态注入协调规则，
+  同时保留显式选择用户自定义 OpenCode Agent 的能力。
+
 ## 0.9.1
 
 - 修复 Gateway 在任务结果已经开始播报后重启，仍可能重复播报同一条旧消息的问题；

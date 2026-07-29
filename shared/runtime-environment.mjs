@@ -20,7 +20,7 @@ const USER_CONFIG_TEMPLATE = [
   'DASHSCOPE_API_KEY=',
   'QWEN_AUDIO_REALTIME_PROVIDER=dashscope',
   '',
-  '# 必填：选择后台 Agent（openclaw、opencode、qoder、hermes、codebuddy、codex 或 acp）',
+  '# 必填：选择后台 Agent（openclaw、opencode、qoder、hermes、codebuddy、codex、claude 或 acp）',
   'AGENT_PROTOCOL=',
   '# OpenClaw 可选：连接用户已经启动的 Gateway',
   '# OPENCLAW_ATTACH_EXISTING=true',
@@ -315,6 +315,10 @@ export function loadRuntimeEnvironment({
   const codexWorkspace = env.CODEX_WORKSPACE
     ? resolve(root, env.CODEX_WORKSPACE)
     : resolve(configDirectory, 'workspaces/codex')
+  const defaultClaudeWorkspace = !env.CLAUDE_WORKSPACE
+  const claudeWorkspace = env.CLAUDE_WORKSPACE
+    ? resolve(root, env.CLAUDE_WORKSPACE)
+    : resolve(configDirectory, 'workspaces/claude')
   const defaultAcpWorkspace = !env.ACP_WORKSPACE
   const acpWorkspace = env.ACP_WORKSPACE
     ? resolve(root, env.ACP_WORKSPACE)
@@ -362,6 +366,12 @@ export function loadRuntimeEnvironment({
         resolve(root, 'config/codex/workspace/AGENTS.md'),
       )
     }
+    if (defaultClaudeWorkspace) {
+      ensureManagedWorkspace(
+        claudeWorkspace,
+        resolve(root, 'config/claude/workspace/AGENTS.md'),
+      )
+    }
     if (defaultAcpWorkspace) {
       ensureManagedWorkspace(
         acpWorkspace,
@@ -376,6 +386,7 @@ export function loadRuntimeEnvironment({
     env.HERMES_WORKSPACE = hermesWorkspace
     env.CODEBUDDY_WORKSPACE = codeBuddyWorkspace
     env.CODEX_WORKSPACE = codexWorkspace
+    env.CLAUDE_WORKSPACE = claudeWorkspace
     env.ACP_WORKSPACE = acpWorkspace
     migratedFiles = [
       [resolve(root, 'runtime/frontend-memory.json'), frontendMemoryPath],
@@ -399,6 +410,7 @@ export function loadRuntimeEnvironment({
     hermesWorkspace,
     codeBuddyWorkspace,
     codexWorkspace,
+    claudeWorkspace,
     acpWorkspace,
     openClawStateDirectory,
     migratedFiles,

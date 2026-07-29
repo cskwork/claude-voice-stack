@@ -14,6 +14,7 @@ export function acpBackendProfile({
   permissionMode,
   model,
   modelUrl,
+  claudeExecutable,
   args,
   label,
 }) {
@@ -29,6 +30,7 @@ export function acpBackendProfile({
     permissionMode,
     model,
     modelUrl,
+    claudeExecutable,
     args,
     label,
   })

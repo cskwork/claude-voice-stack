@@ -50,17 +50,18 @@ Agent 也应该始终在场。
 
 ## Agent 支持
 
-| 后台 Agent | 状态 | 主要能力 | 推荐指数 |
+| 后台 Agent | 接入方式 | 接入准备 | 推荐指数 |
 | --- | --- | --- | --- |
-| OpenCode | 已支持 | 工具与代码任务、项目 Session、进度查询与取消 | ★★★★★ |
-| OpenClaw | 已支持 | Agent、工具、任务执行与权限控制 | ★★★★★ |
-| Qoder | 已支持 | 原生 CLI Session、新建或继续项目、任务委派与取消 | ★★★★★ |
-| Hermes | 已支持 | 原生 ACP、工具调用、项目 Session 与任务执行 | ★★★★☆ |
-| CodeBuddy | 已支持 | 原生 ACP、自定义模型、项目 Session 与权限控制 | ★★★★☆ |
-| Codex | 已支持 | Codex ACP、代码任务、项目 Session 与权限控制 | ★★★★☆ |
+| OpenCode | 原生 ACP | 可自动安装 | ★★★★★ |
+| OpenClaw | 内置 ACP 桥接 | 可自动安装 | ★★★★★ |
+| Qoder | 原生 ACP | 需要用户安装和认证 | ★★★★★ |
+| Hermes | 原生 ACP | 需要用户安装和配置模型 | ★★★★☆ |
+| CodeBuddy | 原生 ACP | 需要用户安装和认证 | ★★★★☆ |
+| Codex | 外部 ACP 适配 | 可自动安装 | ★★★★☆ |
+| Claude Code | 外部 ACP 适配 | 可自动安装，需要用户认证 | ★★★★☆ |
 
 推荐指数综合反映当前集成完整度、兼容性和实际验证程度：五星表示已经过充分测试的
-推荐集成，四星表示正在开发或尚未完成同等范围验证。是否当前可用以状态栏为准。
+推荐集成，四星表示正在开发或尚未完成同等范围验证。
 详细配置和能力边界见[配置说明](docs/configuration.md)。
 
 ## 安装
@@ -219,11 +220,11 @@ AGENT_PROTOCOL=qoder
 QODER_MODEL=auto
 ```
 
-Hermes、CodeBuddy 和 Codex 也可直接选择：
+Hermes、CodeBuddy、Codex 和 Claude Code 也可直接选择：
 
 ```dotenv
 AGENT_PROTOCOL=hermes
-# 或 codebuddy、codex
+# 或 codebuddy、codex、claude
 ```
 
 使用其他支持 ACP stdio 的 Agent：
