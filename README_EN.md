@@ -142,11 +142,12 @@ qwenaudio config
 ```
 
 2. Open the displayed `config.env` file, add your DashScope API Key, and select
-   OpenClaw:
+   OpenClaw or another backend Agent:
 
 ```dotenv
-DASHSCOPE_API_KEY=your-key
 AGENT_PROTOCOL=openclaw
+DASHSCOPE_API_KEY=your-key
+QWEN_AUDIO_REALTIME_MODEL=qwen-audio-3.0-realtime-plus
 QWEN_AUDIO_AGENT_BACKEND_MODEL=qwen3.7-max
 ```
 
