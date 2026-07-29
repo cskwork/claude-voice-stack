@@ -121,11 +121,13 @@ npm install -g git+https://github.com/QwenAudio/qwen-audio-agent.git
 qwenaudio config
 ```
 
-2. 打开命令显示的 `config.env`，填写 DashScope API Key，并选择 OpenClaw：
+2. 打开命令显示的 `config.env`，填写 DashScope API Key，并选择 OpenClaw
+   或其他后台 Agent：
 
 ```dotenv
-DASHSCOPE_API_KEY=your-key
 AGENT_PROTOCOL=openclaw
+DASHSCOPE_API_KEY=your-key
+QWEN_AUDIO_REALTIME_MODEL=qwen-audio-3.0-realtime-plus
 QWEN_AUDIO_AGENT_BACKEND_MODEL=qwen3.7-max
 ```
 
