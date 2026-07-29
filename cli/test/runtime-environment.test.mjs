@@ -256,7 +256,7 @@ test('keeps the generated CodeBuddy model aligned with backend settings', () => 
   loadRuntimeEnvironment({
     root: target.root,
     homeDirectory: target.homeDirectory,
-    env: { CODEBUDDY_MODEL: 'qwen3.7-max' },
+    env: { QWEN_AUDIO_AGENT_BACKEND_MODEL: 'qwen3.7-max' },
     generateSecret: false,
   })
   assert.deepEqual(JSON.parse(readFileSync(modelPath, 'utf8')), {
@@ -291,7 +291,7 @@ test('removes only a generated CodeBuddy override when no model is configured', 
 test('preserves a user-edited CodeBuddy model configuration', () => {
   const target = fixture()
   const env = {
-    CODEBUDDY_MODEL: 'qwen3.7-plus',
+    QWEN_AUDIO_AGENT_BACKEND_MODEL: 'qwen3.7-plus',
   }
   const first = loadRuntimeEnvironment({
     root: target.root,
@@ -319,7 +319,7 @@ test('preserves a user-edited CodeBuddy model configuration', () => {
   loadRuntimeEnvironment({
     root: target.root,
     homeDirectory: target.homeDirectory,
-    env: { CODEBUDDY_MODEL: 'qwen3.7-max' },
+    env: { QWEN_AUDIO_AGENT_BACKEND_MODEL: 'qwen3.7-max' },
     generateSecret: false,
   })
   assert.equal(readFileSync(modelPath, 'utf8'), customized)

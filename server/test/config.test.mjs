@@ -86,8 +86,11 @@ test('maps one backend model name to each managed backend provider', () => {
   })
 })
 
-test('preserves backend-native models when no override is configured', () => {
-  assert.deepEqual(resolveBackendModels({}), {
+test('ignores backend-native model variables as Gateway overrides', () => {
+  assert.deepEqual(resolveBackendModels({
+    OPENCODE_MODEL: 'custom-open/code-model',
+    QODER_MODEL: 'qoder-model',
+  }), {
     common: '',
     openCode: '',
     openClaw: '',
@@ -100,26 +103,19 @@ test('preserves backend-native models when no override is configured', () => {
   })
 })
 
-test('preserves backend-native model overrides', () => {
+test('uses only the unified backend model override', () => {
   assert.deepEqual(resolveBackendModels({
     QWEN_AUDIO_AGENT_BACKEND_MODEL: 'qwen3.7-max',
     OPENCODE_MODEL: 'custom-open/code-model',
-    OPENCLAW_MODEL: 'custom-claw/model',
-    QODER_MODEL: 'qoder-model',
-    HERMES_MODEL: 'hermes/model',
-    CODEBUDDY_MODEL: 'codebuddy-model',
-    CODEX_MODEL: 'codex-model',
-    CLAUDE_MODEL: 'claude-model',
-    ACP_MODEL: 'acp/model',
   }), {
     common: 'qwen3.7-max',
-    openCode: 'custom-open/code-model',
-    openClaw: 'custom-claw/model',
-    qoder: 'qoder-model',
-    hermes: 'hermes/model',
-    codeBuddy: 'codebuddy-model',
-    codex: 'codex-model',
-    claude: 'claude-model',
-    acp: 'acp/model',
+    openCode: 'alibaba-cn/qwen3.7-max',
+    openClaw: 'bailian/qwen3.7-max',
+    qoder: 'qwen3.7-max',
+    hermes: 'qwen3.7-max',
+    codeBuddy: 'qwen3.7-max',
+    codex: 'qwen3.7-max',
+    claude: 'qwen3.7-max',
+    acp: 'qwen3.7-max',
   })
 })

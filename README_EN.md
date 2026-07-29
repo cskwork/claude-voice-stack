@@ -261,7 +261,6 @@ Use Qoder:
 
 ```dotenv
 AGENT_PROTOCOL=qoder
-QODER_MODEL=auto
 ```
 
 Hermes, CodeBuddy, Codex, and Claude Code can also be selected directly:
@@ -279,7 +278,7 @@ ACP_COMMAND=your-agent
 ACP_ARGS=["--acp"]
 ```
 
-The generic ACP entry point requires no Gateway code changes. Configure its command, arguments, display label, model, and workspace with `ACP_COMMAND`, `ACP_ARGS`, `ACP_LABEL`, `ACP_MODEL`, and `ACP_WORKSPACE`.
+The generic ACP entry point requires no Gateway code changes. Configure its command, arguments, display label, and workspace with `ACP_COMMAND`, `ACP_ARGS`, `ACP_LABEL`, and `ACP_WORKSPACE`.
 
 Backend model selection follows these rules:
 
@@ -289,10 +288,10 @@ Backend model selection follows these rules:
   user's own configuration.
 - For a resumed Session, the selected Agent preserves that Session's existing
   model.
-- Only an explicit `QWEN_AUDIO_AGENT_BACKEND_MODEL` or backend-specific model
-  setting makes the Gateway force the model for Sessions managed by
-  qwen-audio-agent and verify the result. A clear error is returned when the
-  Agent does not support the model or the override cannot be verified.
+- Only the single backend model setting, `QWEN_AUDIO_AGENT_BACKEND_MODEL`,
+  makes the Gateway force the model for Sessions managed by qwen-audio-agent
+  and verify the result. A clear error is returned when the Agent does not
+  support the model or the override cannot be verified.
 
 Backend permissions default to `native`, so the backend Agent asks when
 permission is required. Enable the following option only in trusted projects

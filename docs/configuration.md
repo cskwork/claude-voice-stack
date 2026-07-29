@@ -60,10 +60,9 @@ qwen-audio-agent 强制覆盖其管理的全部 Session 时，才设置：
 QWEN_AUDIO_AGENT_BACKEND_MODEL=qwen3.7-max
 ```
 
-公共覆盖会映射到所选后台；`OPENCODE_MODEL`、`OPENCLAW_MODEL`、
-`QODER_MODEL`、`HERMES_MODEL`、`CODEBUDDY_MODEL`、`CODEX_MODEL`、
-`CLAUDE_MODEL` 和 `ACP_MODEL` 可进一步使用后台原生模型标识，并优先于公共值。
-模型 ID 由各 Agent 定义，并不由 ACP 统一命名。
+这是 qwen-audio-agent 唯一的后台模型配置入口。Gateway 会把该值映射为所选后台
+使用的模型标识；模型 ID 仍由各 Agent 定义，并不由 ACP 统一命名。后台自身的
+原生模型环境变量可以继续由后台读取，但 Gateway 不会把它们解释为模型覆盖请求。
 
 未指定模型时，Gateway 不传模型，也不猜测默认值：新建 Session 的模型完全由
 后台 Agent 根据用户配置选择，恢复 Session 则保留其原有模型。历史 Session
@@ -74,7 +73,7 @@ Gateway 不会擅自重置。
 从 ACP `configOptions` 中按 `category: model` 发现模型选项，并通过
 `session/set_config_option` 设置；如果 Agent 没有提供模型配置、目标模型不在
 可选清单中、调用失败或返回结果无法确认生效，当前请求会明确失败，不会静默换用
-其他模型。未设置任何模型变量时完全不调用模型设置接口。
+其他模型。未设置 `QWEN_AUDIO_AGENT_BACKEND_MODEL` 时完全不调用模型设置接口。
 
 本地身份密钥由程序首次启动时自动生成，保存在同一配置目录的 `state.env`，
 文件权限为仅当前用户可读写。
@@ -131,7 +130,6 @@ Qoder 使用本机 `qodercli --acp`，没有 HTTP 后台地址：
 ```dotenv
 AGENT_PROTOCOL=qoder
 QWEN_AUDIO_AGENT_BACKEND_PERMISSION_MODE=native
-QODER_MODEL=auto
 ```
 
 统一 ACP Adapter 为每个用户维护一个固定的原生协调 Session，并通过 ACP 的
@@ -142,7 +140,6 @@ Session list/resume/new 能力和动态 MCP 工具提供列出、新建、继续
 认证复用 `qodercli` 当前登录状态或它支持的环境变量。高级配置：
 
 ```dotenv
-QODER_MODEL=auto
 QODERCLI_PATH=
 QODER_CONFIG_DIR=
 ```
@@ -156,7 +153,6 @@ AGENT_PROTOCOL=acp
 ACP_COMMAND=your-agent
 ACP_ARGS=["--acp"]
 ACP_LABEL=Your Agent
-ACP_MODEL=auto
 ACP_WORKSPACE=
 ```
 
@@ -175,12 +171,11 @@ QWEN_AUDIO_AGENT_BACKEND_PERMISSION_MODE=native
 ```
 
 Hermes 默认使用自身配置的模型与 provider。显式设置
-`HERMES_MODEL` 或 `QWEN_AUDIO_AGENT_BACKEND_MODEL` 时，Gateway 才会通过 ACP
-覆盖其 Session 模型。首次使用前可运行 `hermes acp --check` 检查依赖。高级配置：
+`QWEN_AUDIO_AGENT_BACKEND_MODEL` 时，Gateway 才会通过 ACP 覆盖其 Session
+模型。首次使用前可运行 `hermes acp --check` 检查依赖。高级配置：
 
 ```dotenv
 HERMES_BIN=
-HERMES_MODEL=
 HERMES_WORKSPACE=
 ```
 
@@ -199,21 +194,19 @@ AGENT_PROTOCOL=codebuddy
 QWEN_AUDIO_AGENT_BACKEND_PERMISSION_MODE=native
 ```
 
-默认直接使用 CodeBuddy 已有的模型配置。只有显式设置 `CODEBUDDY_MODEL` 或
+默认直接使用 CodeBuddy 已有的模型配置。只有显式设置
 `QWEN_AUDIO_AGENT_BACKEND_MODEL` 时，协调工作区才会生成项目级
 `.codebuddy/models.json`，通过环境变量读取指定的模型与地址。高级配置：
 
 ```dotenv
 CODEBUDDY_BIN=
 CODEBUDDY_WORKSPACE=
-CODEBUDDY_MODEL=qwen3.7-max
 CODEBUDDY_MODEL_URL=https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions
 ```
 
 取消模型覆盖后，Gateway 会移除自己生成的 `.codebuddy/models.json`，恢复
 CodeBuddy 原有模型；用户手动修改的文件始终保留。启用覆盖时，
-`CODEBUDDY_MODEL` 或 `QWEN_AUDIO_AGENT_BACKEND_MODEL` 的变化会自动同步到
-系统生成的文件。
+`QWEN_AUDIO_AGENT_BACKEND_MODEL` 的变化会自动同步到系统生成的文件。
 
 ### Codex
 
@@ -227,9 +220,9 @@ AGENT_PROTOCOL=codex
 QWEN_AUDIO_AGENT_BACKEND_PERMISSION_MODE=native
 ```
 
-默认复用用户的 `~/.codex`、登录状态和模型。只有显式设置 `CODEX_MODEL`、
-`CODEX_BASE_URL` 或 `QWEN_AUDIO_AGENT_BACKEND_MODEL` 时，才为当前 ACP Session
-注入覆盖，不修改用户配置文件。高级配置：
+默认复用用户的 `~/.codex`、登录状态和模型。只有显式设置
+`QWEN_AUDIO_AGENT_BACKEND_MODEL` 时才覆盖模型；`CODEX_BASE_URL` 只用于配置
+自定义模型服务地址。两者都不会修改用户配置文件。高级配置：
 
 ```dotenv
 CODEX_ACP_BIN=
@@ -237,7 +230,6 @@ CODEX_ACP_PACKAGE=@agentclientprotocol/codex-acp@1.1.7
 CODEX_ACP_RUNTIME=auto
 CODEX_PATH=
 CODEX_WORKSPACE=
-CODEX_MODEL=
 CODEX_BASE_URL=
 ```
 
@@ -254,9 +246,8 @@ QWEN_AUDIO_AGENT_BACKEND_PERMISSION_MODE=native
 ```
 
 模型和凭据默认由 Claude Code 自己管理，并复用 `~/.claude` 中已有的登录状态；
-也可以设置 `ANTHROPIC_API_KEY`。显式设置 `CLAUDE_MODEL` 或
-`QWEN_AUDIO_AGENT_BACKEND_MODEL` 时，Gateway 才会通过 ACP 覆盖其 Session
-模型。高级配置：
+也可以设置 `ANTHROPIC_API_KEY`。显式设置 `QWEN_AUDIO_AGENT_BACKEND_MODEL`
+时，Gateway 才会通过 ACP 覆盖其 Session 模型。高级配置：
 
 ```dotenv
 CLAUDE_CODE_ACP_BIN=
@@ -265,7 +256,6 @@ CLAUDE_CODE_ACP_RUNTIME=auto
 CLAUDE_WORKSPACE=
 CLAUDE_CODE_EXECUTABLE=
 CLAUDE_CONFIG_DIR=
-CLAUDE_MODEL=
 ```
 
 设置 `CLAUDE_CONFIG_DIR` 会改用独立配置目录，需要在该目录中单独完成认证。
@@ -420,9 +410,7 @@ QWEN_AUDIO_AGENT_OPENCODE_ISOLATE_USER_CONFIG=true
 | `OPENCODE_WORKSPACE` | 用户配置目录下的 `workspaces/opencode` |
 | `QODER_WORKSPACE` | 用户配置目录下的 `workspaces/qoder` |
 | `QWEN_AUDIO_AGENT_BACKEND_MODEL` | 空；使用后台 Agent 原有模型 |
-| 后台专属 `*_MODEL` | 空；显式设置时优先于公共模型并强制覆盖 Session |
 | `OPENCLAW_ATTACH_EXISTING` | `false`；由 Adapter 启动 OpenClaw Gateway |
-| `QODER_MODEL` | `auto` |
 | `QWEN_AUDIO_AGENT_BACKEND_PERMISSION_MODE` | `native` |
 | `QWEN_AUDIO_REALTIME_MODEL` | `qwen-audio-3.0-realtime-plus` |
 | `QWEN_AUDIO_REALTIME_PROVIDER` | `dashscope` |

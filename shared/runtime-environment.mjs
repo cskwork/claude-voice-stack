@@ -165,9 +165,7 @@ function ensureManagedWorkspace(directory, templatePath) {
 
 function codeBuddyModelName(env) {
   const configured = String(
-    env.CODEBUDDY_MODEL
-    || env.QWEN_AUDIO_AGENT_BACKEND_MODEL
-    || '',
+    env.QWEN_AUDIO_AGENT_BACKEND_MODEL || '',
   ).trim()
   const separator = configured.indexOf('/')
   return separator >= 0 ? configured.slice(separator + 1) : configured

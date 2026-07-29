@@ -408,7 +408,7 @@ test('external ACP adapters require the user backend to be installed', {
   }
 })
 
-test('only maps a backend model when the user explicitly configures one', {
+test('does not translate the unified model into backend process variables', {
   skip: process.platform === 'win32',
 }, () => {
   const openCode = fixture()
@@ -425,7 +425,7 @@ test('only maps a backend model when the user explicitly configures one', {
     assert.deepEqual(run('scripts/opencode-server', openCode, {
       QWEN_AUDIO_AGENT_BACKEND_MODEL: 'qwen-custom',
     }).slice(-5), [
-      'OPENCODE_MODEL=alibaba-cn/qwen-custom',
+      'OPENCODE_MODEL=',
       'OPENCLAW_MODEL=',
       'OPENCLAW_MODEL_ID=',
       'OPENCLAW_CONFIG_PATH=',

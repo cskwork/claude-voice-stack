@@ -120,20 +120,14 @@ export function resolveBackendModels(env = process.env) {
   const name = backendModelName(common)
   return {
     common,
-    openCode: String(
-      env.OPENCODE_MODEL
-      || (common ? `alibaba-cn/${name}` : ''),
-    ).trim(),
-    openClaw: String(
-      env.OPENCLAW_MODEL
-      || (common ? `bailian/${name}` : ''),
-    ).trim(),
-    qoder: String(env.QODER_MODEL || name).trim(),
-    hermes: String(env.HERMES_MODEL || common).trim(),
-    codeBuddy: String(env.CODEBUDDY_MODEL || name).trim(),
-    codex: String(env.CODEX_MODEL || name).trim(),
-    claude: String(env.CLAUDE_MODEL || common).trim(),
-    acp: String(env.ACP_MODEL || common).trim(),
+    openCode: common ? `alibaba-cn/${name}` : '',
+    openClaw: common ? `bailian/${name}` : '',
+    qoder: name,
+    hermes: common,
+    codeBuddy: name,
+    codex: name,
+    claude: common,
+    acp: common,
   }
 }
 
@@ -252,8 +246,8 @@ export const config = {
     process.env.QODERCLI_PATH || process.env.QODER_CLI_PATH || '',
   ).trim(),
   qoderModel: String(
-    backendModels.qoder || 'auto',
-  ).trim() || 'auto',
+    backendModels.qoder,
+  ).trim(),
   hermesDirectory: resolveHermesWorkspace(),
   hermesCliPath: String(process.env.HERMES_BIN || '').trim(),
   hermesModel: String(
@@ -301,8 +295,8 @@ export const config = {
   acpLabel: String(process.env.ACP_LABEL || 'ACP Agent').trim() || 'ACP Agent',
   acpDirectory: resolveAcpWorkspace(),
   acpModel: String(
-    backendModels.acp || 'auto',
-  ).trim() || 'auto',
+    backendModels.acp,
+  ).trim(),
   acpCoordinatorAgent: String(process.env.ACP_COORDINATOR_AGENT || '').trim(),
   openCodeModel: backendModels.openCode,
   openClawModel: backendModels.openClaw,

@@ -31,7 +31,6 @@ test('updates client settings without changing Gateway-owned configuration', () 
     'QWEN_AUDIO_REALTIME_MODEL=realtime-model',
     'AGENT_PROTOCOL=qoder',
     'QWEN_AUDIO_AGENT_BACKEND_PERMISSION_MODE=full',
-    'QODER_MODEL=auto',
     '',
   ].join('\n'), {
     gatewayUrl: 'http://127.0.0.1:3200',
@@ -43,7 +42,6 @@ test('updates client settings without changing Gateway-owned configuration', () 
   assert.match(content, /QWEN_AUDIO_REALTIME_MODEL=realtime-model/)
   assert.match(content, /AGENT_PROTOCOL=qoder/)
   assert.match(content, /QWEN_AUDIO_AGENT_BACKEND_PERMISSION_MODE=full/)
-  assert.match(content, /QODER_MODEL=auto/)
   assert.match(content, /QWEN_AUDIO_AGENT_URL=http:\/\/127\.0\.0\.1:3200/)
   assert.match(content, /QWEN_AUDIO_ORB_STYLE=goo/)
   assert.deepEqual(parseSettings(content), {
