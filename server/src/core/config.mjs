@@ -8,7 +8,8 @@ import {
 } from '../../../shared/backend-catalog.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
-const root = resolve(here, '../../..')
+const sourceRoot = resolve(here, '../../..')
+const root = process.env.QWEN_AUDIO_AGENT_RUNTIME_ROOT || sourceRoot
 const runtimeEnvironment = loadRuntimeEnvironment({ root })
 
 function numberSetting(value, fallback, {
@@ -187,7 +188,11 @@ export function resolveOpenCodeCoordinatorAgent(env = process.env) {
 export const config = {
   root,
   host: process.env.HOST || '127.0.0.1',
-  port: numberSetting(process.env.PORT, 3101, { min: 1, max: 65535 }),
+  // PORT=0 lets an embedded host (e.g. the desktop app) fall back to a
+  // random loopback port and learn it from the child process report.
+  port: String(process.env.PORT || '').trim() === '0'
+    ? 0
+    : numberSetting(process.env.PORT, 3101, { min: 1, max: 65535 }),
   audioProvider: String(
     process.env.QWEN_AUDIO_REALTIME_PROVIDER || 'dashscope',
   ).trim().toLowerCase(),

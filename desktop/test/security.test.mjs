@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   desktopOrbUrl,
+  isLoopbackUrl,
   isSafeExternalUrl,
   isSameOrigin,
   validateAppUrl,
@@ -29,6 +30,14 @@ test('limits in-app navigation and external protocols', () => {
   assert.equal(isSafeExternalUrl('https://example.com'), true)
   assert.equal(isSafeExternalUrl('file:///etc/passwd'), false)
   assert.equal(isSafeExternalUrl('javascript:alert(1)'), false)
+})
+
+test('distinguishes loopback gateway targets from remote ones', () => {
+  assert.equal(isLoopbackUrl('http://127.0.0.1:3101'), true)
+  assert.equal(isLoopbackUrl('http://localhost:3101'), true)
+  assert.equal(isLoopbackUrl('http://[::1]:3101'), true)
+  assert.equal(isLoopbackUrl('https://voice.example.com'), false)
+  assert.equal(isLoopbackUrl('not a url'), false)
 })
 
 test('builds a dedicated desktop orb URL without losing existing parameters', () => {

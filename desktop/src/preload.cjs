@@ -11,9 +11,16 @@ contextBridge.exposeInMainWorld('qwenAudioAgentDesktop', {
   dragEnd: () => ipcRenderer.send('qwen-audio-agent:drag-end'),
   openSettings: () => ipcRenderer.send('qwen-audio-agent:open-settings'),
   loadSettings: () => ipcRenderer.invoke('qwen-audio-agent:settings-load'),
+  loadRuntimeStatus: () => ipcRenderer.invoke(
+    'qwen-audio-agent:settings-runtime-status',
+  ),
   saveSettings: settings => ipcRenderer.invoke(
     'qwen-audio-agent:settings-save',
     settings,
   ),
+  openExternal: url => {
+    if (typeof url !== 'string') return
+    ipcRenderer.send('qwen-audio-agent:open-external', url)
+  },
   quit: () => ipcRenderer.send('qwen-audio-agent:quit'),
 })

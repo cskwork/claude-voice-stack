@@ -3,6 +3,38 @@ set -eu
 
 QWEN_AUDIO_AGENT_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 export QWEN_AUDIO_AGENT_ROOT
+QWEN_AUDIO_AGENT_SOURCE_ROOT=${QWEN_AUDIO_AGENT_SOURCE_ROOT:-"$QWEN_AUDIO_AGENT_ROOT"}
+
+run_qwenaudio_node() {
+  if [ "${QWEN_AUDIO_AGENT_DESKTOP:-}" = "1" ]; then
+    ELECTRON_RUN_AS_NODE=1 "${QWEN_AUDIO_AGENT_NODE:-node}" "$@"
+    return
+  fi
+  "${QWEN_AUDIO_AGENT_NODE:-node}" "$@"
+}
+
+run_openclaw_helper() {
+  if [ "$QWEN_AUDIO_AGENT_SOURCE_ROOT" != "$QWEN_AUDIO_AGENT_ROOT" ]; then
+    run_qwenaudio_node \
+      "$QWEN_AUDIO_AGENT_SOURCE_ROOT/server/src/process/openclaw-desktop-helper.mjs" \
+      "$@"
+    return
+  fi
+  case "$1" in
+    prepare)
+      shift
+      run_qwenaudio_node \
+        "$QWEN_AUDIO_AGENT_ROOT/scripts/prepare-openclaw-config.mjs" \
+        "$@"
+      ;;
+    sync-token)
+      shift
+      run_qwenaudio_node \
+        "$QWEN_AUDIO_AGENT_ROOT/scripts/sync-openclaw-gateway-token.mjs" \
+        "$@"
+      ;;
+  esac
+}
 
 if [ "${QWEN_AUDIO_AGENT_ENV_LOADED:-}" != "1" ]; then
   if [ -f "$QWEN_AUDIO_AGENT_ROOT/.env.local" ]; then
@@ -71,8 +103,7 @@ if [ "${1:-}" = "gateway" ]; then
     OPENCLAW_USER_CONFIG_PATH=$OPENCLAW_CONFIG_PATH
     OPENCLAW_USER_STATE_DIR=$(dirname -- "$OPENCLAW_USER_CONFIG_PATH")
     OPENCLAW_RUNTIME_CONFIG_PATH="$OPENCLAW_RUNTIME_STATE_DIR/openclaw.json"
-    "${QWEN_AUDIO_AGENT_NODE:-node}" \
-      "$QWEN_AUDIO_AGENT_ROOT/scripts/prepare-openclaw-config.mjs" \
+    run_openclaw_helper prepare \
       "$OPENCLAW_USER_CONFIG_PATH" \
       "$OPENCLAW_RUNTIME_CONFIG_PATH"
     export OPENCLAW_CONFIG_PATH="$OPENCLAW_RUNTIME_CONFIG_PATH"
@@ -104,8 +135,7 @@ if [ -n "$OPENCLAW_GATEWAY_TOKEN" ]; then
   chmod 600 "$OPENCLAW_GATEWAY_TOKEN_TMP"
   mv -f "$OPENCLAW_GATEWAY_TOKEN_TMP" "$OPENCLAW_GATEWAY_TOKEN_FILE"
 elif [ "${1:-}" = "gateway" ]; then
-  "${QWEN_AUDIO_AGENT_NODE:-node}" \
-    "$QWEN_AUDIO_AGENT_ROOT/scripts/sync-openclaw-gateway-token.mjs" \
+  run_openclaw_helper sync-token \
     "$OPENCLAW_GATEWAY_TOKEN_FILE"
 fi
 export OPENCLAW_GATEWAY_TOKEN_FILE
@@ -148,6 +178,10 @@ run_source() {
 }
 
 run_package() {
+  if [ "${QWEN_AUDIO_AGENT_DESKTOP_INSTALLED_ONLY:-}" = "1" ]; then
+    echo "OpenClaw is not installed. Install OpenClaw before selecting it in the desktop app." >&2
+    exit 1
+  fi
   if ! command -v npx >/dev/null 2>&1; then
     echo "OpenClaw package mode requires npx." >&2
     exit 1

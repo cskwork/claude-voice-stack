@@ -35,6 +35,10 @@ run_binary() {
 }
 
 run_package() {
+  if [ "${QWEN_AUDIO_AGENT_DESKTOP_INSTALLED_ONLY:-}" = "1" ]; then
+    echo "codex-acp is not installed. Install the ACP adapter before selecting Codex in the desktop app." >&2
+    exit 1
+  fi
   if ! command -v npx >/dev/null 2>&1; then
     echo "codex-acp package mode requires npx." >&2
     exit 1

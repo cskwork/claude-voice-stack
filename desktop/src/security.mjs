@@ -19,6 +19,14 @@ export function isSameOrigin(value, expectedOrigin) {
   }
 }
 
+export function isLoopbackUrl(value) {
+  try {
+    return LOOPBACK_HOSTS.has(new URL(value).hostname)
+  } catch {
+    return false
+  }
+}
+
 export function isSafeExternalUrl(value) {
   try {
     return ['http:', 'https:'].includes(new URL(value).protocol)
