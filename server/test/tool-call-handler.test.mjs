@@ -380,7 +380,7 @@ test('queues a hidden high-priority coordinator query for delegated work', async
   await manager.wait(delegated.id)
 })
 
-test('relays a realtime semantic permission decision with verbatim evidence', async () => {
+test('relays a realtime semantic permission decision without evidence matching', async () => {
   const calls = []
   const answer = '你按刚才说的处理就成'
   const permissionPolicy = new SessionPermissionPolicy()
@@ -402,7 +402,6 @@ test('relays a realtime semantic permission decision with verbatim evidence', as
     arguments: JSON.stringify({
       authorization_id: 'auth-one',
       decision: 'always',
-      evidence: answer,
     }),
   })
 
@@ -439,7 +438,6 @@ test('confirms a rejected realtime permission exactly once', async () => {
     arguments: JSON.stringify({
       authorization_id: 'auth-one',
       decision: 'reject',
-      evidence: answer,
     }),
   })
 
@@ -498,29 +496,26 @@ test('auto-allows later permissions in the Gateway without publishing them', asy
   )
 })
 
-test('rejects permission evidence that was not spoken in the current turn', async () => {
-  let called = false
+test('accepts a semantic permission decision without an evidence field', async () => {
+  const calls = []
   const kit = await permissionHarness({
-    answer: '我还没想好',
-    respondPermission: async () => {
-      called = true
+    answer: '你按刚才说的做吧',
+    respondPermission: async (id, decision) => {
+      calls.push({ id, decision })
+      return { id, workId: 'work-one', status: 'approved' }
     },
   })
   await kit.handler.handle({
-    call_id: 'permission-forged-evidence',
+    call_id: 'permission-without-evidence',
     name: 'respond_agent_permission',
     arguments: JSON.stringify({
       authorization_id: 'auth-one',
       decision: 'always',
-      evidence: '用户已经明确同意',
     }),
   })
 
-  assert.equal(called, false)
-  assert.equal(
-    kit.outputs.at(-1)[1].error_code,
-    'permission_evidence_mismatch',
-  )
+  assert.deepEqual(calls, [{ id: 'auth-one', decision: 'always' }])
+  assert.equal(kit.outputs.at(-1)[1].status, 'approved')
   await kit.finish()
 })
 
@@ -539,7 +534,6 @@ test('rejects a permission id that is not pending on the current task', async ()
     arguments: JSON.stringify({
       authorization_id: 'auth-other',
       decision: 'always',
-      evidence: answer,
     }),
   })
 

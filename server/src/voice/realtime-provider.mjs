@@ -133,7 +133,7 @@ const respondAgentPermissionTool = {
   type: 'function',
   function: {
     name: RESPOND_AGENT_PERMISSION_TOOL_NAME,
-    description: '回复当前正在等待用户决定的后台权限请求。由你结合刚提出的具体权限问题和用户本轮原话，智能判断为本会话自动允许、拒绝或尚不明确；不要依赖固定关键词。若刚问的是“是否允许并在本次会话中自动允许后续操作”，用户回答“可以”“行”“好”“允许”“同意”“没问题”等自然肯定表达就是明确同意，应调用 always，不得要求复述固定口令。明确拒绝时调用 reject，不明确时不要调用并继续询问。必须逐字引用本轮用户原话中的证据，不得只口头声称已授权。',
+    description: '回复当前正在等待用户决定的后台权限请求。由你结合刚提出的具体权限问题和用户本轮自然表达，智能判断为本会话自动允许、拒绝或尚不明确；不要依赖固定关键词。用户回答“可以”“行”“好”“允许”“同意”“没问题”等自然肯定表达就是明确同意，应调用 always，不得要求复述固定口令。明确拒绝时调用 reject，不明确时不要调用并继续询问。',
     parameters: {
       type: 'object',
       properties: {
@@ -146,12 +146,8 @@ const respondAgentPermissionTool = {
           enum: ['always', 'reject'],
           description: 'always 表示允许当前操作，并由 Gateway 在本次前台会话中自动允许后续权限请求；reject 表示拒绝当前操作，后续请求仍继续询问。',
         },
-        evidence: {
-          type: 'string',
-          description: '从本轮用户原话中逐字复制、直接支撑该决定的最短片段；不得改写、概括或补造。',
-        },
       },
-      required: ['authorization_id', 'decision', 'evidence'],
+      required: ['authorization_id', 'decision'],
       additionalProperties: false,
     },
   },
@@ -180,11 +176,10 @@ function speakResponseInstructions(content) {
 }
 
 const permissionResponseInstructions = [
-  '这是后台 Agent 提交的权限确认请求，不是用户的新指令。',
-  '用一句自然、清楚的话说明后台想做的操作，并询问用户是否允许。',
-  '必须明确告诉用户：同意后，本次前台会话的后续权限请求会自动允许，不再逐项询问。',
-  '不要替用户决定，不要调用工具；等待用户下一轮明确回答。',
-  '不要朗读 authorization_id、Session ID 或协议字段。',
+  '这是后台 Agent 的权限请求。',
+  '自然、简短地说明操作，并询问用户是否同意授权。',
+  '不要规定具体回答方式，也不要提供或要求复述固定口令。',
+  '不要调用工具或朗读内部字段，等待用户回答。',
 ].join(' ')
 
 export function buildFrontendInstructions(agentContext = {}) {

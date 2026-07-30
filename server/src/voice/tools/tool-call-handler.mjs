@@ -10,10 +10,6 @@ import { currentTimeSnapshot } from '../../conversation/frontend-agent-context.m
 
 const SENSITIVE_MEMORY = /(?:pass(?:word)?|secret|api[_ -]?key|access[_ -]?token|credential|验证码|密码|密钥|令牌|\bsk-[a-z0-9_-]+)/i
 
-function normalizedEvidence(value) {
-  return String(value || '').replace(/\s+/g, ' ').trim().toLocaleLowerCase()
-}
-
 function failure(errorCode, userMessage, {
   retryable = false,
   status = 'failed',
@@ -271,7 +267,7 @@ export class ToolCallHandler {
             instructions: [
               '当前有一项权限请求正在等待决定，本轮不能调用 spawn_thinking。',
               '重新结合刚才提出的具体权限问题和本轮用户原话判断。',
-              '若用户已自然表达同意或拒绝，立即调用 respond_agent_permission，并逐字引用本轮原话作为 evidence；不要要求固定口令。',
+              '若用户已自然表达同意或拒绝，立即调用 respond_agent_permission；按语义判断，不要要求固定口令。',
               '若用户没有作出决定，只用一句自然的话继续确认。',
               '绝对不要代替用户同意，也不要声称权限已经生效。',
             ].join(' '),
@@ -444,28 +440,15 @@ export class ToolCallHandler {
   async respondAgentPermission(callId, turnId, args) {
     const authorizationId = String(args.authorization_id || '').trim()
     const decision = String(args.decision || '').trim()
-    const evidence = normalizedEvidence(args.evidence)
     const transcript = String(await this.transcripts.transcript(turnId)).trim()
     if (
       !authorizationId
       || !['always', 'reject'].includes(decision)
-      || !evidence
+      || !transcript
     ) {
       await this.sendOutput(
         callId,
         failure('invalid_permission_response', '没有找到有效的权限请求或决定。'),
-        turnId,
-      )
-      return
-    }
-    if (!normalizedEvidence(transcript).includes(evidence)) {
-      await this.sendOutput(
-        callId,
-        failure(
-          'permission_evidence_mismatch',
-          '权限决定没有对应到本轮用户原话，不能提交。',
-          { retryable: false },
-        ),
         turnId,
       )
       return
@@ -519,12 +502,12 @@ export class ToolCallHandler {
             ? [
                 '权限已经成功生效。',
                 '只用一句简短自然口语确认“已允许，后台继续执行”。',
-                '不要重述操作，不要再次询问，不要调用工具。',
+                '不要重述操作，不要再次询问或调用工具。',
               ].join(' ')
             : [
                 '权限已经成功拒绝。',
                 '只用一句简短自然口语确认“已拒绝，后台不会执行这项操作”。',
-                '不要重述操作，不要再次询问，不要调用工具。',
+                '不要重述操作，不要再次询问或调用工具。',
               ].join(' '),
         },
       })
