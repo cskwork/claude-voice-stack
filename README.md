@@ -23,7 +23,13 @@ Agent 也应该始终在场。
 
 “已经好了。”
 
-## 核心特色
+## 对话继续，任务也在继续
+
+这段真实演示里，对话没有因为后台任务而停下；任务完成后，结果会自然回到当前对话：
+
+https://github.com/user-attachments/assets/42022655-36d1-46b2-9c26-ff0765284000
+
+### 核心特色
 
 - 全双工实时语音交互、自然打断和持续多轮对话
 - 一键连接你喜欢的各种 Agent，使用已有的模型、工具、MCP、Skill
@@ -32,11 +38,7 @@ Agent 也应该始终在场。
 - 支持 WebUI、终端 TUI 和 macOS 桌面悬浮球
 - 支持本地用户档案与跨会话个人记忆
 
-## 对话继续，任务也在继续
-
-这段真实演示里，对话没有因为后台任务而停下；任务完成后，结果会自然回到当前对话：
-
-https://github.com/user-attachments/assets/42022655-36d1-46b2-9c26-ff0765284000
+## 参考架构
 
 ![qwen-audio-agent 原理图](docs/architecture-overview.png)
 
