@@ -29,9 +29,8 @@ task is complete, naturally tells you:
 
 ## Keep Talking While Tasks Keep Running
 
-In this real-world demo, conversation continues while the Agent works in the
-background. When the task is done, the result returns naturally to the
-conversation:
+Conversation continues while the Agent works in the background. When the task
+is done, the result returns naturally to the conversation:
 
 https://github.com/user-attachments/assets/42022655-36d1-46b2-9c26-ff0765284000
 

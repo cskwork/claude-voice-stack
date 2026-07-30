@@ -1,8 +1,10 @@
 import { spawn } from 'node:child_process'
 import { createConnection, createServer } from 'node:net'
 import { resolve } from 'node:path'
-import { normalizeBackendProtocol } from '../../../shared/backend-catalog.mjs'
-import { backendRuntimeDriver } from './backend-drivers/registry.mjs'
+import {
+  backendRuntimeDriver,
+  normalizeBackendRuntimeProtocol,
+} from './backend-drivers/registry.mjs'
 
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1', '[::1]'])
 
@@ -17,7 +19,7 @@ function permissionMode(env) {
 }
 
 export function resolveManagedBackend(env = process.env) {
-  const protocol = normalizeBackendProtocol(env.AGENT_PROTOCOL)
+  const protocol = normalizeBackendRuntimeProtocol(env.AGENT_PROTOCOL)
   if (!protocol) return null
   const driver = backendRuntimeDriver(protocol)
   const resolvedPermissionMode = permissionMode(env)
