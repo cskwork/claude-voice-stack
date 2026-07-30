@@ -103,6 +103,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ needs.plan.outputs.tag }}
+          RELEASE_MANUAL: ${{ needs.plan.outputs.manual }}
         run: |
           set -eu
           if EXISTING=$(
@@ -113,8 +114,12 @@ jobs:
               "refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}"
             RESOLVED=$(git rev-list -n 1 "$RELEASE_TAG")
             if [ "$RESOLVED" != "$GITHUB_SHA" ]; then
-              echo "${RELEASE_TAG} already points to ${RESOLVED}, not ${GITHUB_SHA}." >&2
-              exit 1
+              if [ "$RELEASE_MANUAL" = "true" ]; then
+                echo "Recovering the existing ${RELEASE_TAG} at ${RESOLVED}."
+              else
+                echo "${RELEASE_TAG} already points to ${RESOLVED}, not ${GITHUB_SHA}." >&2
+                exit 1
+              fi
             fi
           else
             gh api \
@@ -133,6 +138,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
+          ref: ${{ needs.plan.outputs.tag }}
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
@@ -164,6 +170,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
+          ref: ${{ needs.plan.outputs.tag }}
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
