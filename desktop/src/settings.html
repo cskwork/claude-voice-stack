@@ -13,15 +13,14 @@
   <body>
     <main>
       <header>
-        <div class="earth" aria-hidden="true">◉</div>
-        <div>
-          <h1>设置</h1>
-          <p>桌面球只连接 Gateway，不管理服务进程。</p>
+        <div class="brand-mark" aria-hidden="true">
+          <span></span>
         </div>
+        <h1>设置</h1>
       </header>
 
       <section class="runtime-status" aria-labelledby="runtime-status-title">
-        <h2 id="runtime-status-title">当前运行</h2>
+        <h2 id="runtime-status-title">运行状态</h2>
         <dl>
           <div>
             <dt>Gateway</dt>
@@ -39,28 +38,79 @@
       </section>
 
       <form id="settings-form">
-        <section>
-          <h2>连接</h2>
-          <label>
-            <span>Gateway 地址</span>
-            <input id="gateway-url" type="url" spellcheck="false" required />
-          </label>
-        </section>
+        <section class="settings-card">
+          <div class="setting-row api-key-row">
+            <label for="dashscope-api-key">API Key</label>
+            <div class="field-with-action">
+              <input
+                id="dashscope-api-key"
+                type="password"
+                autocomplete="off"
+                spellcheck="false"
+                placeholder="sk-…"
+              />
+              <button id="get-api-key" class="link-button" type="button">
+                获取 API Key
+                <span aria-hidden="true">↗</span>
+              </button>
+            </div>
+          </div>
 
-        <section>
-          <h2>外观</h2>
-          <label>
-            <span>球形样式</span>
+          <div class="setting-row">
+            <label for="realtime-model">前台模型</label>
+            <select id="realtime-model">
+              <option value="qwen-audio-3.0-realtime-plus">
+                qwen-audio-3.0-realtime-plus
+              </option>
+              <option value="qwen-audio-3.0-realtime-flash">
+                qwen-audio-3.0-realtime-flash
+              </option>
+            </select>
+          </div>
+
+          <div class="setting-row">
+            <label for="agent-protocol">后台 Agent</label>
+            <select id="agent-protocol">
+              <option value="none">不使用后台 Agent</option>
+              <option value="opencode">OpenCode</option>
+              <option value="openclaw">OpenClaw</option>
+              <option value="qoder">Qoder</option>
+              <option value="hermes">Hermes</option>
+              <option value="codebuddy">CodeBuddy</option>
+              <option value="codex">Codex</option>
+              <option value="claude">Claude Code</option>
+              <option value="acp">通用 ACP Agent</option>
+            </select>
+          </div>
+
+          <div class="setting-row">
+            <label for="backend-model">后台模型</label>
+            <input
+              id="backend-model"
+              type="text"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="留空使用默认模型"
+            />
+          </div>
+
+          <div class="setting-row">
+            <label for="gateway-url">Gateway</label>
+            <input id="gateway-url" type="url" spellcheck="false" required />
+          </div>
+
+          <div class="setting-row">
+            <label for="orb-style">外观</label>
             <select id="orb-style">
               <option value="fluid">流光声波球</option>
               <option value="goo">液态渐变球</option>
             </select>
-          </label>
+          </div>
         </section>
 
-        <p id="message" role="status"></p>
         <footer>
-          <button type="submit" disabled>应用</button>
+          <p id="message" role="status"></p>
+          <button class="apply-button" type="submit" disabled>应用</button>
         </footer>
       </form>
     </main>

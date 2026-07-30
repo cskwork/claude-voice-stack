@@ -229,6 +229,7 @@ app.use(express.static(webDist))
 app.get('*', (req, res) => res.sendFile(resolve(webDist, 'index.html')))
 
 const server = createServer(app)
+export { server }
 realtimeGateway = attachRealtimeGateway(server, {
   identityManager,
   memoryStore: frontendMemory,
@@ -243,5 +244,14 @@ realtimeGateway = attachRealtimeGateway(server, {
   permissionPolicy,
 })
 server.listen(config.port, config.host, () => {
-  console.log(`qwen-audio-agent running at http://${config.host}:${config.port}`)
+  const address = server.address()
+  const port = address && typeof address === 'object' ? address.port : config.port
+  const origin = `http://${config.host}:${port}`
+  if (process.parentPort) {
+    process.parentPort.postMessage({
+      type: 'qwen-audio-agent:gateway-ready',
+      origin,
+    })
+  }
+  console.log(`qwen-audio-agent running at ${origin}`)
 })

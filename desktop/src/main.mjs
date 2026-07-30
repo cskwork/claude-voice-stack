@@ -8,14 +8,20 @@ import {
 } from 'electron'
 import {
   chmodSync,
+  existsSync,
   readFileSync,
   writeFileSync,
 } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { loadRuntimeEnvironment } from '../../shared/runtime-environment.mjs'
+import { parseEnv } from 'node:util'
+import {
+  loadRuntimeEnvironment,
+  userConfigDirectory,
+} from '../../shared/runtime-environment.mjs'
 import {
   desktopOrbUrl,
+  isLoopbackUrl,
   isSafeExternalUrl,
   isSameOrigin,
   validateAppUrl,
@@ -23,6 +29,10 @@ import {
 import {
   readGatewayHealth,
 } from '../../shared/gateway-client.mjs'
+import {
+  desktopGatewayEnvironment,
+  EmbeddedGateway,
+} from './gateway-process.mjs'
 import {
   parseSettings,
   updateSettingsContent,
@@ -32,18 +42,36 @@ import {
 } from './renderer-server.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
-const root = resolve(here, '../..')
+const sourceRoot = resolve(here, '../..')
+const runtimeRoot = app.isPackaged
+  ? resolve(process.resourcesPath, 'runtime')
+  : sourceRoot
+const expectedConfigPath = resolve(
+  userConfigDirectory(process.env),
+  'config.env',
+)
+const configExistedAtLaunch = existsSync(expectedConfigPath)
 const runtimeEnvironment = loadRuntimeEnvironment({
-  root,
+  root: runtimeRoot,
   prepareBackendRuntime: false,
   generateSecret: false,
 })
 const fallbackPage = resolve(here, 'orb-unavailable.html')
 const fallbackUrl = pathToFileURL(fallbackPage).href
 const settingsPage = resolve(here, 'settings.html')
-const webRoot = resolve(root, 'web/dist')
-let appOrigin = validateAppUrl(
-  process.env.QWEN_AUDIO_AGENT_URL || 'http://127.0.0.1:3101',
+const webRoot = resolve(sourceRoot, 'web/dist')
+const initialSettings = parseSettings(
+  readFileSync(runtimeEnvironment.configPath, 'utf8'),
+  process.env,
+)
+let configuredGatewayOrigin = validateAppUrl(initialSettings.gatewayUrl)
+let appOrigin = configuredGatewayOrigin
+let setupRequired = (
+  !configExistedAtLaunch
+  || (
+    isLoopbackUrl(configuredGatewayOrigin)
+    && !initialSettings.dashscopeApiKey
+  )
 )
 const preloadPath = resolve(here, 'preload.cjs')
 
@@ -52,6 +80,102 @@ let settingsWindow = null
 let rendererServer = null
 let dragState = null
 let reconnectTimer = null
+let embeddedGateway = null
+let gatewayCrashCount = 0
+let lastRuntimeError = ''
+
+const MAX_GATEWAY_CRASH_RESTARTS = 3
+
+function configuredOrigin() {
+  const settings = parseSettings(
+    readFileSync(runtimeEnvironment.configPath, 'utf8'),
+    process.env,
+  )
+  return {
+    origin: validateAppUrl(settings.gatewayUrl),
+    settings,
+  }
+}
+
+function configuredGatewayEnvironment() {
+  const configured = parseEnv(
+    readFileSync(runtimeEnvironment.configPath, 'utf8'),
+  )
+  return desktopGatewayEnvironment({
+    env: process.env,
+    configured,
+    runtimeRoot,
+    sourceRoot,
+  })
+}
+
+function gatewayPort(origin) {
+  const port = Number(new URL(origin).port)
+  return Number.isInteger(port) && port > 0 ? port : 3101
+}
+
+// The desktop always owns its loopback Gateway. If the configured port is
+// already occupied, EmbeddedGateway selects another loopback port instead of
+// adopting a process that the desktop cannot safely manage.
+async function startLocalGateway(origin) {
+  if (!isLoopbackUrl(origin)) return origin
+  if (!embeddedGateway) {
+    embeddedGateway = new EmbeddedGateway({
+      preferredPort: gatewayPort(origin),
+      envFactory: configuredGatewayEnvironment,
+    })
+    embeddedGateway.onUnexpectedExit = () => {
+      lastRuntimeError = '内置 Gateway 意外退出'
+      if (gatewayCrashCount >= MAX_GATEWAY_CRASH_RESTARTS) return
+      gatewayCrashCount += 1
+      const gateway = embeddedGateway
+      setTimeout(() => {
+        if (embeddedGateway !== gateway || gateway.running) return
+        gateway.start().then(restarted => {
+          lastRuntimeError = ''
+          appOrigin = restarted
+          process.env.QWEN_AUDIO_AGENT_URL = restarted
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            void loadQwenAudioAgent(mainWindow)
+          }
+        }).catch(error => {
+          lastRuntimeError = error?.message || String(error)
+          console.error('Failed to restart embedded gateway:', error)
+        })
+      }, 1000)
+    }
+  }
+  const started = await embeddedGateway.start({
+    preferredPort: gatewayPort(origin),
+  })
+  gatewayCrashCount = 0
+  return started
+}
+
+async function ensureDesktopUi() {
+  if (!rendererServer) {
+    rendererServer = await startDesktopRendererServer({
+      webRoot,
+      target: () => appOrigin,
+    })
+  }
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    mainWindow = createWindow()
+  }
+}
+
+async function startConfiguredRuntime(settings = configuredOrigin().settings) {
+  configuredGatewayOrigin = validateAppUrl(settings.gatewayUrl)
+  appOrigin = isLoopbackUrl(configuredGatewayOrigin)
+    ? await startLocalGateway(configuredGatewayOrigin)
+    : configuredGatewayOrigin
+  process.env.QWEN_AUDIO_AGENT_URL = appOrigin
+  process.env.QWEN_AUDIO_ORB_STYLE = settings.orbStyle
+  await ensureDesktopUi()
+  lastRuntimeError = ''
+  return appOrigin
+}
+
 async function runtimeStatus(target = appOrigin) {
   const health = await readGatewayHealth(target)
   return {
@@ -66,6 +190,7 @@ async function runtimeStatus(target = appOrigin) {
           baseUrl: health.backend.baseUrl || null,
           model: health.backend.model || null,
           connected: health.backend.ok === true,
+          error: health.backend.error || null,
         }
       : null,
   }
@@ -203,9 +328,9 @@ function createWindow() {
 function createSettingsWindow() {
   const window = new BrowserWindow({
     width: 540,
-    height: 610,
+    height: 730,
     minWidth: 460,
-    minHeight: 540,
+    minHeight: 640,
     title: '设置',
     backgroundColor: '#f5f6f7',
     autoHideMenuBar: true,
@@ -277,6 +402,22 @@ ipcMain.on('qwen-audio-agent:open-settings', event => {
   if (mainWindow && event.sender === mainWindow.webContents) showSettings()
 })
 
+const ALLOWED_EXTERNAL_HOSTS = new Set(['bailian.console.aliyun.com'])
+
+ipcMain.on('qwen-audio-agent:open-external', (event, value) => {
+  if (!settingsWindow || event.sender !== settingsWindow.webContents) return
+  let target
+  try {
+    target = new URL(String(value))
+  } catch {
+    return
+  }
+  if (target.protocol !== 'https:' || !ALLOWED_EXTERNAL_HOSTS.has(target.hostname)) {
+    return
+  }
+  void shell.openExternal(target.href)
+})
+
 ipcMain.handle('qwen-audio-agent:settings-load', async event => {
   if (!settingsWindow || event.sender !== settingsWindow.webContents) {
     throw new Error('无权读取设置')
@@ -287,9 +428,26 @@ ipcMain.handle('qwen-audio-agent:settings-load', async event => {
   )
   return {
     settings,
-    runtime: await runtimeStatus(),
+    runtime: setupRequired
+      ? {
+          gatewayConnected: false,
+          realtimeProvider: null,
+          realtimeModel: null,
+          voiceConfigured: false,
+          backend: null,
+        }
+      : await runtimeStatus(),
+    setupRequired,
+    runtimeError: lastRuntimeError || null,
     restartRequired: false,
   }
+})
+
+ipcMain.handle('qwen-audio-agent:settings-runtime-status', async event => {
+  if (!settingsWindow || event.sender !== settingsWindow.webContents) {
+    throw new Error('无权读取运行状态')
+  }
+  return runtimeStatus()
 })
 
 ipcMain.handle('qwen-audio-agent:settings-save', async (event, settings) => {
@@ -301,28 +459,71 @@ ipcMain.handle('qwen-audio-agent:settings-save', async (event, settings) => {
   const content = updateSettingsContent(current, settings)
   const normalized = parseSettings(content)
   const nextOrigin = validateAppUrl(normalized.gatewayUrl)
-  const nextRuntime = await runtimeStatus(nextOrigin)
-  if (!nextRuntime.gatewayConnected) {
-    throw new Error(`无法连接 Gateway：${nextOrigin}`)
+  const remote = !isLoopbackUrl(nextOrigin)
+  if (!remote && !normalized.dashscopeApiKey) {
+    throw new Error('请先填写 DashScope API Key')
+  }
+  if (remote) {
+    const remoteRuntime = await runtimeStatus(nextOrigin)
+    if (!remoteRuntime.gatewayConnected) {
+      throw new Error(`无法连接 Gateway：${nextOrigin}`)
+    }
   }
   writeFileSync(runtimeEnvironment.configPath, content, {
     encoding: 'utf8',
     mode: 0o600,
   })
   chmodSync(runtimeEnvironment.configPath, 0o600)
-  const gatewayChanged = nextOrigin !== appOrigin
+  const gatewayChanged = nextOrigin !== configuredGatewayOrigin
+  const apiKeyChanged = previous.dashscopeApiKey !== normalized.dashscopeApiKey
+  const backendChanged = previous.agentProtocol !== normalized.agentProtocol
+  const realtimeModelChanged = previous.realtimeModel !== normalized.realtimeModel
+  const backendModelChanged = previous.backendModel !== normalized.backendModel
   const orbStyleChanged = previous.orbStyle !== normalized.orbStyle
-  appOrigin = nextOrigin
-  process.env.QWEN_AUDIO_AGENT_URL = nextOrigin
+  let restarted = false
+  configuredGatewayOrigin = nextOrigin
+  if (remote) {
+    if (embeddedGateway) {
+      await embeddedGateway.stop()
+      embeddedGateway = null
+    }
+    appOrigin = nextOrigin
+  } else if (
+    embeddedGateway?.running
+    && (
+      gatewayChanged
+      || apiKeyChanged
+      || backendChanged
+      || realtimeModelChanged
+      || backendModelChanged
+    )
+  ) {
+    appOrigin = await embeddedGateway.restart({
+      preferredPort: gatewayPort(nextOrigin),
+    })
+    restarted = true
+  } else if (!embeddedGateway?.running) {
+    appOrigin = await startLocalGateway(nextOrigin)
+    restarted = true
+  }
+  setupRequired = false
+  lastRuntimeError = ''
+  process.env.QWEN_AUDIO_AGENT_URL = appOrigin
   process.env.QWEN_AUDIO_ORB_STYLE = normalized.orbStyle
-  if ((gatewayChanged || orbStyleChanged) && mainWindow && !mainWindow.isDestroyed()) {
+  await ensureDesktopUi()
+  const runtime = await runtimeStatus(appOrigin)
+  if (
+    (restarted || gatewayChanged || orbStyleChanged)
+    && mainWindow
+    && !mainWindow.isDestroyed()
+  ) {
     void loadQwenAudioAgent(mainWindow)
   }
   return {
     settings: normalized,
-    restarted: false,
+    restarted,
     restartRequired: false,
-    runtime: nextRuntime,
+    runtime,
   }
 })
 
@@ -334,24 +535,38 @@ if (!app.requestSingleInstanceLock()) {
   app.quit()
 } else {
   app.on('second-instance', () => {
-    if (!mainWindow) return
+    if (setupRequired || !mainWindow) {
+      showSettings()
+      return
+    }
     if (mainWindow.isMinimized()) mainWindow.restore()
     mainWindow.focus()
   })
 
   app.whenReady().then(async () => {
-    rendererServer = await startDesktopRendererServer({
-      webRoot,
-      target: () => appOrigin,
-    })
     if (process.platform === 'darwin' && process.defaultApp) {
       app.setActivationPolicy('accessory')
       app.dock?.hide()
     }
-    mainWindow = createWindow()
+    if (setupRequired) {
+      showSettings()
+    } else {
+      try {
+        await startConfiguredRuntime(initialSettings)
+      } catch (error) {
+        lastRuntimeError = error?.message || String(error)
+        setupRequired = true
+        console.error('Failed to start configured desktop runtime:', error)
+        showSettings()
+      }
+    }
     app.on('activate', () => {
+      if (setupRequired) {
+        showSettings()
+        return
+      }
       if (!BrowserWindow.getAllWindows().length) {
-        mainWindow = createWindow()
+        void ensureDesktopUi()
       }
     })
   }).catch(error => {
@@ -368,5 +583,8 @@ if (!app.requestSingleInstanceLock()) {
   app.on('before-quit', () => {
     void rendererServer?.close()
     rendererServer = null
+    const gateway = embeddedGateway
+    embeddedGateway = null
+    void gateway?.stop()
   })
 }
