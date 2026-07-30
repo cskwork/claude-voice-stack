@@ -1,6 +1,6 @@
 import { createConnection } from 'node:net'
 import { execFileSync } from 'node:child_process'
-import { dirname, resolve } from 'node:path'
+import { dirname, posix, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { validateAppUrl } from './security.mjs'
 
@@ -46,8 +46,8 @@ export function desktopExecutablePath({
   }
   return uniquePath([
     ...loginPath,
-    env.HOME ? resolve(env.HOME, '.local/bin') : '',
-    env.HOME ? resolve(env.HOME, '.npm-global/bin') : '',
+    env.HOME ? posix.join(env.HOME, '.local/bin') : '',
+    env.HOME ? posix.join(env.HOME, '.npm-global/bin') : '',
     '/opt/homebrew/bin',
     '/usr/local/bin',
     ...configured,
