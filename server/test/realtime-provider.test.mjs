@@ -191,7 +191,7 @@ test('configures Qwen Audio Realtime with Smart Turn only', () => {
     session.tools.find(tool => (
       tool.function.name === 'respond_agent_permission'
     )).function.parameters.required,
-    ['authorization_id', 'decision', 'evidence'],
+    ['authorization_id', 'decision'],
   )
   assert.match(
     session.tools.find(tool => (
@@ -274,9 +274,10 @@ test('builds frontend identity, time, memory and reconnect context', () => {
   assert.match(prompt, /\[COMPLETE\]/)
   assert.doesNotMatch(prompt, /get_agent_tasks|reply_agent_permission/)
   assert.match(prompt, /respond_agent_permission/)
-  assert.match(prompt, /用户直接回答“可以”/)
-  assert.match(prompt, /不得再次要求用户复述“始终允许”/)
-  assert.match(prompt, /permission_decision_required/)
+  assert.match(prompt, /存在待确认权限时/)
+  assert.match(prompt, /不要求用户原话与某个短语逐字一致/)
+  assert.match(prompt, /判断明确后直接调用工具/)
+  assert.match(prompt, /不要先说“好”“收到”“正在授权”/)
   assert.match(prompt, /cancel_agent_task/)
   const memory = REALTIME_PROVIDERS.qwen
     .buildSession({ configured: false })
@@ -318,6 +319,16 @@ test('builds frontend identity, time, memory and reconnect context', () => {
   assert.match(prompt, /继续或修改已有工作/)
   assert.match(prompt, /get_agent_task_status/)
   assert.match(prompt, /不要因为推测自己缺少某种能力而拒绝/)
+  const permission = REALTIME_PROVIDERS.qwen.buildPermissionInjection({
+    id: 'permission-one',
+    summary: '查看系统内存',
+  })
+  assert.match(permission.response.instructions, /自然、简短地说明操作/)
+  assert.match(permission.response.instructions, /是否同意授权/)
+  assert.doesNotMatch(permission.response.instructions, /用一句完整的话/)
+  assert.match(permission.response.instructions, /不要提供或要求复述固定口令/)
+  assert.doesNotMatch(permission.response.instructions, /后续权限会自动允许/)
+  assert.doesNotMatch(permission.response.instructions, /必须明确告诉用户/)
 })
 
 test('refreshes live session instructions after frontend context changes', async () => {
