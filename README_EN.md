@@ -70,6 +70,7 @@ module walkthrough.
 
 | Backend Agent | Integration | Setup | Rating |
 | --- | --- | --- | --- |
+| None | N/A | Frontend-only, no setup required | ★★★★★ |
 | OpenCode | Native ACP | Automatic installation and Bailian setup supported | ★★★★★ |
 | OpenClaw | Built-in ACP Bridge | Automatic installation and Bailian setup supported | ★★★★★ |
 | Qoder | Native ACP | User installation and configuration required | ★★★★★ |
