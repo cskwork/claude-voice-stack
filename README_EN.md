@@ -9,23 +9,26 @@
 
 ## Agent Presence
 
-Real conversation should not leave you waiting after a single sentence.
-
-Nor should it grind to a halt just because the Agent is looking something up,
+Real conversation should not leave you waiting after a single sentence, nor
+should it grind to a halt just because the Agent is looking something up,
 calling a tool, or working on a task.
 
-Conversation should keep flowing.
-
-An Agent should always be present.
+Conversation should keep flowing, and the Agent should always be present.
 
 That is why we built **qwen-audio-agent**—a realtime voice runtime that keeps
-Agents talking, working, and present.
-
-Whether chatting with you, thinking through a problem, or working on a task,
-your Agent remains in the conversation. It listens, responds, and when the
-task is complete, naturally tells you:
+Agents talking, working, and present. Whether chatting with you, thinking
+through a problem, or working on a task, your Agent remains in the
+conversation. It listens, responds, and when the task is complete, naturally
+tells you:
 
 “It’s ready.”
+
+## News
+
+- **2026-07-30 · [v1.0.0](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.0.0)**
+  🚀 First stable release with a macOS desktop app and integrated Gateway.
+- **2026-07-28 · [v0.9.0](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v0.9.0)**
+  🌍 The project became open source with a unified ACP backend architecture.
 
 ## Keep Talking While Tasks Keep Running
 
