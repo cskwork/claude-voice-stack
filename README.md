@@ -23,10 +23,6 @@ Agent 也应该始终在场。
 
 “已经好了。”
 
-Demo 视频：
-
-https://github.com/user-attachments/assets/42022655-36d1-46b2-9c26-ff0765284000
-
 ## 核心特色
 
 - 全双工实时语音交互、自然打断和持续多轮对话
@@ -37,6 +33,10 @@ https://github.com/user-attachments/assets/42022655-36d1-46b2-9c26-ff0765284000
 - 支持本地用户档案与跨会话个人记忆
 
 ## 对话继续，任务也在继续
+
+这段真实演示里，对话没有因为后台任务而停下；任务完成后，结果会自然回到当前对话：
+
+https://github.com/user-attachments/assets/42022655-36d1-46b2-9c26-ff0765284000
 
 ![qwen-audio-agent 原理图](docs/architecture-overview.png)
 
@@ -132,10 +132,10 @@ qwenaudio config
 DASHSCOPE_API_KEY=your-key
 # 语音前台模型：qwen-audio-3.0-realtime-flash 或 qwen-audio-3.0-realtime-plus（默认）
 QWEN_AUDIO_REALTIME_MODEL=qwen-audio-3.0-realtime-plus
-# 可选；需要后台任务时取消注释
-# AGENT_PROTOCOL=openclaw
+# 后台Agent：可选，不设置或设置为 none 时，启动仅前台模式
+AGENT_PROTOCOL=openclaw
 # 后台模型：可为空，留空则沿用 Agent 自身的用户配置
-# QWEN_AUDIO_AGENT_BACKEND_MODEL=qwen3.7-max
+QWEN_AUDIO_AGENT_BACKEND_MODEL=qwen3.7-max
 ```
 
 3. 在一个终端中启动 Gateway：

@@ -27,10 +27,6 @@ task is complete, naturally tells you:
 
 “It’s ready.”
 
-Demo video:
-
-https://github.com/user-attachments/assets/42022655-36d1-46b2-9c26-ff0765284000
-
 ## Core Features
 
 - Full-duplex realtime voice interaction, natural interruption, and continuous
@@ -45,6 +41,12 @@ https://github.com/user-attachments/assets/42022655-36d1-46b2-9c26-ff0765284000
 - Local user profile and personal memory across sessions
 
 ## Keep Talking While Tasks Keep Running
+
+In this real-world demo, conversation continues while the Agent works in the
+background. When the task is done, the result returns naturally to the
+conversation:
+
+https://github.com/user-attachments/assets/42022655-36d1-46b2-9c26-ff0765284000
 
 ![qwen-audio-agent architecture](docs/architecture-overview-en.png)
 
