@@ -111,12 +111,13 @@ npm install -g git+https://github.com/QwenAudio/qwen-audio-agent.git
 
 ## 获取 DashScope API Key
 
-阿里云百炼为 Qwen Audio 3.0 Realtime 提供免费体验额度，创建 API Key 后即可免费开始使用 qwen-audio-agent。
+阿里云百炼为 Qwen Audio 3.0 Realtime 提供
+[新人免费额度](https://help.aliyun.com/zh/model-studio/new-free-quota)，创建 API Key 后
+即可免费开始使用 qwen-audio-agent。
 
-1. 登录阿里云；如果尚未开通，请先按提示开通阿里云百炼。
-2. 打开百炼控制台的 [API Key 页面](https://bailian.console.aliyun.com/?tab=model#/api-key)，
-   单击**创建 API Key**。
-3. 复制生成的 Key，稍后填入 `config.env`。请勿公开或提交 API Key。
+1. 打开百炼控制台的 [API Key 页面](https://bailian.console.aliyun.com/?tab=model#/api-key)，
+   登录账号，单击**创建 API Key**。
+2. 复制生成的 Key，稍后填入 `config.env`。请勿公开或提交 API Key。
 
 详细说明见[百炼官方文档](https://help.aliyun.com/zh/model-studio/get-api-key)。
 

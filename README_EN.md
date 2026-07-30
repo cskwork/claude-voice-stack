@@ -127,15 +127,14 @@ npm install -g git+https://github.com/QwenAudio/qwen-audio-agent.git
 
 ## Get a DashScope API Key
 
-Alibaba Cloud Model Studio offers free trial credits for Qwen Audio 3.0
-Realtime. Create an API Key to start using qwen-audio-agent for free.
+Alibaba Cloud Model Studio includes Qwen Audio 3.0 Realtime in its
+[free quota for new users](https://help.aliyun.com/en/model-studio/new-free-quota).
+Create an API Key to start using qwen-audio-agent for free.
 
-1. Sign in to Alibaba Cloud. If Model Studio is not yet activated, follow the
-   prompt to activate it.
-2. Open the Model Studio
-   [API Key page](https://bailian.console.aliyun.com/?tab=model#/api-key),
-   then click **Create API Key**.
-3. Copy the generated Key and add it to `config.env` later. Never publish or
+1. Open the Model Studio
+   [API Key page](https://bailian.console.aliyun.com/?tab=model#/api-key), sign
+   in, and click **Create API Key**.
+2. Copy the generated Key and add it to `config.env` later. Never publish or
    commit your API Key.
 
 See the [official API Key guide](https://help.aliyun.com/en/model-studio/get-api-key)
