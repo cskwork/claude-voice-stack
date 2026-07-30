@@ -156,8 +156,17 @@ test('force-stops a managed backend that ignores graceful shutdown', async () =>
   ])
 })
 
-test('requires an explicit backend selection', () => {
-  assert.throws(() => resolveManagedBackend({}), /必须指定后台 Agent/)
+test('runs without a managed process when no backend is selected', async () => {
+  assert.equal(resolveManagedBackend({}), null)
+  assert.equal(resolveManagedBackend({ AGENT_PROTOCOL: 'none' }), null)
+  const runtime = await startManagedBackend({
+    root: '/repo',
+    env: {},
+    spawnImpl: () => {
+      throw new Error('frontend-only mode must not spawn a backend')
+    },
+  })
+  assert.equal(runtime.ownsProcess, false)
 })
 
 test('normalizes the selected backend', () => {

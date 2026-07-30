@@ -309,20 +309,44 @@ export class ToolCallHandler {
     }
 
     let coordinatorReady = false
+    let coordinatorConfigured = true
     try {
-      coordinatorReady = await this.coordinatorAvailable()
+      const availability = await this.coordinatorAvailable()
+      if (availability && typeof availability === 'object') {
+        coordinatorConfigured = availability.enabled !== false
+        coordinatorReady = (
+          coordinatorConfigured && availability.ok === true
+        )
+      } else {
+        coordinatorReady = availability === true
+      }
     } catch {
       coordinatorReady = false
     }
     if (!coordinatorReady) {
+      const userMessage = coordinatorConfigured
+        ? '后台 Agent 当前未连接。你仍然可以继续普通聊天，后台恢复后再执行这项工作。'
+        : '当前未配置后台 Agent，无法执行需要后台处理的任务。你仍然可以继续普通聊天。'
       await this.sendOutput(
         callId,
         failure(
           'backend_unavailable',
-          '后台 Agent 当前未连接。可以继续语音交流，连接 OpenCode 或 OpenClaw 后再执行这项工作。',
-          { retryable: true },
+          userMessage,
+          { retryable: coordinatorConfigured },
         ),
         turnId,
+        null,
+        {
+          response: {
+            instructions: [
+              coordinatorConfigured
+                ? '直接向用户说明后台 Agent 当前未连接，暂时无法执行这项后台任务。'
+                : '直接向用户说明当前未配置后台 Agent，无法执行这项后台任务。',
+              '不要再次调用后台工具，也不要声称任务已经创建或正在执行。',
+              '可以继续完成不需要后台 Agent 的聊天和回答。',
+            ].join('\n'),
+          },
+        },
       )
       return
     }

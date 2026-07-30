@@ -2,12 +2,18 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { helpText, parseArguments } from '../src/arguments.mjs'
 
-test('requires an explicit backend for running the Gateway', () => {
-  assert.throws(() => parseArguments([], {}), /必须指定后台 Agent/)
-  assert.throws(
-    () => parseArguments(['gateway', 'run'], {}),
-    /必须指定后台 Agent/,
-  )
+test('allows the Gateway to run without a backend Agent', () => {
+  const frontendOnly = parseArguments([], {})
+  assert.equal(frontendOnly.command, 'gateway')
+  assert.equal(frontendOnly.gatewayAction, 'run')
+  assert.equal(frontendOnly.backend, '')
+  assert.equal(frontendOnly.backendUrl, '')
+  assert.equal(parseArguments([], {
+    QWEN_AUDIO_AGENT_BACKEND_PERMISSION_MODE: 'unused-invalid-value',
+  }).backend, '')
+  assert.equal(parseArguments(['gateway', '--backend', 'none'], {}).backend, '')
+  assert.equal(parseArguments([], { AGENT_PROTOCOL: 'NONE' }).backend, '')
+
   const options = parseArguments([], { AGENT_PROTOCOL: 'openclaw' })
   assert.equal(options.command, 'gateway')
   assert.equal(options.gatewayAction, 'run')

@@ -18,8 +18,13 @@ const drivers = new Map([
   genericAcpRuntimeDriver,
 ].map(driver => [driver.id, driver]))
 
-export function backendRuntimeDriver(protocol) {
+export function normalizeBackendRuntimeProtocol(protocol) {
   const id = String(protocol || '').trim().toLowerCase()
+  return id === 'none' ? '' : id
+}
+
+export function backendRuntimeDriver(protocol) {
+  const id = normalizeBackendRuntimeProtocol(protocol)
   const driver = drivers.get(id)
   if (!driver) throw new Error(`不支持的后台 Agent：${id}`)
   return driver

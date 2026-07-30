@@ -23,11 +23,13 @@ Agent 也应该始终在场。
 
 “已经好了。”
 
-Demo 视频：
+## 对话继续，任务也在继续
+
+对话不会因为后台任务而停下；任务完成后，结果会自然回到当前对话：
 
 https://github.com/user-attachments/assets/42022655-36d1-46b2-9c26-ff0765284000
 
-## 核心特色
+### 核心特色
 
 - 全双工实时语音交互、自然打断和持续多轮对话
 - 一键连接你喜欢的各种 Agent，使用已有的模型、工具、MCP、Skill
@@ -36,7 +38,7 @@ https://github.com/user-attachments/assets/42022655-36d1-46b2-9c26-ff0765284000
 - 支持 WebUI、终端 TUI 和 macOS 桌面悬浮球
 - 支持本地用户档案与跨会话个人记忆
 
-## 对话继续，任务也在继续
+## 参考架构
 
 ![qwen-audio-agent 原理图](docs/architecture-overview.png)
 
@@ -125,14 +127,14 @@ npm install -g git+https://github.com/QwenAudio/qwen-audio-agent.git
 qwenaudio config
 ```
 
-2. 打开命令显示的 `config.env`，填写 DashScope API Key，并选择 OpenClaw
-   或其他后台 Agent：
+2. 打开命令显示的 `config.env`，填写 DashScope API Key。需要执行后台任务时，
+   再选择 OpenClaw 或其他后台 Agent：
 
 ```dotenv
 DASHSCOPE_API_KEY=your-key
 # 语音前台模型：qwen-audio-3.0-realtime-flash 或 qwen-audio-3.0-realtime-plus（默认）
 QWEN_AUDIO_REALTIME_MODEL=qwen-audio-3.0-realtime-plus
-# 后台 Agent
+# 后台Agent：可选，不设置或设置为 none 时，启动仅前台模式
 AGENT_PROTOCOL=openclaw
 # 后台模型：可为空，留空则沿用 Agent 自身的用户配置
 QWEN_AUDIO_AGENT_BACKEND_MODEL=qwen3.7-max
@@ -211,12 +213,17 @@ qwenaudio gateway uninstall
 
 ## 选择后台 Agent
 
-通过 `AGENT_PROTOCOL` 环境变量或 `--backend` 参数选择后台 Agent。OpenCode 和 OpenClaw
-支持自动下载安装；配置 `DASHSCOPE_API_KEY` 和 `QWEN_AUDIO_AGENT_BACKEND_MODEL`
-后即可自动接入百炼模型。未指定后台模型且用户已经安装并配置对应 Agent 时，则
-完整复用用户环境。
+`AGENT_PROTOCOL` 是可选配置。留空时，Gateway 以仅前台模式运行，实时语音聊天
+保持可用；如果请求需要后台执行，前台会明确说明当前没有可用的后台 Agent。
+也可以在命令行中使用 `qwenaudio --backend none`，明确要求仅启动前台模式。
+
+通过 `AGENT_PROTOCOL` 环境变量或 `--backend` 参数选择后台 Agent。选择后，
+OpenCode 和 OpenClaw 支持自动下载安装；配置
+`DASHSCOPE_API_KEY` 和 `QWEN_AUDIO_AGENT_BACKEND_MODEL` 后即可自动接入百炼
+模型。未指定后台模型且用户已经安装并配置对应 Agent 时，则完整复用用户环境。
 
 查看当前可用的后台 Agent：
+
 ```bash
 qwenaudio setup
 ```

@@ -27,11 +27,14 @@ task is complete, naturally tells you:
 
 “It’s ready.”
 
-Demo video:
+## Keep Talking While Tasks Keep Running
+
+Conversation continues while the Agent works in the background. When the task
+is done, the result returns naturally to the conversation:
 
 https://github.com/user-attachments/assets/42022655-36d1-46b2-9c26-ff0765284000
 
-## Core Features
+### Core Features
 
 - Full-duplex realtime voice interaction, natural interruption, and continuous
   multi-turn conversation
@@ -44,7 +47,7 @@ https://github.com/user-attachments/assets/42022655-36d1-46b2-9c26-ff0765284000
 - WebUI, terminal TUI, and a macOS desktop orb
 - Local user profile and personal memory across sessions
 
-## Keep Talking While Tasks Keep Running
+## Reference Architecture
 
 ![qwen-audio-agent architecture](docs/architecture-overview-en.png)
 
@@ -145,17 +148,17 @@ for details.
 qwenaudio config
 ```
 
-2. Open the displayed `config.env` file, add your DashScope API Key, and select
-   OpenClaw or another backend Agent:
+2. Open the displayed `config.env` file and add your DashScope API Key. Select
+   OpenClaw or another backend Agent only when you need background tasks:
 
 ```dotenv
 DASHSCOPE_API_KEY=your-key
 # Voice model: qwen-audio-3.0-realtime-flash or qwen-audio-3.0-realtime-plus (default)
 QWEN_AUDIO_REALTIME_MODEL=qwen-audio-3.0-realtime-plus
-# Backend Agent
-AGENT_PROTOCOL=openclaw
+# Optional; uncomment when background tasks are needed
+# AGENT_PROTOCOL=openclaw
 # Backend model: can be left empty; the Agent uses its own user configuration
-QWEN_AUDIO_AGENT_BACKEND_MODEL=qwen3.7-max
+# QWEN_AUDIO_AGENT_BACKEND_MODEL=qwen3.7-max
 ```
 
 3. Start the Gateway in one terminal:
@@ -236,12 +239,19 @@ qwenaudio gateway uninstall
 
 ## Choose a Backend Agent
 
-Select the backend Agent with `AGENT_PROTOCOL` (required, no default value).
-OpenCode and OpenClaw can be downloaded automatically. Configure
-`DASHSCOPE_API_KEY` and `QWEN_AUDIO_AGENT_BACKEND_MODEL` to connect them to a
-Bailian model automatically. When no backend model is specified and the Agent
-is already installed and configured, qwen-audio-agent fully reuses the user's
-existing environment.
+`AGENT_PROTOCOL` is optional. When it is empty, the Gateway runs in
+frontend-only mode and realtime voice chat remains available. If a request
+requires background execution, the frontend clearly explains that no backend
+Agent is available. You can also run `qwenaudio --backend none` to explicitly
+start in frontend-only mode.
+
+Select the backend Agent with `AGENT_PROTOCOL` or `--backend`. After selecting
+one, OpenCode and OpenClaw can be downloaded automatically. Configure
+`DASHSCOPE_API_KEY` and
+`QWEN_AUDIO_AGENT_BACKEND_MODEL` to connect them to a Bailian model
+automatically. When no backend model is specified and the Agent is already
+installed and configured, qwen-audio-agent fully reuses the user's existing
+environment.
 
 Check which backends are available:
 

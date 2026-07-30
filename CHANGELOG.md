@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.12.0
+
+- 新增仅前台 Gateway 模式：后台 Agent 配置改为可选，未配置
+  `AGENT_PROTOCOL` 或显式使用 `--backend none` 时仍可正常进行实时语音对话；
+  需要后台执行的请求会明确说明当前没有可用的后台 Agent。
+- 调整中英文 README 的开篇结构，将演示视频、核心特色和参考架构按实际体验到
+  技术实现的顺序重新组织。
+
 ## 0.11.0
 
 - 统一后台 Setup：OpenCode 和 OpenClaw 优先使用用户安装，并提供固定 npm 包

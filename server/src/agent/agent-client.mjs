@@ -187,17 +187,14 @@ export class AgentClient {
   }
 }
 
-// The shared client is created lazily so that importing this module never
-// fails in environments without AGENT_PROTOCOL, such as unit tests. The
-// Gateway itself fails fast in resolveManagedBackend before this point.
 let sharedAgent = null
 
 function requireAgent() {
   if (!sharedAgent) {
     if (!config.agentProtocol) {
-      throw new Error(
-        '必须指定后台 Agent：请在 config.env 中设置 AGENT_PROTOCOL',
-      )
+      throw new AgentError('当前未配置后台 Agent', {
+        protocol: '',
+      })
     }
     sharedAgent = new AgentClient()
   }
@@ -205,14 +202,34 @@ function requireAgent() {
 }
 
 export const agent = {
+  get enabled() {
+    return Boolean(config.agentProtocol)
+  },
   get protocol() {
-    return requireAgent().protocol
+    return config.agentProtocol || null
   },
   get label() {
-    return requireAgent().label
+    return config.agentProtocol ? requireAgent().label : '仅前台聊天'
   },
-  describe: () => requireAgent().describe(),
-  health: () => requireAgent().health(),
+  describe: () => config.agentProtocol
+    ? requireAgent().describe()
+    : {
+        enabled: false,
+        protocol: null,
+        kind: null,
+        label: '仅前台聊天',
+        status: 'not_configured',
+        capabilities: {
+          backendUi: false,
+        },
+      },
+  health: () => config.agentProtocol
+    ? requireAgent().health()
+    : Promise.resolve({
+        enabled: false,
+        ok: true,
+        status: 'not_configured',
+      }),
   runCoordinator: (message, options = {}) =>
     requireAgent().runCoordinator(message, options),
   respondPermission: (id, decision, options = {}) =>
@@ -221,8 +238,9 @@ export const agent = {
     requireAgent().cancelDelegatedWork(workId, options),
   queryDelegatedWork: (workId, question, options = {}) =>
     requireAgent().queryDelegatedWork(workId, question, options),
-  canRecoverDelegatedWork: task =>
-    requireAgent().canRecoverDelegatedWork(task),
+  canRecoverDelegatedWork: task => config.agentProtocol
+    ? requireAgent().canRecoverDelegatedWork(task)
+    : false,
   recoverDelegatedWork: (task, options = {}) =>
     requireAgent().recoverDelegatedWork(task, options),
   uiUrl: (options = {}) => requireAgent().uiUrl(options),

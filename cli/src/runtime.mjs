@@ -3,6 +3,7 @@ import { resolve } from 'node:path'
 import {
   backendDefinition,
   backendNames,
+  normalizeBackendProtocol,
 } from '../../shared/backend-catalog.mjs'
 import {
   loadRuntimeEnvironment,
@@ -27,13 +28,19 @@ function normalizedOrigin(value) {
 }
 
 export function resolveBackend(options = {}, env = process.env) {
-  const protocol = String(
-    options.backend || env.AGENT_PROTOCOL || '',
-  ).toLowerCase()
-  if (!protocol) throw new Error(
-    '必须指定后台 Agent：在 config.env 设置 AGENT_PROTOCOL，'
-    + `或使用 --backend（可选 ${backendNames().join('、')}）`,
+  const protocol = normalizeBackendProtocol(
+    options.backend || env.AGENT_PROTOCOL,
   )
+  if (!protocol) {
+    return {
+      enabled: false,
+      protocol: null,
+      ownership: null,
+      permissionMode: null,
+      agentId: '',
+      baseUrl: null,
+    }
+  }
   const definition = backendDefinition(protocol)
   if (!definition) throw new Error(
     `不支持的后台 Agent：${protocol}（可选 ${backendNames().join('、')}）`,
@@ -70,6 +77,15 @@ export function resolveBackend(options = {}, env = process.env) {
 }
 
 export function assertGatewayCompatibility(health, backend) {
+  const actualEnabled = health?.backend?.enabled !== false
+  if (!backend.protocol) {
+    if (!actualEnabled) return
+    const actualProtocol = health?.backend?.kind || health?.backend?.protocol
+    throw new Error(
+      `现有 Gateway 使用 ${actualProtocol || '后台 Agent'}，`
+      + '与当前仅前台聊天配置不一致',
+    )
+  }
   const actualProtocol = health?.backend?.kind || health?.backend?.protocol
   const actualBaseUrl = health?.backend?.baseUrl
   const actualOwnership = health?.backend?.ownership
@@ -169,6 +185,17 @@ function waitForReadiness(child, readiness, label) {
 }
 
 function backendEnvironment(env, backend) {
+  if (!backend.protocol) {
+    const next = {
+      ...env,
+      // An empty value is an intentional override. Deleting it would let the
+      // child Gateway reload AGENT_PROTOCOL from config.env.
+      AGENT_PROTOCOL: '',
+    }
+    delete next.QWEN_AUDIO_AGENT_BACKEND_PERMISSION_MODE
+    delete next.QWEN_AUDIO_AGENT_BACKEND_AGENT
+    return next
+  }
   const definition = backendDefinition(backend.protocol)
   const next = {
     ...env,
@@ -285,8 +312,9 @@ export async function ensureRuntime(options, {
   const runtime = new ManagedRuntime([], { platform })
   const local = isLocalGateway(options.url)
   const backend = resolveBackend(options, env)
-  const backendLabel = backendDefinition(backend.protocol)?.label
-    || backend.protocol
+  const backendLabel = backend.protocol
+    ? backendDefinition(backend.protocol)?.label || backend.protocol
+    : '后台 Agent'
   let health = await readGatewayHealth(options.url, fetchImpl)
   const existingGateway = Boolean(health)
 
@@ -312,7 +340,9 @@ export async function ensureRuntime(options, {
         gateway,
         waitForGateway(options.url, {
           fetchImpl,
-          requireBackend: options.waitForBackend !== false,
+          requireBackend: Boolean(
+            backend.protocol && options.waitForBackend !== false
+          ),
         }),
         'Gateway',
       )
@@ -323,11 +353,17 @@ export async function ensureRuntime(options, {
     if (existingGateway || backend.ownership === 'external') {
       assertGatewayCompatibility(health, backend)
     } else {
-      const actualProtocol = health?.backend?.kind || health?.backend?.protocol
-      if (actualProtocol !== backend.protocol) {
+      const actualProtocol = (
+        health?.backend?.kind || health?.backend?.protocol || null
+      )
+      const actualEnabled = health?.backend?.enabled !== false
+      if (
+        actualProtocol !== backend.protocol
+        || actualEnabled !== Boolean(backend.protocol)
+      ) {
         throw new Error(
-          `Gateway 启动了 ${actualProtocol || '未知'} 后台，`
-          + `与当前配置 ${backend.protocol} 不一致`,
+          `Gateway 启动了 ${actualProtocol || '仅前台聊天模式'}，`
+          + `与当前配置 ${backend.protocol || '仅前台聊天模式'} 不一致`,
         )
       }
     }
@@ -340,7 +376,11 @@ export async function ensureRuntime(options, {
       )
     }
 
-    if (health.backend?.ok !== true && options.waitForBackend !== false) {
+    if (
+      backend.protocol
+      && health.backend?.ok !== true
+      && options.waitForBackend !== false
+    ) {
       throw new Error(
         backend.ownership === 'external'
           ? `未连接到已有 ${backendLabel} 后台服务，请先启动并检查 ${backend.baseUrl}`

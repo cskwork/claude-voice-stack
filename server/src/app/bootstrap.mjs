@@ -233,7 +233,10 @@ realtimeGateway = attachRealtimeGateway(server, {
   identityManager,
   memoryStore: frontendMemory,
   coordinator,
-  coordinatorAvailable: async () => (await agent.health()).ok === true,
+  coordinatorAvailable: async () => ({
+    enabled: agent.enabled,
+    ok: agent.enabled && (await agent.health()).ok === true,
+  }),
   respondPermission: (id, decision, options) => (
     agent.respondPermission(id, decision, options)
   ),
