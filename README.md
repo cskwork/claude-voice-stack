@@ -125,33 +125,22 @@ qwenaudio config
    或其他后台 Agent：
 
 ```dotenv
-AGENT_PROTOCOL=openclaw
 DASHSCOPE_API_KEY=your-key
+# 语音前台模型：qwen-audio-3.0-realtime-flash 或 qwen-audio-3.0-realtime-plus（默认）
 QWEN_AUDIO_REALTIME_MODEL=qwen-audio-3.0-realtime-plus
+# 后台 Agent
+AGENT_PROTOCOL=openclaw
+# 后台模型：可为空，留空则沿用 Agent 自身的用户配置
 QWEN_AUDIO_AGENT_BACKEND_MODEL=qwen3.7-max
 ```
 
-3. 只读检查后台 Agent 是否已经准备好：
-
-```bash
-qwenaudio setup
-```
-
-该命令不会安装 Agent、触发登录或修改配置。也可以只检查一个后台，或输出供
-桌面版和脚本使用的结构化结果：
-
-```bash
-qwenaudio setup --backend openclaw
-qwenaudio setup --json
-```
-
-4. 在一个终端中启动 Gateway：
+3. 在一个终端中启动 Gateway：
 
 ```bash
 qwenaudio
 ```
 
-5. 另开一个终端，启动 TUI：
+4. 另开一个终端，启动 TUI：
 
 ```bash
 qwenaudio tui
@@ -218,10 +207,17 @@ qwenaudio gateway uninstall
 
 ## 选择后台 Agent
 
-通过 `AGENT_PROTOCOL` 选择后台 Agent（必填，没有默认值）。OpenCode 和 OpenClaw
-支持自动下载；配置 `DASHSCOPE_API_KEY` 和 `QWEN_AUDIO_AGENT_BACKEND_MODEL`
+通过 `AGENT_PROTOCOL` 环境变量或 `--backend` 参数选择后台 Agent。OpenCode 和 OpenClaw
+支持自动下载安装；配置 `DASHSCOPE_API_KEY` 和 `QWEN_AUDIO_AGENT_BACKEND_MODEL`
 后即可自动接入百炼模型。未指定后台模型且用户已经安装并配置对应 Agent 时，则
-完整复用用户环境。使用 OpenClaw：
+完整复用用户环境。
+
+查看当前可用的后台 Agent：
+```bash
+qwenaudio setup
+```
+
+使用 OpenClaw：
 
 ```dotenv
 AGENT_PROTOCOL=openclaw
@@ -258,15 +254,6 @@ ACP_ARGS=["--acp"]
 ```
 
 通用 ACP 入口不需要修改 Gateway 代码。命令、参数、显示名称和工作目录可分别通过 `ACP_COMMAND`、`ACP_ARGS`、`ACP_LABEL` 和 `ACP_WORKSPACE` 配置。
-
-后台模型遵循以下规则：
-
-- 未指定模型：Gateway 不传模型、不调用 ACP 模型设置接口，也不猜测默认模型。
-- 新建 Session：完全由所选 Agent 根据用户自己的配置选择模型。
-- 恢复 Session：完全由所选 Agent 保留该 Session 原来的模型。
-- 显式设置唯一的后台模型变量 `QWEN_AUDIO_AGENT_BACKEND_MODEL`：Gateway 才通过
-  ACP 强制覆盖 qwen-audio-agent 管理的 Session，并验证设置结果；不支持或无法
-  确认生效时会明确报错。
 
 后台权限默认使用 `native`，由后台 Agent 在需要时询问。只有在可信项目中，并且
 明确接受自动执行命令和修改文件时，才应启用：
