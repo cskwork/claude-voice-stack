@@ -197,10 +197,10 @@ qwenaudio tui --audio-mode full
 
 ## macOS Desktop App
 
-The desktop app provides a persistent voice orb. Start the Gateway before using
-it and grant microphone permission on first launch. The settings page lets you
-switch the Gateway address and orb appearance, and shows the active model and
-backend Agent.
+The desktop app provides a persistent voice orb and embeds and manages its own
+Gateway, so no service needs to be started in advance. On first launch, the app
+creates its configuration file and guides you to enter a DashScope API Key and
+choose a backend Agent (or frontend-only mode) in Settings.
 
 The desktop app includes a streaming wave orb and a liquid gradient orb. Their
 original animated thinking / breathing states are shown below:
