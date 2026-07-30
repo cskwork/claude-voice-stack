@@ -45,10 +45,15 @@ JSON 输出与 CLI 使用同一个共享检测模块，可供桌面版和其他�
 
 ## 最小配置
 
-最小配置需要填写实时语音凭据，并显式选择后台 Agent（以 OpenClaw 为例）：
+最小配置只需要填写实时语音凭据：
 
 ```dotenv
 DASHSCOPE_API_KEY=your-key
+```
+
+需要执行后台任务时，再选择后台 Agent（以 OpenClaw 为例）：
+
+```dotenv
 AGENT_PROTOCOL=openclaw
 QWEN_AUDIO_AGENT_BACKEND_MODEL=qwen3.7-max
 ```
@@ -101,7 +106,11 @@ tasks.json            # 后台任务、结果和待播报通知的恢复状态
 
 ## 选择后台
 
-`AGENT_PROTOCOL` 没有默认值，必须显式指定。OpenClaw 默认地址为 `http://127.0.0.1:18789`：
+`AGENT_PROTOCOL` 没有默认值，也是可选配置。留空时 Gateway 仅提供前台实时语音
+聊天；需要后台执行的请求会返回明确错误，不会创建任务或猜测执行结果。
+也可以使用 `qwenaudio --backend none` 显式启动仅前台模式。
+
+OpenClaw 默认地址为 `http://127.0.0.1:18789`：
 
 ```dotenv
 AGENT_PROTOCOL=openclaw

@@ -145,17 +145,17 @@ for details.
 qwenaudio config
 ```
 
-2. Open the displayed `config.env` file, add your DashScope API Key, and select
-   OpenClaw or another backend Agent:
+2. Open the displayed `config.env` file and add your DashScope API Key. Select
+   OpenClaw or another backend Agent only when you need background tasks:
 
 ```dotenv
 DASHSCOPE_API_KEY=your-key
 # Voice model: qwen-audio-3.0-realtime-flash or qwen-audio-3.0-realtime-plus (default)
 QWEN_AUDIO_REALTIME_MODEL=qwen-audio-3.0-realtime-plus
-# Backend Agent
-AGENT_PROTOCOL=openclaw
+# Optional; uncomment when background tasks are needed
+# AGENT_PROTOCOL=openclaw
 # Backend model: can be left empty; the Agent uses its own user configuration
-QWEN_AUDIO_AGENT_BACKEND_MODEL=qwen3.7-max
+# QWEN_AUDIO_AGENT_BACKEND_MODEL=qwen3.7-max
 ```
 
 3. Start the Gateway in one terminal:
@@ -236,12 +236,19 @@ qwenaudio gateway uninstall
 
 ## Choose a Backend Agent
 
-Select the backend Agent with `AGENT_PROTOCOL` (required, no default value).
-OpenCode and OpenClaw can be downloaded automatically. Configure
-`DASHSCOPE_API_KEY` and `QWEN_AUDIO_AGENT_BACKEND_MODEL` to connect them to a
-Bailian model automatically. When no backend model is specified and the Agent
-is already installed and configured, qwen-audio-agent fully reuses the user's
-existing environment.
+`AGENT_PROTOCOL` is optional. When it is empty, the Gateway runs in
+frontend-only mode and realtime voice chat remains available. If a request
+requires background execution, the frontend clearly explains that no backend
+Agent is available. You can also run `qwenaudio --backend none` to explicitly
+start in frontend-only mode.
+
+Select the backend Agent with `AGENT_PROTOCOL` or `--backend`. After selecting
+one, OpenCode and OpenClaw can be downloaded automatically. Configure
+`DASHSCOPE_API_KEY` and
+`QWEN_AUDIO_AGENT_BACKEND_MODEL` to connect them to a Bailian model
+automatically. When no backend model is specified and the Agent is already
+installed and configured, qwen-audio-agent fully reuses the user's existing
+environment.
 
 Check which backends are available:
 

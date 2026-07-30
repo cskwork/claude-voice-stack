@@ -32,10 +32,17 @@ async function runMinimal(options) {
 }
 
 function applyGatewayOptions(env, options) {
-  env.AGENT_PROTOCOL = options.backend
+  // Keep an explicit empty value so the environment loader cannot restore a
+  // backend from config.env after --backend none selected frontend-only mode.
+  env.AGENT_PROTOCOL = options.backend || ''
   const definition = backendDefinition(options.backend)
-  env.QWEN_AUDIO_AGENT_BACKEND_PERMISSION_MODE = options.backendPermissionMode
-  if (options.backendAgent) {
+  if (options.backend) {
+    env.QWEN_AUDIO_AGENT_BACKEND_PERMISSION_MODE =
+      options.backendPermissionMode
+  } else {
+    delete env.QWEN_AUDIO_AGENT_BACKEND_PERMISSION_MODE
+  }
+  if (options.backend && options.backendAgent) {
     env.QWEN_AUDIO_AGENT_BACKEND_AGENT = options.backendAgent
   } else {
     delete env.QWEN_AUDIO_AGENT_BACKEND_AGENT
@@ -46,6 +53,7 @@ function applyGatewayOptions(env, options) {
 }
 
 function gatewaySummary(health) {
+  if (health?.backend?.enabled === false) return '仅前台聊天模式'
   const label = health?.backend?.label
     || health?.backend?.kind
     || health?.backend?.protocol
@@ -84,7 +92,8 @@ export async function main(argv, {
   prepareRuntime = options => ensureRuntime(options, { root, env }),
   inspectGateway = url => readGatewayHealth(url),
   manageService = (action, options) => manageGatewayService(action, options),
-  waitForService = url => waitForGateway(url, { requireBackend: true }),
+  waitForService = (url, { requireBackend = false } = {}) =>
+    waitForGateway(url, { requireBackend }),
   waitForServiceStop = url => waitForGatewayStop(url, { inspectGateway }),
   runWebUi = options => launchWebUi(options),
   acquireInstance = directory => acquireCliInstance(directory),
@@ -156,7 +165,9 @@ export async function main(argv, {
     )
     const serviceUrl = service.installedMetadata?.url || currentUrl
     if (['install', 'start', 'restart'].includes(options.gatewayAction)) {
-      const ready = await waitForService(serviceUrl)
+      const ready = await waitForService(serviceUrl, {
+        requireBackend: Boolean(options.backend),
+      })
       stdout.write(
         `Gateway 后台服务已${
           options.gatewayAction === 'restart' ? '重启' : '启动'

@@ -153,8 +153,89 @@ test('rejects an existing Gateway with different ownership settings', async () =
   )
 })
 
-test('requires an explicit backend selection', () => {
-  assert.throws(() => resolveBackend({}, {}), /必须指定后台 Agent/)
+test('resolves an empty backend as frontend-only mode', () => {
+  assert.deepEqual(resolveBackend({}, {}), {
+    enabled: false,
+    protocol: null,
+    ownership: null,
+    permissionMode: null,
+    agentId: '',
+    baseUrl: null,
+  })
+  assert.deepEqual(
+    resolveBackend({ backend: 'none' }, {}),
+    resolveBackend({}, {}),
+  )
+  assert.deepEqual(
+    resolveBackend({}, { AGENT_PROTOCOL: 'none' }),
+    resolveBackend({}, {}),
+  )
+})
+
+test('starts and reuses a frontend-only Gateway without a backend', async () => {
+  const frontendOnlyOptions = {
+    url: 'http://127.0.0.1:3101',
+    backend: '',
+  }
+  const frontendOnlyHealth = {
+    ok: true,
+    voiceConfigured: true,
+    backend: {
+      enabled: false,
+      ok: true,
+      status: 'not_configured',
+    },
+  }
+  const runtime = await ensureRuntime(frontendOnlyOptions, {
+    ...dependencies(),
+    fetchImpl: async () => ({
+      json: async () => frontendOnlyHealth,
+    }),
+  })
+  assert.equal(runtime.ownsProcesses, false)
+  assert.doesNotThrow(() => assertGatewayCompatibility(
+    frontendOnlyHealth,
+    resolveBackend(frontendOnlyOptions, {}),
+  ))
+})
+
+test('keeps frontend-only mode explicit when spawning the Gateway', async () => {
+  const calls = []
+  let reads = 0
+  const runtime = await ensureRuntime({
+    url: 'http://127.0.0.1:3101',
+    backend: '',
+  }, {
+    ...dependencies({
+      env: {
+        AGENT_PROTOCOL: '',
+        DASHSCOPE_API_KEY: 'key',
+      },
+      loadEnvironment: () => {},
+    }),
+    fetchImpl: async () => {
+      reads += 1
+      if (reads === 1) throw new Error('offline')
+      return {
+        json: async () => ({
+          ok: true,
+          voiceConfigured: true,
+          backend: {
+            enabled: false,
+            ok: true,
+            status: 'not_configured',
+          },
+        }),
+      }
+    },
+    spawnImpl: (command, args, spawnOptions) => {
+      calls.push([command, args, spawnOptions])
+      return childProcess()
+    },
+  })
+  assert.equal(runtime.ownsProcesses, true)
+  assert.equal(calls[0][2].env.AGENT_PROTOCOL, '')
+  runtime.close()
 })
 
 test('derives selected backend configuration', () => {

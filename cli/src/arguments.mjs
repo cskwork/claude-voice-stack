@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import {
   backendDefinition,
   backendNames,
+  normalizeBackendProtocol,
 } from '../../shared/backend-catalog.mjs'
 
 const COMMANDS = new Set([
@@ -69,7 +70,7 @@ export function parseArguments(argv, env = process.env) {
     audioMode: String(
       env.QWEN_AUDIO_AGENT_TUI_AUDIO_MODE || 'half',
     ).toLowerCase(),
-    backend: String(env.AGENT_PROTOCOL || '').toLowerCase(),
+    backend: normalizeBackendProtocol(env.AGENT_PROTOCOL),
     backendPermissionMode: String(
       env.QWEN_AUDIO_AGENT_BACKEND_PERMISSION_MODE || 'native',
     ).toLowerCase(),
@@ -91,7 +92,9 @@ export function parseArguments(argv, env = process.env) {
       options.url = nextValue(args, index++, '--url')
       options.gatewayConfigurationSpecified = true
     } else if (argument === '--backend') {
-      options.backend = nextValue(args, index++, '--backend').toLowerCase()
+      options.backend = normalizeBackendProtocol(
+        nextValue(args, index++, '--backend'),
+      )
       options.backendSpecified = true
       options.gatewayConfigurationSpecified = true
     } else if (argument === '--backend-agent') {
@@ -127,7 +130,10 @@ export function parseArguments(argv, env = process.env) {
       `不支持的后台：${options.backend}（可选 ${backendNames().join('、')}）`,
     )
   }
-  if (!BACKEND_PERMISSION_MODES.has(options.backendPermissionMode)) {
+  if (
+    options.backend
+    && !BACKEND_PERMISSION_MODES.has(options.backendPermissionMode)
+  ) {
     throw new Error(
       `不支持的后台权限模式：${options.backendPermissionMode}`
       + '（可选 native、full）',
@@ -177,16 +183,6 @@ export function parseArguments(argv, env = process.env) {
       `${definition.label} 不支持 Gateway 统一最高权限模式`,
     )
   }
-  if (
-    command === 'gateway'
-    && options.gatewayAction === 'run'
-    && !options.backend
-  ) {
-    throw new Error(
-      '必须指定后台 Agent：在 config.env 设置 AGENT_PROTOCOL，'
-      + `或使用 --backend（可选 ${backendNames().join('、')}）`,
-    )
-  }
   options.sessionId = String(options.sessionId || '').trim()
   if (!options.sessionId) throw new Error('--session 不能为空')
   return options
@@ -212,7 +208,7 @@ export function helpText() {
     '',
     'Gateway 选项：',
     '  --url URL              Gateway 地址（默认 http://127.0.0.1:3101）',
-    '  --backend NAME         必填：openclaw、opencode、qoder、hermes、codebuddy、codex、claude 或 acp（也可在 config.env 设置 AGENT_PROTOCOL）',
+    '  --backend NAME         可选：openclaw、opencode、qoder、hermes、codebuddy、codex、claude、acp 或 none；不设置或使用 none 时仅前台聊天',
     '  --backend-permission-mode MODE  native（默认）或 full（最高权限）',
     '  --backend-url URL      后台 Server 地址',
     '  --backend-agent ID     指定协调 Agent',

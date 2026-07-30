@@ -4,6 +4,7 @@ import { loadRuntimeEnvironment } from '../../../shared/runtime-environment.mjs'
 import {
   backendDefinition,
   backendNames,
+  normalizeBackendProtocol,
 } from '../../../shared/backend-catalog.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -134,9 +135,9 @@ export function resolveBackendModels(env = process.env) {
   }
 }
 
-const configuredAgentProtocol = String(
-  process.env.AGENT_PROTOCOL || '',
-).toLowerCase()
+const configuredAgentProtocol = normalizeBackendProtocol(
+  process.env.AGENT_PROTOCOL,
+)
 const backendOwnership = 'owned'
 const backendModels = resolveBackendModels()
 const managedOpenClawBailian = (
@@ -148,7 +149,10 @@ const managedOpenClawBailian = (
 const backendPermissionMode = String(
   process.env.QWEN_AUDIO_AGENT_BACKEND_PERMISSION_MODE || 'native',
 ).toLowerCase()
-if (!['native', 'full'].includes(backendPermissionMode)) {
+if (
+  configuredAgentProtocol
+  && !['native', 'full'].includes(backendPermissionMode)
+) {
   throw new Error(
     `不支持的后台权限模式：${backendPermissionMode}（可选 native、full）`,
   )

@@ -156,7 +156,7 @@ test('deduplicates repeated tool calls from one realtime turn', async () => {
   )
 })
 
-test('rejects delegated work immediately when no backend Agent is connected', async () => {
+test('rejects delegated work immediately when the backend Agent is disconnected', async () => {
   const kit = harness({
     coordinatorAvailable: async () => false,
   })
@@ -169,6 +169,28 @@ test('rejects delegated work immediately when no backend Agent is connected', as
 
   assert.equal(kit.outputs[0][1].error_code, 'backend_unavailable')
   assert.equal(kit.outputs[0][1].retryable, true)
+  assert.match(kit.outputs[0][1].user_message, /当前未连接/)
+  assert.equal(kit.manager.list({ ownerId: 'owner' }).length, 0)
+})
+
+test('explains that background work is unavailable without a configured backend', async () => {
+  const kit = harness({
+    coordinatorAvailable: async () => ({ enabled: false, ok: false }),
+  })
+  kit.transcripts.record('turn-one', '帮我修改项目')
+  await kit.handler.handle({
+    call_id: 'call-unconfigured',
+    name: 'spawn_thinking',
+    arguments: '{"objective":"修改项目"}',
+  })
+
+  assert.equal(kit.outputs[0][1].error_code, 'backend_unavailable')
+  assert.equal(kit.outputs[0][1].retryable, false)
+  assert.match(kit.outputs[0][1].user_message, /未配置后台 Agent/)
+  assert.match(
+    kit.outputs[0][3].response.instructions,
+    /未配置后台 Agent/,
+  )
   assert.equal(kit.manager.list({ ownerId: 'owner' }).length, 0)
 })
 

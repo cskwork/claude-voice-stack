@@ -89,6 +89,30 @@ test('starts the Gateway by default without acquiring a UI lock', async () => {
   ])
 })
 
+test('--backend none overrides a configured backend with frontend-only mode', async () => {
+  const target = harness()
+  target.dependencies.prepareRuntime = async options => {
+    target.calls.push([
+      'runtime',
+      options,
+      target.dependencies.env.AGENT_PROTOCOL,
+    ])
+    return {
+      ownsProcesses: false,
+      close: () => {},
+      wait: async () => 0,
+    }
+  }
+  assert.equal(
+    await main(['gateway', '--backend', 'none'], target.dependencies),
+    0,
+  )
+  assert.equal(
+    target.calls.find(call => call[0] === 'runtime')[2],
+    '',
+  )
+})
+
 test('keeps an owned Gateway in the foreground', async () => {
   const target = harness({ ownsProcesses: true })
   assert.equal(await main(['gateway'], target.dependencies), 17)

@@ -46,9 +46,14 @@ const definitions = new Map([
 ])
 
 export function backendDefinition(protocol) {
-  return definitions.get(String(protocol || '').trim().toLowerCase()) || null
+  return definitions.get(normalizeBackendProtocol(protocol)) || null
 }
 
 export function backendNames() {
   return [...definitions.keys()]
+}
+
+export function normalizeBackendProtocol(value) {
+  const protocol = String(value || '').trim().toLowerCase()
+  return protocol === 'none' ? '' : protocol
 }

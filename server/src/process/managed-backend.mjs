@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process'
 import { createConnection, createServer } from 'node:net'
 import { resolve } from 'node:path'
+import { normalizeBackendProtocol } from '../../../shared/backend-catalog.mjs'
 import { backendRuntimeDriver } from './backend-drivers/registry.mjs'
 
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1', '[::1]'])
@@ -16,12 +17,8 @@ function permissionMode(env) {
 }
 
 export function resolveManagedBackend(env = process.env) {
-  const protocol = String(env.AGENT_PROTOCOL || '').toLowerCase()
-  if (!protocol) {
-    throw new Error(
-      '必须指定后台 Agent：请在 config.env 中设置 AGENT_PROTOCOL',
-    )
-  }
+  const protocol = normalizeBackendProtocol(env.AGENT_PROTOCOL)
+  if (!protocol) return null
   const driver = backendRuntimeDriver(protocol)
   const resolvedPermissionMode = permissionMode(env)
   const ownership = driver.resolveOwnership?.({ env }) || 'owned'
@@ -177,6 +174,7 @@ export async function startManagedBackend({
   findFreeAddress = allocateBackendAddress,
 } = {}) {
   const backend = resolveManagedBackend(env)
+  if (!backend) return new ManagedBackendRuntime(null, { platform })
   const driver = backendRuntimeDriver(backend.protocol)
   applyBackendPermissionMode(env, backend)
   if (!driver.separateManagedProcess) {
