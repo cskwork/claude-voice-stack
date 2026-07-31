@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- 新增官方 Kimi Code CLI 后台，使用原生 `kimi acp` 接入共享 ACP Session、权限、
+  模型覆盖和第三层任务链路；支持原生登录与 `KIMI_MODEL_*` 临时凭据配置，并将
+  Gateway `full` 权限精确映射为 Kimi Auto 模式；保持跨协调轮次的 Session MCP
+  连接有效，同时更新每轮任务关联上下文。
+
 ## 1.0.0
 
 - 桌面版内置并管理 Gateway：已有配置时直接启动，首次使用时自动创建

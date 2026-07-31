@@ -7,6 +7,7 @@ import {
   resolveCodexWorkspace,
   resolveBackendModels,
   resolveHermesWorkspace,
+  resolveKimiWorkspace,
   resolveOpenCodeCoordinatorAgent,
   resolveOpenCodeWorkspace,
   resolveQoderWorkspace,
@@ -61,6 +62,10 @@ test('uses the user data directory for additional ACP backend workspaces', () =>
     resolve(directory, 'workspaces/hermes'),
   )
   assert.equal(
+    resolveKimiWorkspace({}, directory),
+    resolve(directory, 'workspaces/kimi'),
+  )
+  assert.equal(
     resolveCodeBuddyWorkspace({}, directory),
     resolve(directory, 'workspaces/codebuddy'),
   )
@@ -78,6 +83,7 @@ test('maps one backend model name to each managed backend provider', () => {
     openCode: 'alibaba-cn/qwen3.7-plus',
     openClaw: 'bailian/qwen3.7-plus',
     qoder: 'qwen3.7-plus',
+    kimi: 'qwen3.7-plus',
     hermes: 'qwen3.7-plus',
     codeBuddy: 'qwen3.7-plus',
     codex: 'qwen3.7-plus',
@@ -95,6 +101,7 @@ test('ignores backend-native model variables as Gateway overrides', () => {
     openCode: '',
     openClaw: '',
     qoder: '',
+    kimi: '',
     hermes: '',
     codeBuddy: '',
     codex: '',
@@ -111,6 +118,7 @@ test('treats legacy auto as no backend model override', () => {
     openCode: '',
     openClaw: '',
     qoder: '',
+    kimi: '',
     hermes: '',
     codeBuddy: '',
     codex: '',
@@ -128,6 +136,7 @@ test('uses only the unified backend model override', () => {
     openCode: 'alibaba-cn/qwen3.7-max',
     openClaw: 'bailian/qwen3.7-max',
     qoder: 'qwen3.7-max',
+    kimi: 'qwen3.7-max',
     hermes: 'qwen3.7-max',
     codeBuddy: 'qwen3.7-max',
     codex: 'qwen3.7-max',

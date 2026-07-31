@@ -20,6 +20,7 @@
     "opencode",
     "openclaw",
     "qoder",
+    "kimi-code",
     "claude-code"
   ],
   "type": "module",
@@ -41,6 +42,7 @@
     "config/acp/workspace/AGENTS.md",
     "config/opencode/workspace/AGENTS.md",
     "config/qoder/workspace/AGENTS.md",
+    "config/kimi/workspace/AGENTS.md",
     "docs/architecture.md",
     "docs/architecture-overview.png",
     "docs/architecture-overview-en.png",
