@@ -8,7 +8,8 @@ import {
 } from '../../../shared/backend-catalog.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
-const root = resolve(here, '../../..')
+const sourceRoot = resolve(here, '../../..')
+const root = process.env.QWEN_AUDIO_AGENT_RUNTIME_ROOT || sourceRoot
 const runtimeEnvironment = loadRuntimeEnvironment({ root })
 
 function numberSetting(value, fallback, {
@@ -36,6 +37,15 @@ export function resolveQoderWorkspace(
   return env.QODER_WORKSPACE
     ? resolve(root, env.QODER_WORKSPACE)
     : resolve(configDirectory, 'workspaces/qoder')
+}
+
+export function resolveKimiWorkspace(
+  env = process.env,
+  configDirectory = runtimeEnvironment.configDirectory,
+) {
+  return env.KIMI_WORKSPACE
+    ? resolve(root, env.KIMI_WORKSPACE)
+    : resolve(configDirectory, 'workspaces/kimi')
 }
 
 export function resolveHermesWorkspace(
@@ -127,6 +137,7 @@ export function resolveBackendModels(env = process.env) {
     openCode: common ? `alibaba-cn/${name}` : '',
     openClaw: common ? `bailian/${name}` : '',
     qoder: name,
+    kimi: common,
     hermes: common,
     codeBuddy: name,
     codex: name,
@@ -187,7 +198,11 @@ export function resolveOpenCodeCoordinatorAgent(env = process.env) {
 export const config = {
   root,
   host: process.env.HOST || '127.0.0.1',
-  port: numberSetting(process.env.PORT, 3101, { min: 1, max: 65535 }),
+  // PORT=0 lets an embedded host (e.g. the desktop app) fall back to a
+  // random loopback port and learn it from the child process report.
+  port: String(process.env.PORT || '').trim() === '0'
+    ? 0
+    : numberSetting(process.env.PORT, 3101, { min: 1, max: 65535 }),
   audioProvider: String(
     process.env.QWEN_AUDIO_REALTIME_PROVIDER || 'dashscope',
   ).trim().toLowerCase(),
@@ -259,6 +274,11 @@ export const config = {
   ).trim(),
   qoderModel: String(
     backendModels.qoder,
+  ).trim(),
+  kimiDirectory: resolveKimiWorkspace(),
+  kimiCliPath: String(process.env.KIMI_CODE_BIN || '').trim(),
+  kimiModel: String(
+    backendModels.kimi,
   ).trim(),
   hermesDirectory: resolveHermesWorkspace(),
   hermesCliPath: String(process.env.HERMES_BIN || '').trim(),

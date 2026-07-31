@@ -9,6 +9,14 @@ OPENCODE_MIN_VERSION=${OPENCODE_MIN_VERSION:-1.18.0}
 OPENCODE_COMMAND=${OPENCODE_COMMAND:-serve}
 QWEN_AUDIO_AGENT_NODE=${QWEN_AUDIO_AGENT_NODE:-node}
 
+run_qwenaudio_node() {
+  if [ "${QWEN_AUDIO_AGENT_DESKTOP:-}" = "1" ]; then
+    ELECTRON_RUN_AS_NODE=1 "$QWEN_AUDIO_AGENT_NODE" "$@"
+    return
+  fi
+  "$QWEN_AUDIO_AGENT_NODE" "$@"
+}
+
 if [ "${QWEN_AUDIO_AGENT_ENV_LOADED:-}" != "1" ]; then
   if [ -f "$QWEN_AUDIO_AGENT_ROOT/.env.local" ]; then
     set -a
@@ -84,6 +92,10 @@ run_source() {
 }
 
 run_package() {
+  if [ "${QWEN_AUDIO_AGENT_DESKTOP_INSTALLED_ONLY:-}" = "1" ]; then
+    echo "OpenCode is not installed. Install OpenCode before selecting it in the desktop app." >&2
+    exit 1
+  fi
   if ! command -v npx >/dev/null 2>&1; then
     echo "OpenCode package mode requires npx." >&2
     exit 1
@@ -115,7 +127,7 @@ installed_version() {
 }
 
 version_supported() {
-  "$QWEN_AUDIO_AGENT_NODE" -e '
+  run_qwenaudio_node -e '
     const parse = value => {
       const match = String(value).match(/(\d+)\.(\d+)\.(\d+)/)
       return match ? match.slice(1).map(Number) : null
@@ -185,6 +197,10 @@ if command -v opencode >/dev/null 2>&1; then
       exec opencode serve --hostname 127.0.0.1 --port "$OPENCODE_PORT" "$@"
     fi
     exec opencode "$OPENCODE_COMMAND" "$@"
+  fi
+  if [ "${QWEN_AUDIO_AGENT_DESKTOP_INSTALLED_ONLY:-}" = "1" ]; then
+    echo "Installed OpenCode $VERSION is older than the supported minimum $OPENCODE_MIN_VERSION." >&2
+    exit 1
   fi
   echo "Installed OpenCode $VERSION is older than the supported minimum; using $OPENCODE_PACKAGE." >&2
 fi

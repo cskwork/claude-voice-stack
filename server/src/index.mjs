@@ -3,7 +3,8 @@ import { fileURLToPath } from 'node:url'
 import { loadRuntimeEnvironment } from '../../shared/runtime-environment.mjs'
 import { startManagedBackend } from './process/managed-backend.mjs'
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
+const sourceRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
+const root = process.env.QWEN_AUDIO_AGENT_RUNTIME_ROOT || sourceRoot
 loadRuntimeEnvironment({ root })
 
 let backendRuntime
