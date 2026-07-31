@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.1.0
 
 - 新增官方 Kimi Code CLI 后台，使用原生 `kimi acp` 接入共享 ACP Session、权限、
   模型覆盖和第三层任务链路；支持原生登录与 `KIMI_MODEL_*` 临时凭据配置，并将
