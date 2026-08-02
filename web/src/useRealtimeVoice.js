@@ -40,6 +40,15 @@ export function shouldAdvertiseVoice(enabled, inputReady) {
   return enabled === true && inputReady === true
 }
 
+// Keeps a persisted front end selection only while the server still offers it.
+// A stale key would be refused on every connect, so it degrades to the empty
+// value that means "use the server default".
+export function retainedRealtimeProvider(selected, providers) {
+  if (!selected) return ''
+  const offered = (providers || []).some(provider => provider.key === selected)
+  return offered ? selected : ''
+}
+
 export function microphoneControlEvent({
   enabled,
   inputOnlyMute = false,
@@ -63,6 +72,7 @@ export default function useRealtimeVoice({
   clientType = 'web',
   clientLabel = 'WebUI',
   takeover = false,
+  realtimeProvider = '',
   onEvent,
   onInputError,
 }) {
@@ -282,6 +292,8 @@ export default function useRealtimeVoice({
           clientLabel,
           clientInstanceId: clientInstanceId.current,
           takeover,
+          // Empty means "keep the server default front end".
+          ...(realtimeProvider ? { provider: realtimeProvider } : {}),
         }))
       }
       socket.onmessage = message => {
@@ -367,7 +379,7 @@ export default function useRealtimeVoice({
       stopPlayback()
       mutedPlaybackResponses.current.clear()
     }
-  }, [clientLabel, clientType, inputOnlyMute, sessionId, takeover])
+  }, [clientLabel, clientType, inputOnlyMute, realtimeProvider, sessionId, takeover])
 
   useEffect(() => {
     if (outputMuted) stopPlayback()

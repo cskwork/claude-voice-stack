@@ -95,7 +95,8 @@ boundaries.
 ## Installation
 
 You need Node.js 22.22.2+ or 24.15.0+, npm 10+, and a
-DashScope API Key. The repository includes `.nvmrc` and `.node-version`; if you
+DashScope API Key when using the default DashScope realtime frontend. The
+repository includes `.nvmrc` and `.node-version`; if you
 use nvm, run `nvm use`.
 
 One-line install (recommended, from npm):
@@ -184,6 +185,61 @@ You can use the browser interface instead:
 ```bash
 qwenaudio webui
 ```
+
+### Use a Hugging Face speech-to-speech frontend
+
+qwen-audio-agent can also connect to a user-managed
+[Hugging Face speech-to-speech](https://github.com/huggingface/speech-to-speech)
+server. It combines VAD, STT, LLM, and TTS behind an OpenAI Realtime-compatible
+API. The entire voice pipeline can run locally, or you can replace individual
+models and services as needed. Fully local operation is not limited to macOS:
+Linux and Windows can run a local LLM through `transformers` on CUDA or CPU,
+while Apple Silicon can use `mlx-lm`. Python 3.10 or later is required.
+
+1. Install speech-to-speech:
+
+```bash
+pip install speech-to-speech
+```
+
+2. Start a fully local service. STT and TTS use local models by default; select
+   the LLM backend for your hardware:
+
+Linux / Windows with an NVIDIA GPU:
+
+```bash
+speech-to-speech \
+  --llm_backend transformers \
+  --device cuda
+```
+
+Apple Silicon:
+
+```bash
+speech-to-speech \
+  --llm_backend mlx-lm \
+  --device mps
+```
+
+Both commands use Qwen3-4B by default. Specify `--model_name` only when you want
+to use another model or a quantized variant. Without an NVIDIA GPU, you can
+choose a smaller local model suitable for CPU inference, or point the LLM
+backend at a local vLLM / llama.cpp server. The service listens on
+`ws://127.0.0.1:8765/v1/realtime` by default.
+
+3. Add the following to the qwen-audio-agent `config.env` file:
+
+```dotenv
+QWEN_AUDIO_REALTIME_PROVIDER=speech-to-speech
+SPEECH_TO_SPEECH_REALTIME_URL=ws://127.0.0.1:8765/v1/realtime
+```
+
+Then start `qwenaudio` as usual. Fully local mode requires no cloud API Key. The
+Gateway only connects to the Realtime endpoint and does not alter the STT, LLM,
+TTS, or voice configured in speech-to-speech. You can still replace its LLM with
+DashScope, OpenAI, or another compatible service; speech-to-speech continues to
+own that model and its authentication. Set `SPEECH_TO_SPEECH_AUTH_TOKEN` only
+when the Realtime endpoint is behind a proxy that requires Bearer authentication.
 
 ### TUI Notes
 
@@ -337,8 +393,8 @@ forget information during a conversation.
 
 - Do not store passwords, API Keys, verification codes, or access tokens in
   your user profile or conversations.
-- Microphone audio and realtime conversations are sent to the configured Qwen
-  Audio Realtime service.
+- Microphone audio and realtime conversations are sent to the configured
+  Realtime frontend (DashScope or speech-to-speech).
 - Backend tasks may call models, tools, MCP servers, and external services
   configured for the selected Agent.
 - `full` permission allows command execution and file changes. Use it only in

@@ -26,6 +26,7 @@ import {
   taskView,
 } from './task-view.js'
 import useRealtimeVoice, {
+  retainedRealtimeProvider,
   shouldClaimReleasedVoice,
 } from './useRealtimeVoice.js'
 import { requestedSessionId } from './session.js'
@@ -110,6 +111,10 @@ export default function App() {
   const [messages, setMessages] = useState([])
   const [activity, setActivity] = useState('正在检查后台 Agent')
   const [frontend, setFrontend] = useState({ label: 'Realtime Agent' })
+  const [realtimeProviders, setRealtimeProviders] = useState([])
+  const [realtimeProvider, setRealtimeProvider] = useState(
+    () => localStorage.getItem('qwen-audio-agent.realtimeProvider') || '',
+  )
   const [backend, setBackend] = useState({ label: 'Agent', ready: false })
   const [agentTasks, setAgentTasks] = useState([])
   const [orbDragging, setOrbDragging] = useState(false)
@@ -197,6 +202,21 @@ export default function App() {
         const label = payload.backend?.label || payload.backend?.kind || 'Agent'
         setFrontend({
           label: payload.realtimeLabel || payload.realtimeProvider || 'Realtime Agent',
+        })
+        setRealtimeProviders(payload.realtimeProviders || [])
+        // A front end persisted by an earlier visit may no longer exist on this
+        // server (removed provider, different deployment). Sending it would be
+        // refused on every connect, so the stale selection is dropped in favour
+        // of the server default instead of leaving the client stuck.
+        setRealtimeProvider(current => {
+          const retained = retainedRealtimeProvider(
+            current,
+            payload.realtimeProviders,
+          )
+          if (retained !== current) {
+            localStorage.removeItem('qwen-audio-agent.realtimeProvider')
+          }
+          return retained
         })
         setBackend({
           label,
@@ -601,6 +621,7 @@ export default function App() {
     clientType: desktopOrbMode ? 'desktop' : 'web',
     clientLabel: desktopOrbMode ? '桌面端' : 'WebUI',
     takeover: takeoverRequested,
+    realtimeProvider,
     onEvent: onRealtimeEvent,
     onInputError: message => {
       setVoiceEnabled(false)
@@ -614,6 +635,18 @@ export default function App() {
   const ownershipLabel = voice.ownership.holder
     ? frontendLabel(voice.ownership.holder)
     : ''
+
+  // Switching the front end reconnects on its own: realtimeProvider is part of
+  // the realtime effect's dependencies, so changing it tears the current socket
+  // down and connects again with the newly selected provider.
+  const selectRealtimeProvider = value => {
+    setRealtimeProvider(value)
+    if (value) {
+      localStorage.setItem('qwen-audio-agent.realtimeProvider', value)
+    } else {
+      localStorage.removeItem('qwen-audio-agent.realtimeProvider')
+    }
+  }
 
   const resetSession = () => {
     taskDismissTimers.current.forEach(timer => clearTimeout(timer))
@@ -850,6 +883,18 @@ export default function App() {
         <i className={backend.ready ? 'ready' : ''} />
         {backend.label}
       </a>
+      {realtimeProviders.length > 1 && <select
+        className="ghost frontend-provider"
+        value={realtimeProvider}
+        onChange={event => selectRealtimeProvider(event.target.value)}
+        title="选择前台语音引擎"
+        aria-label="选择前台语音引擎"
+      >
+        <option value="">前台：默认（{frontend.label}）</option>
+        {realtimeProviders.map(item => <option key={item.key} value={item.key}>
+          前台：{item.label}
+        </option>)}
+      </select>}
       <div className="status"><i className={visualVoiceState} />{labelFor(visualVoiceState)}</div>
       <button className="ghost" onClick={resetSession}>新会话</button>
       <button

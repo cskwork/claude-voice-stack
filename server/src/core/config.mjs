@@ -6,6 +6,9 @@ import {
   backendNames,
   normalizeBackendProtocol,
 } from '../../../shared/backend-catalog.mjs'
+import {
+  resolveRealtimeFrontendConfiguration,
+} from '../../../shared/realtime-provider-catalog.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const sourceRoot = resolve(here, '../../..')
@@ -198,6 +201,8 @@ export function resolveOpenCodeCoordinatorAgent(env = process.env) {
   ].includes(selected) ? '' : selected
 }
 
+const realtimeFrontend = resolveRealtimeFrontendConfiguration(process.env)
+
 export const config = {
   root,
   host: process.env.HOST || '127.0.0.1',
@@ -206,25 +211,24 @@ export const config = {
   port: String(process.env.PORT || '').trim() === '0'
     ? 0
     : numberSetting(process.env.PORT, 3101, { min: 1, max: 65535 }),
-  audioProvider: String(
-    process.env.QWEN_AUDIO_REALTIME_PROVIDER || 'dashscope',
-  ).trim().toLowerCase(),
-  dashscopeApiKey: (
-    process.env.QWEN_AUDIO_REALTIME_API_KEY
-    || process.env.DASHSCOPE_API_KEY
-    || ''
-  ),
-  audioRealtimeBaseUrl: (
-    process.env.QWEN_AUDIO_REALTIME_BASE_URL
-    || process.env.QWEN_AUDIO_REALTIME_URL
-    || (
-      process.env.DASHSCOPE_WORKSPACE_ID
-        ? `wss://${process.env.DASHSCOPE_WORKSPACE_ID}.cn-beijing.maas.aliyuncs.com/api-ws/v1/realtime`
-        : 'wss://dashscope.aliyuncs.com/api-ws/v1/realtime'
-    )
-  ).replace(/\?+$/, ''),
-  audioModel: process.env.QWEN_AUDIO_REALTIME_MODEL || 'qwen-audio-3.0-realtime-plus',
-  audioVoice: process.env.QWEN_AUDIO_REALTIME_VOICE || 'longanqian',
+  audioProvider: realtimeFrontend.provider,
+  realtimeConfigSignature: realtimeFrontend.signature,
+  dashscopeApiKey: realtimeFrontend.dashscopeApiKey,
+  audioRealtimeBaseUrl: realtimeFrontend.dashscopeRealtimeUrl,
+  // User-managed huggingface/speech-to-speech OpenAI Realtime endpoint. The
+  // pipeline owns its STT, LLM, TTS and voice configuration; Gateway only
+  // connects to the endpoint and supplies the shared frontend instructions and
+  // tools for each realtime Session.
+  speechToSpeechRealtimeUrl: realtimeFrontend.speechToSpeechRealtimeUrl,
+  // Do not advertise a local service merely because a default endpoint
+  // exists. It becomes selectable when the user explicitly configures it or
+  // chooses it as the active frontend.
+  speechToSpeechConfigured: realtimeFrontend.speechToSpeechConfigured,
+  // The upstream WebSocket does not require authentication. This optional
+  // credential is useful only when users put it behind an authenticated proxy.
+  speechToSpeechAuthToken: realtimeFrontend.speechToSpeechAuthToken,
+  audioModel: realtimeFrontend.dashscopeModel,
+  audioVoice: realtimeFrontend.dashscopeVoice,
   allowedOrigins: String(process.env.QWEN_AUDIO_AGENT_ALLOWED_ORIGINS || '')
     .split(',')
     .map(value => value.trim())

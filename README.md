@@ -77,7 +77,8 @@ https://github.com/user-attachments/assets/42022655-36d1-46b2-9c26-ff0765284000
 
 ## 安装
 
-需要 Node.js 22.22.2+ 或 24.15.0+、npm 10+ 和 DashScope API Key。
+需要 Node.js 22.22.2+ 或 24.15.0+、npm 10+。使用默认的 DashScope
+实时语音前台时，还需要 DashScope API Key。
 仓库提供 `.nvmrc` 和 `.node-version`；使用 nvm 时可直接运行 `nvm use`。
 
 一键安装（推荐，从 npm 安装）：
@@ -163,6 +164,58 @@ qwenaudio tui
 ```bash
 qwenaudio webui
 ```
+
+### 使用 Hugging Face speech-to-speech 前台
+
+qwen-audio-agent 也可以连接用户自行运行的
+[Hugging Face speech-to-speech](https://github.com/huggingface/speech-to-speech)。
+它将 VAD、STT、LLM 和 TTS 组合成 OpenAI Realtime 兼容服务，整条语音链路既可以
+完全运行在本地，也可以按需替换其中的模型或服务。
+Linux / Windows 可通过 `transformers` 在 CUDA 或 CPU 上运行本地 LLM，Apple Silicon
+则可以使用 `mlx-lm`。使用前需准备 Python 3.10 或更高版本。
+
+1. 安装 speech-to-speech：
+
+```bash
+pip install "speech-to-speech[paraformer]"
+```
+
+2. 启动全本地服务：
+
+Linux / Windows（NVIDIA GPU）：
+
+```bash
+speech-to-speech \
+  --stt paraformer \
+  --llm_backend transformers \
+  --device cuda
+```
+
+Apple Silicon：
+
+```bash
+speech-to-speech \
+  --stt paraformer \
+  --llm_backend mlx-lm \
+  --device mps
+```
+
+没有 NVIDIA GPU 时，也可以选择适合 CPU 的更小本地模型；还可以
+将 LLM 指向本机运行的 vLLM / llama.cpp。服务默认运行在
+`ws://127.0.0.1:8765/v1/realtime`。
+
+3. 在 qwen-audio-agent 的 `config.env` 中设置：
+
+```dotenv
+QWEN_AUDIO_REALTIME_PROVIDER=speech-to-speech
+SPEECH_TO_SPEECH_REALTIME_URL=ws://127.0.0.1:8765/v1/realtime
+```
+
+然后正常启动 `qwenaudio`。在全本地模式下无需云端 API Key。Gateway 只连接 Realtime
+接口，不会修改 speech-to-speech 的 STT、LLM、TTS 或音色配置。你也可以自行将其中的
+LLM 换成 DashScope、OpenAI 等兼容服务；相关模型和认证仍由 speech-to-speech 管理。
+如果 Realtime 接口位于需要 Bearer 认证的代理后方，可设置
+`SPEECH_TO_SPEECH_AUTH_TOKEN`。
 
 ### TUI 使用注意
 
@@ -298,7 +351,8 @@ QWEN_AUDIO_AGENT_BACKEND_PERMISSION_MODE=full
 ## 使用注意事项
 
 - 不要在用户档案或对话中保存密码、API Key、验证码和访问令牌。
-- 麦克风音频与实时对话会发送到配置的 Qwen Audio Realtime 服务。
+- 麦克风音频与实时对话会发送到配置的 Realtime 前台服务（DashScope 或
+  speech-to-speech）。
 - 后台任务可能调用所选 Agent 的模型、工具、MCP 和外部服务。
 - `full` 权限允许后台执行命令和修改文件，只应在可信项目中使用。
 - Gateway 默认仅供本机访问；不要直接暴露到局域网或公网。
