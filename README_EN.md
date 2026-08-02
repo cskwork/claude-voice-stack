@@ -25,7 +25,7 @@ tells you:
 
 ## News
 
-- **v1.3.0 · In testing**
+- **In testing · v1.3.0**
   🧪 Adds a [🤗 speech-to-speech](https://github.com/huggingface/speech-to-speech) frontend for a locally deployed VAD–STT–LLM–TTS pipeline. Available from source; the formal Release will follow after testing.
 - **2026-07-30 · [v1.0.0](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.0.0)**
   🚀 First stable release with a macOS desktop app and integrated Gateway.

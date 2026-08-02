@@ -20,7 +20,7 @@
 
 ## News
 
-- **v1.3.0 · 测试中**
+- **测试中 · v1.3.0**
   🧪 新增 [🤗 speech-to-speech](https://github.com/huggingface/speech-to-speech) 前台接入，支持本地部署 VAD、STT、LLM 与 TTS 全链路。当前可从源码体验，正式 Release 将在完成测试后发布。
 - **2026-07-30 · [v1.0.0](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.0.0)**
   🚀 正式版发布，推出内置 Gateway 的 macOS 桌面版。
