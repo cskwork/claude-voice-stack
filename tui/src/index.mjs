@@ -967,6 +967,14 @@ export async function runTui(options = parseArguments(process.argv.slice(2))) {
       }
       if (ownsVoice) startMicrophone()
     }
+    if (
+      event.type === GatewayServerEvent.VOICE_CONNECTION
+      && event.state === 'unavailable'
+    ) {
+      frontendReady = false
+      setCaptureEnabled(false)
+      print(`${style('[语音前台连接失败]', 'red')} ${event.message || '请检查前台服务配置'}`)
+    }
     if (event.type === GatewayServerEvent.VOICE_OWNERSHIP) {
       if (event.state === 'active') {
         ownsVoice = true

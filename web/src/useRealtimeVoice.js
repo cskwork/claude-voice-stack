@@ -372,6 +372,7 @@ export default function useRealtimeVoice({
             setVisualError(false)
           } else if (event.state === 'unavailable') {
             setError(event.message || '语音前台连接异常，正在重试')
+            setVisualError(true)
           }
         }
         if (event.type === GatewayServerEvent.VOICE_OWNERSHIP) {

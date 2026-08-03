@@ -13,6 +13,14 @@ function classifyError(message) {
   if (isRecoverableRealtimeInactivityError(message)) return 'inactivity'
   if (/user is speaking/i.test(message)) return 'input_busy'
   if (/no active response/i.test(message)) return 'no_active_response'
+  if (
+    /invalid[_ -]?api[_ -]?key|incorrect api key|authentication failed|unauthorized|unexpected server response: (?:401|403)/i
+      .test(message)
+    || /\barrearage\b|account is not in good standing/i.test(message)
+    || /allocationquota\.freetieronly|free allocated quota exceeded|free tier .* exhausted/i
+      .test(message)
+    || /model(?:\.|_)?accessdenied|model[_ -]?not[_ -]?found/i.test(message)
+  ) return 'fatal'
   return 'other'
 }
 

@@ -633,7 +633,9 @@ export default function App() {
   const voiceConnectionError = voice.connectionState === 'unavailable'
   const visualVoiceState = voice.ownership.state === 'busy'
     ? 'occupied'
-    : voiceEnabled && voice.connectionState === 'connecting'
+    : voiceConnectionError
+      ? 'error'
+      : voiceEnabled && voice.connectionState === 'connecting'
       ? 'connecting'
       : voice.visualState || voice.state
   const ownershipLabel = voice.ownership.holder

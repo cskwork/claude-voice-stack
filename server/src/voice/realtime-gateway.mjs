@@ -9,7 +9,11 @@ import { AnnouncementWindow } from './announcement/announcement-window.mjs'
 import { config } from '../core/config.mjs'
 import { conversationSync } from '../conversation/conversation-sync.mjs'
 import { normalizeClientContext } from '../conversation/frontend-agent-context.mjs'
-import { createRealtimeFrontend, resolveRealtimeProvider } from './realtime-provider.mjs'
+import {
+  createRealtimeFrontend,
+  realtimeEventErrorMessage,
+  resolveRealtimeProvider,
+} from './realtime-provider.mjs'
 import { isAllowedOrigin } from '../core/request-security.mjs'
 import { taskManager } from '../task/task-manager.mjs'
 import { recordTaskResult } from '../conversation/task-result-projector.mjs'
@@ -150,6 +154,7 @@ export function attachRealtimeGateway(server, {
     let permissionResponseTimer = null
     let scheduledRealtimeReconnect = null
     let realtimeConnectedAt = 0
+    let realtimeBlockedError = ''
     const realtimeReconnectBackoff = new ReconnectBackoff()
     const announcementWindow = new AnnouncementWindow()
     const playbackTurns = new Map()
@@ -265,11 +270,14 @@ export function attachRealtimeGateway(server, {
       descriptor,
       realtimeStatus: () => ({
         provider: sessionProvider,
-        state: frontend?.ready
+        state: realtimeBlockedError
+          ? 'unavailable'
+          : frontend?.ready
           ? 'connected'
           : connectPromise
             ? 'connecting'
             : 'disconnected',
+        ...(realtimeBlockedError ? { error: realtimeBlockedError } : {}),
       }),
       // Lets the arbitration evict this owner once its socket has died without
       // a clean close, so a stale holder never blocks a new voice claim.
@@ -373,6 +381,7 @@ export function attachRealtimeGateway(server, {
     }
 
     const scheduleRealtimeReconnect = () => {
+      if (realtimeBlockedError) return Promise.resolve()
       if (frontend?.ready) return Promise.resolve()
       if (scheduledRealtimeReconnect) {
         return scheduledRealtimeReconnect.promise
@@ -403,6 +412,11 @@ export function attachRealtimeGateway(server, {
       scheduled.timer.unref?.()
       scheduledRealtimeReconnect = scheduled
       return promise
+    }
+    const reportFrontendError = error => {
+      if (error?.realtimeConnectionReported) return
+      if (error) error.realtimeConnectionReported = true
+      send(ws, { type: 'error', message: error?.message || String(error) })
     }
     const ensurePermissionResponseFor = context => {
       clearTimeout(permissionResponseTimer)
@@ -1151,9 +1165,7 @@ export function attachRealtimeGateway(server, {
         // A response refused by a busy single-slot provider is retried by the
         // frontend transparently; nothing user-facing happened.
         if (event.__voiceRetried) return
-        const errorMessage = event.error?.message
-          || event.message
-          || '实时语音服务错误'
+        const errorMessage = realtimeEventErrorMessage(event)
         const providerError = frontend.provider.classifyError(errorMessage)
         const recoverableInactivity = providerError === 'inactivity'
         // A local or otherwise capacity-bounded provider can still be draining
@@ -1173,6 +1185,20 @@ export function attachRealtimeGateway(server, {
         // 也不应触发失败簿记(此时本就没有响应在跑)。
         const benignCancelRace = providerError === 'no_active_response'
         if (benignCancelRace) return
+        if (providerError === 'fatal') {
+          realtimeBlockedError = errorMessage
+          pendingAudio = []
+          cancelScheduledRealtimeReconnect()
+          const blockedFrontend = frontend
+          frontend = null
+          blockedFrontend?.close()
+          send(ws, {
+            type: GatewayServerEvent.VOICE_CONNECTION,
+            state: 'unavailable',
+            provider: sessionProvider,
+            message: errorMessage,
+          })
+        }
         const id = realtimeResponseId(event)
         const context = responseContexts.get(id)
         if (context?.origin === 'announcement') {
@@ -1212,7 +1238,7 @@ export function attachRealtimeGateway(server, {
         // backend task is still running. The task remains healthy, and any
         // pending announcement has already returned to the retry queue, so this
         // provider housekeeping event is not user-facing.
-        if (!recoverableInactivity) {
+        if (!recoverableInactivity && providerError !== 'fatal') {
           send(ws, { type: 'error', message: errorMessage })
         }
       }
@@ -1240,11 +1266,14 @@ export function attachRealtimeGateway(server, {
         },
         onEvent: handleEvent,
         onError: error => {
-          if (
-            createdFrontend.provider.classifyError(error.message)
-            !== 'inactivity'
-          ) {
-            send(ws, { type: 'error', message: error.message })
+          const classification = createdFrontend.provider.classifyError(error.message)
+          if (classification === 'fatal') {
+            realtimeBlockedError = error.message
+            pendingAudio = []
+            error.realtimeConnectionReported = true
+          }
+          if (classification !== 'inactivity') {
+            reportFrontendError(error)
           }
         },
         onClose: () => {
@@ -1256,7 +1285,9 @@ export function attachRealtimeGateway(server, {
             type: GatewayServerEvent.VOICE_CONNECTION,
             state: 'unavailable',
             provider: sessionProvider,
+            ...(realtimeBlockedError ? { message: realtimeBlockedError } : {}),
           })
+          if (realtimeBlockedError) return
           if (
             realtimeConnectedAt
             && Date.now() - realtimeConnectedAt >= REALTIME_STABLE_CONNECTION_MS
@@ -1277,6 +1308,7 @@ export function attachRealtimeGateway(server, {
       createdConnectPromise = createdFrontend.connect()
         .then(() => {
           if (frontend !== createdFrontend) return
+          realtimeBlockedError = ''
           realtimeConnectedAt = Date.now()
           send(ws, {
             type: GatewayServerEvent.VOICE_CONNECTION,
@@ -1296,6 +1328,10 @@ export function attachRealtimeGateway(server, {
           })
         })
         .catch(error => {
+          if (createdFrontend.provider.classifyError(error.message) === 'fatal') {
+            realtimeBlockedError = error.message
+            pendingAudio = []
+          }
           if (frontend === createdFrontend) {
             send(ws, {
               type: GatewayServerEvent.VOICE_CONNECTION,
@@ -1314,6 +1350,9 @@ export function attachRealtimeGateway(server, {
     }
 
     const ensureFrontend = () => {
+      if (realtimeBlockedError) {
+        return Promise.reject(new Error(realtimeBlockedError))
+      }
       if (frontend?.ready) return Promise.resolve()
       if (connectPromise) return connectPromise
       if (scheduledRealtimeReconnect) {
@@ -1341,6 +1380,7 @@ export function attachRealtimeGateway(server, {
           try {
             const requested = resolveRealtimeProvider(event.provider)
             sessionProvider = requested.key
+            realtimeBlockedError = ''
             const staleFrontend = frontend
             frontend = null
             cancelScheduledRealtimeReconnect()
@@ -1379,10 +1419,7 @@ export function attachRealtimeGateway(server, {
           textOnly: textOnlySession,
         })
         if (inputEnabled || outputEnabled) {
-          ensureFrontend().catch(error => send(ws, {
-            type: 'error',
-            message: error.message,
-          }))
+          ensureFrontend().catch(reportFrontendError)
         }
       } else if (event.type === GatewayClientEvent.UNMUTE) {
         if (textOnlySession) {
@@ -1398,7 +1435,7 @@ export function attachRealtimeGateway(server, {
             claimPendingNotifications()
             announcements.flush()
           })
-          .catch(error => send(ws, { type: 'error', message: error.message }))
+          .catch(reportFrontendError)
       } else if (event.type === GatewayClientEvent.INPUT_UNMUTE) {
         if (textOnlySession) return
         if (activeVoiceClients.isActive(ownerId, voiceClient)) {
@@ -1414,7 +1451,7 @@ export function attachRealtimeGateway(server, {
             claimPendingNotifications()
             announcements.flush()
           })
-          .catch(error => send(ws, { type: 'error', message: error.message }))
+          .catch(reportFrontendError)
       } else if (event.type === GatewayClientEvent.AUDIO_APPEND) {
         if (!inputEnabled || !activeVoiceClients.isActive(ownerId, voiceClient)) {
           return
@@ -1429,10 +1466,7 @@ export function attachRealtimeGateway(server, {
           // arriving during a close/backoff window is buffered, but must never
           // bypass that window and create a second Realtime connection.
           if (!connectPromise && !scheduledRealtimeReconnect) {
-            ensureFrontend().catch(error => send(ws, {
-              type: 'error',
-              message: error.message,
-            }))
+            ensureFrontend().catch(reportFrontendError)
           }
         }
       } else if (event.type === GatewayClientEvent.TEXT_MESSAGE) {
@@ -1459,7 +1493,7 @@ export function attachRealtimeGateway(server, {
                 : undefined,
             },
           ))
-          .catch(error => send(ws, { type: 'error', message: error.message }))
+          .catch(reportFrontendError)
       } else if (event.type === GatewayClientEvent.INTERRUPT) {
         turnGeneration = ++turnSequence
         committedTurnGeneration = turnGeneration
@@ -1533,6 +1567,7 @@ export function attachRealtimeGateway(server, {
         connected: 0,
         connecting: 0,
         disconnected: 0,
+        unavailable: 0,
         byProvider: {},
       }
       let connected = 0
@@ -1549,10 +1584,12 @@ export function attachRealtimeGateway(server, {
               connected: 0,
               connecting: 0,
               disconnected: 0,
+              unavailable: 0,
             }
           }
           const provider = realtime.byProvider[status.provider]
           provider[status.state] = (provider[status.state] || 0) + 1
+          if (status.error) provider.error = status.error
         }
       }
       return {
