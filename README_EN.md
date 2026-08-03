@@ -25,8 +25,8 @@ tells you:
 
 ## News
 
-- **In testing · v1.3.0**
-  🧪 Adds a [🤗 speech-to-speech](https://github.com/huggingface/speech-to-speech) frontend for a locally deployed VAD–STT–LLM–TTS pipeline. Available from source; the formal Release will follow after testing.
+- **2026-08-03 · [v1.3.0](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.3.0)**
+  🎙️ Adds a [🤗 speech-to-speech](https://github.com/huggingface/speech-to-speech) frontend for a locally deployed VAD–STT–LLM–TTS pipeline.
 - **2026-08-01 · [v1.2.0](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.2.0)**
   ⚡ Desktop auto-update, faster startup, and smarter backend Agent detection.
 - **2026-07-31 · [v1.1.0](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.1.0)**
@@ -193,9 +193,6 @@ qwenaudio webui
 ```
 
 ### Use a Hugging Face speech-to-speech frontend
-
-> [!NOTE]
-> This feature is planned for v1.3.0. It is currently available from source and remains under testing; it is not yet included in a stable Release.
 
 qwen-audio-agent can also connect to a user-managed
 [Hugging Face speech-to-speech](https://github.com/huggingface/speech-to-speech)

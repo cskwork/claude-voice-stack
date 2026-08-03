@@ -20,8 +20,8 @@
 
 ## News
 
-- **测试中 · v1.3.0**
-  🧪 新增 [🤗 speech-to-speech](https://github.com/huggingface/speech-to-speech) 前台接入，支持本地部署 VAD、STT、LLM 与 TTS 全链路。当前可从源码体验，正式 Release 将在完成测试后发布。
+- **2026-08-03 · [v1.3.0](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.3.0)**
+  🎙️ 新增 [🤗 speech-to-speech](https://github.com/huggingface/speech-to-speech) 前台接入，支持本地部署 VAD、STT、LLM 与 TTS 全链路。
 - **2026-08-01 · [v1.2.0](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.2.0)**
   ⚡ 桌面版新增自动更新，优化启动速度与后台 Agent 检测。
 - **2026-07-31 · [v1.1.0](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.1.0)**
@@ -172,9 +172,6 @@ qwenaudio webui
 ```
 
 ### 使用 Hugging Face speech-to-speech 前台
-
-> [!NOTE]
-> 此功能计划随 v1.3.0 正式发布，目前仅在源码版本中提供，仍在测试中。
 
 qwen-audio-agent 也可以连接用户自行运行的
 [Hugging Face speech-to-speech](https://github.com/huggingface/speech-to-speech)。
