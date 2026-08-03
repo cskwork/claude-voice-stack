@@ -5,6 +5,7 @@ import {
   buildFrontendInstructions,
   REALTIME_PROVIDERS,
   RealtimeFrontend,
+  realtimeEventErrorMessage,
 } from '../src/voice/realtime-provider.mjs'
 
 const FRONTEND_TOOL_NAMES = [
@@ -22,6 +23,50 @@ function createQwenFrontend(options = {}) {
     ...options,
   })
 }
+
+test('rejects a provider error before the realtime session becomes ready', () => {
+  const frontend = createQwenFrontend()
+
+  assert.throws(
+    () => frontend.handleProviderEvent({
+      type: 'error',
+      error: {
+        code: 'InvalidApiKey',
+        message: 'Invalid API-key provided.',
+      },
+    }),
+    /InvalidApiKey: Invalid API-key provided/,
+  )
+  assert.equal(frontend.ready, false)
+})
+
+test('preserves provider error codes in the user-facing realtime error', () => {
+  assert.equal(realtimeEventErrorMessage({
+    type: 'error',
+    error: {
+      code: 'AllocationQuota.FreeTierOnly',
+      type: 'insufficient_quota',
+      message: 'The free tier of the model has been exhausted.',
+    },
+  }), 'AllocationQuota.FreeTierOnly: insufficient_quota: The free tier of the model has been exhausted.')
+})
+
+test('classifies non-recoverable DashScope account errors as fatal', () => {
+  const provider = REALTIME_PROVIDERS.qwen
+  for (const message of [
+    'InvalidApiKey: Invalid API-key provided.',
+    'Arrearage: Access denied, please make sure your account is in good standing.',
+    'AllocationQuota.FreeTierOnly: The free tier of the model has been exhausted.',
+    'Free allocated quota exceeded.',
+    'Unexpected server response: 401',
+  ]) {
+    assert.equal(provider.classifyError(message), 'fatal', message)
+  }
+  assert.equal(
+    provider.classifyError('You exceeded your current quota, please check your plan.'),
+    'other',
+  )
+})
 
 test('carries originating turn metadata to a created realtime response', () => {
   const frontend = createQwenFrontend()

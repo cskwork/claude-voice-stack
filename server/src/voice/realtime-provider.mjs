@@ -36,6 +36,16 @@ function normalizedEvents(value) {
   return Array.isArray(value) ? value.filter(Boolean) : [value]
 }
 
+export function realtimeEventErrorMessage(event, fallback = '实时语音服务错误') {
+  const details = [
+    event?.error?.code,
+    event?.error?.type,
+    event?.error?.message,
+    event?.message,
+  ].map(value => String(value || '').trim()).filter(Boolean)
+  return [...new Set(details)].join(': ') || fallback
+}
+
 // Behavioural capabilities of a provider's Realtime implementation. Every
 // default describes the fully specification-compliant behaviour, so providers
 // only declare the guarantees they do NOT uphold and the frontend compensates
@@ -144,6 +154,11 @@ export class RealtimeFrontend {
       this.protocol.normalizeIncoming(providerEvent),
     )
     for (const event of events) {
+      if (event.type === 'error' && !this.ready) {
+        const error = new Error(realtimeEventErrorMessage(event))
+        error.realtimeEvent = true
+        throw error
+      }
       if (event.type === 'session.created') {
         this.updateSession()
         if (!this.capabilities.acknowledgesSessionUpdate) {

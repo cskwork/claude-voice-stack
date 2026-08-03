@@ -1,5 +1,6 @@
 import { backendOptionStates } from './backend-options.mjs'
 import {
+  realtimeConnectionStatus,
   realtimeModelStatusLabel,
   realtimeStatusLabel,
 } from './realtime-status.mjs'
@@ -190,14 +191,6 @@ function setBackendStatus(text, connected) {
   currentBackend.className = `connection-status ${connected ? 'connected' : 'disconnected'}`
 }
 
-function realtimeConnectionState(provider) {
-  const status = runtime?.realtimeConnection?.byProvider?.[provider]
-  if (!status) return 'configured'
-  if (status.connected > 0) return 'connected'
-  if (status.connecting > 0) return 'connecting'
-  return 'disconnected'
-}
-
 function setRealtimeStatus(text, state) {
   currentRealtime.textContent = text
   currentRealtime.className = state === 'configured'
@@ -221,15 +214,27 @@ function renderRuntime() {
   if (!runtime.voiceConfigured) {
     setRealtimeStatus(`${realtimeLabel} · 配置不完整`, 'disconnected')
   } else {
-    const state = realtimeConnectionState(runtime.realtimeProvider)
+    const state = realtimeConnectionStatus(
+      runtime.realtimeConnection?.byProvider?.[runtime.realtimeProvider],
+    )
     const stateLabel = {
       connected: '已连接',
       connecting: '正在连接',
+      unavailable: '连接失败',
       disconnected: '连接异常',
       configured: '已配置',
     }[state]
     setRealtimeStatus(
-      [realtimeLabel, realtimeModelLabel, stateLabel]
+      [
+        realtimeLabel,
+        realtimeModelLabel,
+        stateLabel,
+        state === 'unavailable'
+          ? truncate(
+            runtime.realtimeConnection?.byProvider?.[runtime.realtimeProvider]?.error,
+          )
+          : '',
+      ]
         .filter(Boolean)
         .join(' · '),
       state,
