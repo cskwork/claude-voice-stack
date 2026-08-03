@@ -411,7 +411,7 @@ test('builds frontend identity, time, memory and reconnect context', () => {
   )
   assert.deepEqual(
     memory.function.parameters.properties.scope.enum,
-    ['profile', 'long_term', 'all'],
+    ['profile', 'long_term', 'rules', 'all'],
   )
   assert.equal(
     memory.function.parameters.properties.memory_ids.items.type,

@@ -149,7 +149,7 @@ export class ToolCallHandler {
         originalRequest,
         objective,
         conversationContext: this.getConversationContext(),
-        userMemories: this.memoryStore?.list(this.ownerId) || [],
+        userMemories: this.memoryStore?.list(this.ownerId, { limit: 64 }) || [],
         timeZone: this.getClientContext()?.timeZone,
         workingDirectory: this.getClientContext()?.workingDirectory,
       }, {
@@ -732,7 +732,7 @@ export class ToolCallHandler {
       output = failure('memory_unavailable', '前台记忆功能当前不可用。')
     } else if (!['recall', 'remember', 'replace', 'forget'].includes(action)) {
       output = failure('invalid_memory_action', '没有识别出要执行的记忆操作。')
-    } else if (!['profile', 'long_term', 'all'].includes(scope)) {
+    } else if (!['profile', 'long_term', 'rules', 'all'].includes(scope)) {
       output = failure('invalid_memory_scope', '没有识别出记忆范围。')
     } else if (action === 'recall') {
       const memories = this.memoryStore.list(this.ownerId, { scope, query })

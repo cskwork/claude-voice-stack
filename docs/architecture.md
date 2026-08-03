@@ -71,6 +71,19 @@ respond_agent_permission
 - `replace` atomically replaces recalled IDs when the user corrects a fact;
 - `forget` removes explicitly requested records.
 
+Records live in three scopes: `profile` (name, timezone, locale, stable
+interaction preferences), `long_term` (durable personal facts), and `rules`
+(user-authored standing instructions: speaking style, forms of address, default
+ways of doing things). `rules` are user-authorized directives, not memory data:
+they are always injected into the Realtime context as `User Directives`, take
+precedence over the assistant's default style, and yield to the user's current
+utterance. They never authorize leaking internal structure, skipping
+permission checks, or changing the assistant's identity; entries that demand
+those are void. Rules are bounded to 16 short entries so they can be injected
+in full on every turn, and they are attached to the backend Agent envelope as
+user-authored preference material. `profile` and `long_term` remain
+read-on-demand data.
+
 Only the marked managed section of `USER.md` is editable. User-maintained profile
 text outside that section is returned as read-only data and cannot be replaced.
 

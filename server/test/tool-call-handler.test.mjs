@@ -593,6 +593,43 @@ test('uses one scoped memory tool for recall and remember', async () => {
   assert.equal(changes, 1)
 })
 
+test('routes standing user rules to the rules memory scope', async () => {
+  const calls = []
+  let changes = 0
+  const kit = harness({
+    memoryStore: {
+      remember: (ownerId, input) => {
+        calls.push(['remember', ownerId, input])
+        return {
+          id: 'mem_rule',
+          scope: 'rules',
+          content: input.content,
+          editable: true,
+        }
+      },
+    },
+    onMemoryChanged: () => { changes += 1 },
+  })
+
+  await kit.handler.handle({
+    call_id: 'memory-rule',
+    name: 'user_memory',
+    arguments: JSON.stringify({
+      action: 'remember',
+      scope: 'rules',
+      content: '回复默认先给结论',
+    }),
+  })
+
+  assert.deepEqual(calls[0], ['remember', 'owner', {
+    scope: 'rules',
+    content: '回复默认先给结论',
+  }])
+  assert.equal(kit.outputs.at(-1)[1].status, 'remembered')
+  assert.equal(kit.outputs.at(-1)[1].memory.scope, 'rules')
+  assert.equal(changes, 1)
+})
+
 test('replaces recalled text memories in one storage operation', async () => {
   let replaced
   let changes = 0

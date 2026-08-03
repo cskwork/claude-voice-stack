@@ -87,7 +87,7 @@ const userMemoryTool = {
   type: 'function',
   function: {
     name: USER_MEMORY_TOOL_NAME,
-    description: '管理千问Audio前台持有的用户记忆。profile 用于称呼、时区、语言和稳定交互偏好；long_term 用于用户明确希望跨会话保留的个人事实、喜好、目标和约定；不要保存项目执行历史或后台工作细节。使用 recall 回忆，remember 新增，replace 用新事实替换明确相关的旧记录，forget 遗忘。',
+    description: '管理千问Audio前台持有的用户记忆与长期约定。profile 用于称呼、时区、语言和稳定交互偏好；long_term 用于用户明确希望跨会话保留的个人事实、喜好、目标和约定；rules 用于用户亲自设定的长期约定——说话方式、称呼习惯、默认做法等“以后都……”类要求，设定后长期生效并优先于默认风格；不要保存项目执行历史或后台工作细节。使用 recall 回忆，remember 新增，replace 用新内容替换明确相关的旧记录，forget 遗忘。',
     parameters: {
       type: 'object',
       properties: {
@@ -98,8 +98,8 @@ const userMemoryTool = {
         },
         scope: {
           type: 'string',
-          enum: ['profile', 'long_term', 'all'],
-          description: '记忆范围。remember 和 replace 必须使用 profile 或 long_term；recall 和 forget 可以使用 all。',
+          enum: ['profile', 'long_term', 'rules', 'all'],
+          description: '记忆范围。remember 和 replace 必须使用 profile、long_term 或 rules；recall 和 forget 可以使用 all。',
         },
         content: {
           type: 'string',

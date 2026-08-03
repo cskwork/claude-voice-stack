@@ -1,4 +1,4 @@
-const SCOPES = new Set(['profile', 'long_term', 'all'])
+const SCOPES = new Set(['profile', 'long_term', 'rules', 'all'])
 
 function normalizeScope(value, fallback = 'all') {
   const scope = String(value || fallback).trim().toLowerCase()
@@ -13,18 +13,19 @@ export class ProfiledMemoryStore {
   }
 
   list(ownerId, options = {}) {
-    const limit = Math.min(20, Math.max(1, Number(options.limit) || 20))
+    const limit = Math.min(64, Math.max(1, Number(options.limit) || 20))
     const scope = normalizeScope(options.scope)
-    const profile = scope === 'long_term'
-      ? []
-      : this.userProfile?.list({ query: options.query }) || []
-    const longTerm = scope === 'profile'
-      ? []
-      : this.memoryStore?.list(ownerId, {
+    const profile = ['profile', 'all'].includes(scope)
+      ? this.userProfile?.list({ query: options.query }) || []
+      : []
+    const texts = ['long_term', 'rules', 'all'].includes(scope)
+      ? this.memoryStore?.list(ownerId, {
           query: options.query,
           limit,
+          scope: scope === 'all' ? null : scope,
         }) || []
-    return [...profile, ...longTerm].slice(0, limit)
+      : []
+    return [...profile, ...texts].slice(0, limit)
   }
 
   remember(ownerId, { scope, content } = {}) {
@@ -35,7 +36,7 @@ export class ProfiledMemoryStore {
       return this.userProfile.remember(content)
     }
     if (!this.memoryStore) throw new Error('long-term memory is unavailable')
-    return this.memoryStore.remember(ownerId, content)
+    return this.memoryStore.remember(ownerId, content, { scope: target })
   }
 
   replace(ownerId, {
@@ -50,7 +51,7 @@ export class ProfiledMemoryStore {
       return this.userProfile.replace({ ids, content })
     }
     if (!this.memoryStore) throw new Error('long-term memory is unavailable')
-    return this.memoryStore.replace(ownerId, { ids, content })
+    return this.memoryStore.replace(ownerId, { ids, content, scope: target })
   }
 
   forget(ownerId, {
@@ -60,11 +61,15 @@ export class ProfiledMemoryStore {
   } = {}) {
     const target = normalizeScope(scope)
     let removed = 0
-    if (target !== 'long_term') {
+    if (['profile', 'all'].includes(target)) {
       removed += this.userProfile?.forget({ query, all }) || 0
     }
-    if (target !== 'profile') {
-      removed += this.memoryStore?.forget(ownerId, { query, all }) || 0
+    if (['long_term', 'rules', 'all'].includes(target)) {
+      removed += this.memoryStore?.forget(ownerId, {
+        query,
+        all,
+        scope: target === 'all' ? null : target,
+      }) || 0
     }
     return removed
   }
