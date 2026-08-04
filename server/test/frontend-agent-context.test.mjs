@@ -43,15 +43,11 @@ test('distinguishes the TUI working directory from the backend workspace', () =>
   assert.match(context, /Do not substitute the backend Agent workspace/)
 })
 
-test('adds sleep guidance only when the client advertises the state', () => {
+test('keeps client capabilities out of the runtime prose context', () => {
   const desktop = buildFrontendContext({
     client: { states: ['sleeping'] },
   })
-  const ordinary = buildFrontendContext({ client: {} })
-
-  assert.match(desktop, /call enter_sleep immediately/)
-  assert.match(desktop, /does not cancel background work/)
-  assert.doesNotMatch(ordinary, /enter_sleep/)
+  assert.doesNotMatch(desktop, /enter_sleep|does not cancel background work/)
 })
 
 test('loads one canonical frontend policy separately from runtime context', () => {

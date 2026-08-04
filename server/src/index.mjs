@@ -30,7 +30,7 @@ function stop(signal = 'SIGTERM') {
     agentClient?.close(),
   ]).catch(error => {
     logger.error('backend.stop_failed', { error })
-  })
+  }).finally(() => logger.flush())
   return stopPromise
 }
 

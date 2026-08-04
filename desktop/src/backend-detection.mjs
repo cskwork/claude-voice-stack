@@ -7,6 +7,7 @@ export function detectBackendSetups({
   platform = process.platform,
   WorkerImpl = Worker,
   workerUrl = defaultWorkerUrl,
+  timeoutMs = 15_000,
 } = {}) {
   return new Promise((resolve, reject) => {
     const worker = new WorkerImpl(workerUrl, {
@@ -17,9 +18,14 @@ export function detectBackendSetups({
     })
     let settled = false
 
+    const timer = setTimeout(() => {
+      fail(new Error('后台 Agent 检测超时，请重试'))
+      void worker.terminate?.()
+    }, timeoutMs)
     const finish = callback => value => {
       if (settled) return
       settled = true
+      clearTimeout(timer)
       callback(value)
     }
     const succeed = finish(message => {

@@ -1,6 +1,6 @@
 import { parentPort, workerData } from 'node:worker_threads'
 
-import { inspectBackendSetups } from '../../shared/backend-setup.mjs'
+import { inspectBackendSetupsAsync } from '../../shared/backend-setup.mjs'
 import { refreshProcessPath } from './process-path.mjs'
 
 function compactReport(report) {
@@ -22,7 +22,7 @@ try {
     env,
     platform: workerData.platform,
   })
-  const report = inspectBackendSetups({
+  const report = await inspectBackendSetupsAsync({
     env,
     platform: workerData.platform,
   })

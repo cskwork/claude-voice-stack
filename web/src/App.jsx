@@ -11,7 +11,6 @@ import {
   discardUserTranscript,
   finalAssistantContent,
   insertByTurn,
-  normalizeTranscript,
   upsertUserTranscript,
 } from './message-order.js'
 import MessageContent from './MessageContent.jsx'
@@ -633,7 +632,6 @@ export default function App() {
       )))
     }
   }, [
-    backend.label,
     sessionId,
     updateTimelineItem,
     updateUserTranscript,

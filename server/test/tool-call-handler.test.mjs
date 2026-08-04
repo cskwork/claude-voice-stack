@@ -730,26 +730,8 @@ test('requires recalled ids for replacement and never guesses targets', async ()
   assert.equal(kit.outputs.at(-1)[1].error_code, 'missing_memory_ids')
 })
 
-test('requires explicit user language before forgetting memory', async () => {
-  let removed = 0
+test('forgets selected memory without re-parsing user wording', async () => {
   const kit = harness({
-    memoryStore: {
-      forget: () => {
-        removed += 1
-        return 1
-      },
-    },
-  })
-  kit.transcripts.record('turn-one', '你还记得我的称呼吗')
-  await kit.handler.handle({
-    call_id: 'memory-forget-rejected',
-    name: 'user_memory',
-    arguments: '{"action":"forget","scope":"profile","query":"称呼"}',
-  })
-  assert.equal(kit.outputs.at(-1)[1].status, 'rejected')
-  assert.equal(removed, 0)
-
-  const allowed = harness({
     memoryStore: {
       forget: (_ownerId, options) => {
         assert.deepEqual(options, {
@@ -761,16 +743,15 @@ test('requires explicit user language before forgetting memory', async () => {
       },
     },
   })
-  allowed.transcripts.record('turn-one', '忘掉我的称呼')
-  await allowed.handler.handle({
+  await kit.handler.handle({
     call_id: 'memory-forget',
     name: 'user_memory',
     arguments: '{"action":"forget","scope":"profile","query":"称呼"}',
   })
-  assert.equal(allowed.outputs.at(-1)[1].status, 'forgotten')
+  assert.equal(kit.outputs.at(-1)[1].status, 'forgotten')
 })
 
-test('requires an explicit clear-all request before deleting an entire scope', async () => {
+test('clears an entire memory scope through the explicit all parameter', async () => {
   let calls = 0
   const memoryStore = {
     forget: () => {
@@ -778,18 +759,7 @@ test('requires an explicit clear-all request before deleting an entire scope', a
       return 2
     },
   }
-  const rejected = harness({ memoryStore })
-  rejected.transcripts.record('turn-one', '忘掉我的称呼')
-  await rejected.handler.handle({
-    call_id: 'memory-clear-rejected',
-    name: 'user_memory',
-    arguments: '{"action":"forget","scope":"profile","all":true}',
-  })
-  assert.equal(rejected.outputs.at(-1)[1].error_code, 'clear_all_consent_required')
-  assert.equal(calls, 0)
-
   const allowed = harness({ memoryStore })
-  allowed.transcripts.record('turn-one', '清空全部长期记忆')
   await allowed.handler.handle({
     call_id: 'memory-clear',
     name: 'user_memory',
@@ -869,7 +839,7 @@ test('notes: adds items to a named list and reports ambiguous removals', async (
   )
 })
 
-test('notes: requires explicit user language before clearing or dropping a list', async () => {
+test('notes: clears and drops a named list without re-parsing user wording', async () => {
   const notesStore = new FrontendNotesStore()
   const kit = harness({ notesStore })
   await kit.handler.handle({
@@ -879,15 +849,6 @@ test('notes: requires explicit user language before clearing or dropping a list'
   })
 
   await kit.handler.handle({
-    call_id: 'notes-clear-rejected',
-    name: 'notes',
-    arguments: JSON.stringify({ action: 'clear', list: '购物清单' }),
-  })
-  assert.equal(kit.outputs.at(-1)[1].error_code, 'explicit_consent_required')
-  assert.equal(notesStore.show('owner', '购物清单').items.length, 1)
-
-  kit.transcripts.record('turn-one', '把购物清单清空吧')
-  await kit.handler.handle({
     call_id: 'notes-clear-ok',
     name: 'notes',
     arguments: JSON.stringify({ action: 'clear', list: '购物清单' }),
@@ -896,7 +857,6 @@ test('notes: requires explicit user language before clearing or dropping a list'
   assert.equal(kit.outputs.at(-1)[1].removed, 1)
   assert.equal(notesStore.show('owner', '购物清单').items.length, 0)
 
-  kit.transcripts.record('turn-one', '购物清单不要了，删掉')
   await kit.handler.handle({
     call_id: 'notes-drop-ok',
     name: 'notes',

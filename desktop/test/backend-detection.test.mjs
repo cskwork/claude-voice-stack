@@ -34,6 +34,13 @@ class EmptyWorker extends EventEmitter {
   }
 }
 
+class HangingWorker extends EventEmitter {
+  terminate() {
+    this.terminated = true
+    return Promise.resolve(0)
+  }
+}
+
 test('runs backend detection outside the caller and returns its compact report', async () => {
   const result = await detectBackendSetups({
     env: { PATH: '/usr/bin' },
@@ -58,5 +65,12 @@ test('does not hang when a backend detection worker exits without a result', asy
   await assert.rejects(
     detectBackendSetups({ WorkerImpl: EmptyWorker }),
     /未返回结果/,
+  )
+})
+
+test('terminates backend detection after the overall timeout', async () => {
+  await assert.rejects(
+    detectBackendSetups({ WorkerImpl: HangingWorker, timeoutMs: 5 }),
+    /检测超时/,
   )
 })

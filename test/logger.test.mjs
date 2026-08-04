@@ -26,7 +26,7 @@ function records(path) {
   return readFileSync(path, 'utf8').trim().split('\n').map(JSON.parse)
 }
 
-test('writes standard structured JSONL with inherited correlation context', t => {
+test('writes standard structured JSONL with inherited correlation context', async t => {
   const directory = temporaryDirectory(t)
   const logger = createLogger({
     component: 'gateway',
@@ -41,6 +41,7 @@ test('writes standard structured JSONL with inherited correlation context', t =>
       'Realtime ready',
     )
   })
+  await logger.flush()
 
   const [entry] = records(resolve(directory, 'gateway.log'))
   assert.equal(entry.schema, LOG_SCHEMA)
@@ -58,7 +59,7 @@ test('writes standard structured JSONL with inherited correlation context', t =>
   }
 })
 
-test('redacts secrets recursively from fields, errors and free text', t => {
+test('redacts secrets recursively from fields, errors and free text', async t => {
   const directory = temporaryDirectory(t)
   const logger = createLogger({
     component: 'desktop',
@@ -77,6 +78,7 @@ test('redacts secrets recursively from fields, errors and free text', t => {
     },
     error,
   })
+  await logger.flush()
 
   const content = readFileSync(resolve(directory, 'desktop.log'), 'utf8')
   assert.doesNotMatch(content, /privatevalue|token-value|abc\.def|secretvalue/)
@@ -91,7 +93,7 @@ test('redacts secrets recursively from fields, errors and free text', t => {
   assert.equal(entry.error.authorization, '[REDACTED]')
 })
 
-test('honors log levels and rotates bounded files', t => {
+test('honors log levels and rotates bounded files', async t => {
   const directory = temporaryDirectory(t)
   const logger = createLogger({
     component: 'gateway',
@@ -108,6 +110,7 @@ test('honors log levels and rotates bounded files', t => {
   for (let index = 0; index < 30; index += 1) {
     logger.warn('rotation.test', { index, payload: 'x'.repeat(160) })
   }
+  await logger.flush()
 
   const files = readdirSync(directory).sort()
   assert.deepEqual(files, ['gateway.log', 'gateway.log.1', 'gateway.log.2'])
@@ -127,7 +130,7 @@ test('redaction tolerates circular diagnostic objects', () => {
   })
 })
 
-test('diagnostic fields cannot replace the standard log envelope', t => {
+test('diagnostic fields cannot replace the standard log envelope', async t => {
   const directory = temporaryDirectory(t)
   const logger = createLogger({
     component: 'gateway',
@@ -142,6 +145,7 @@ test('diagnostic fields cannot replace the standard log envelope', t => {
     event: 'other',
     pid: -1,
   })
+  await logger.flush()
 
   const [entry] = records(resolve(directory, 'gateway.log'))
   assert.equal(entry.schema, LOG_SCHEMA)
