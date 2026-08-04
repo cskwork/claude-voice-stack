@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { config } from '../core/config.mjs'
+import { isDirectiveScope } from '../core/memory-scopes.mjs'
 
 const PROMPT_FILE = 'PROMPT.md'
 const MAX_PROMPT_CHARS = 16000
@@ -70,7 +71,7 @@ export function loadFrontendPrompt() {
 }
 
 function directivesSection(memories = []) {
-  const rules = memories.filter(memory => clean(memory.scope) === 'rules')
+  const rules = memories.filter(memory => isDirectiveScope(clean(memory.scope)))
   if (!rules.length) return []
   return [
     '## User Directives',
@@ -82,7 +83,7 @@ function directivesSection(memories = []) {
 }
 
 function memorySection(memories = []) {
-  const records = memories.filter(memory => clean(memory.scope) !== 'rules')
+  const records = memories.filter(memory => !isDirectiveScope(clean(memory.scope)))
   if (!records.length) return []
   return [
     '## User Memory',

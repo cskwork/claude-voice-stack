@@ -7,6 +7,7 @@ import {
   RESPOND_AGENT_PERMISSION_TOOL_NAME,
 } from '../realtime-provider.mjs'
 import { currentTimeSnapshot } from '../../conversation/frontend-agent-context.mjs'
+import { isToolScope } from '../../core/memory-scopes.mjs'
 
 const SENSITIVE_MEMORY = /(?:pass(?:word)?|secret|api[_ -]?key|access[_ -]?token|credential|验证码|密码|密钥|令牌|\bsk-[a-z0-9_-]+)/i
 
@@ -732,7 +733,7 @@ export class ToolCallHandler {
       output = failure('memory_unavailable', '前台记忆功能当前不可用。')
     } else if (!['recall', 'remember', 'replace', 'forget'].includes(action)) {
       output = failure('invalid_memory_action', '没有识别出要执行的记忆操作。')
-    } else if (!['profile', 'long_term', 'rules', 'all'].includes(scope)) {
+    } else if (!isToolScope(scope)) {
       output = failure('invalid_memory_scope', '没有识别出记忆范围。')
     } else if (action === 'recall') {
       const memories = this.memoryStore.list(this.ownerId, { scope, query })

@@ -1,5 +1,6 @@
 import { agent } from './agent-client.mjs'
 import { parseCoordinatorPayload } from './acp-backend-session-utils.mjs'
+import { isDirectiveScope } from '../core/memory-scopes.mjs'
 
 const INLINE_SCHEMA = {
   anyOf: [
@@ -152,10 +153,10 @@ export function buildCoordinatorPrompt({
   delivery = {},
 }) {
   const rules = userMemories
-    .filter(memory => clean(memory.scope) === 'rules')
+    .filter(memory => isDirectiveScope(clean(memory.scope)))
     .map(memory => `- ${clean(memory.content)}`)
   const preferences = userMemories
-    .filter(memory => clean(memory.scope) !== 'rules')
+    .filter(memory => !isDirectiveScope(clean(memory.scope)))
     .slice(0, 20)
   const memories = preferences.length
     ? preferences.map(memory => (

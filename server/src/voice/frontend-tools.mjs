@@ -2,6 +2,7 @@ import {
   buildFrontendContext,
   loadFrontendPrompt,
 } from '../conversation/frontend-agent-context.mjs'
+import { TOOL_SCOPES } from '../core/memory-scopes.mjs'
 
 export const SPAWN_THINKING_TOOL_NAME = 'spawn_thinking'
 export const DELEGATE_TOOL_NAME = SPAWN_THINKING_TOOL_NAME
@@ -98,7 +99,7 @@ const userMemoryTool = {
         },
         scope: {
           type: 'string',
-          enum: ['profile', 'long_term', 'rules', 'all'],
+          enum: TOOL_SCOPES,
           description: '记忆范围。remember 和 replace 必须使用 profile、long_term 或 rules；recall 和 forget 可以使用 all。',
         },
         content: {

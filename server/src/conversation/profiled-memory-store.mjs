@@ -1,9 +1,13 @@
-const SCOPES = new Set(['profile', 'long_term', 'rules', 'all'])
+import { ALL_SCOPE, TOOL_SCOPES, storeForScope } from '../core/memory-scopes.mjs'
 
-function normalizeScope(value, fallback = 'all') {
+function normalizeScope(value, fallback = ALL_SCOPE) {
   const scope = String(value || fallback).trim().toLowerCase()
-  if (!SCOPES.has(scope)) throw new Error(`unsupported memory scope: ${scope}`)
+  if (!TOOL_SCOPES.includes(scope)) throw new Error(`unsupported memory scope: ${scope}`)
   return scope
+}
+
+function scopeTargetsStore(scope, store) {
+  return scope === ALL_SCOPE || storeForScope(scope) === store
 }
 
 export class ProfiledMemoryStore {
@@ -15,14 +19,14 @@ export class ProfiledMemoryStore {
   list(ownerId, options = {}) {
     const limit = Math.min(64, Math.max(1, Number(options.limit) || 20))
     const scope = normalizeScope(options.scope)
-    const profile = ['profile', 'all'].includes(scope)
+    const profile = scopeTargetsStore(scope, 'profile')
       ? this.userProfile?.list({ query: options.query }) || []
       : []
-    const texts = ['long_term', 'rules', 'all'].includes(scope)
+    const texts = scopeTargetsStore(scope, 'memory')
       ? this.memoryStore?.list(ownerId, {
           query: options.query,
           limit,
-          scope: scope === 'all' ? null : scope,
+          scope: scope === ALL_SCOPE ? null : scope,
         }) || []
       : []
     return [...profile, ...texts].slice(0, limit)
@@ -30,8 +34,8 @@ export class ProfiledMemoryStore {
 
   remember(ownerId, { scope, content } = {}) {
     const target = normalizeScope(scope, 'long_term')
-    if (target === 'all') throw new Error('remember requires a concrete memory scope')
-    if (target === 'profile') {
+    if (target === ALL_SCOPE) throw new Error('remember requires a concrete memory scope')
+    if (storeForScope(target) === 'profile') {
       if (!this.userProfile) throw new Error('user profile is unavailable')
       return this.userProfile.remember(content)
     }
@@ -45,8 +49,8 @@ export class ProfiledMemoryStore {
     content,
   } = {}) {
     const target = normalizeScope(scope)
-    if (target === 'all') throw new Error('replace requires a concrete memory scope')
-    if (target === 'profile') {
+    if (target === ALL_SCOPE) throw new Error('replace requires a concrete memory scope')
+    if (storeForScope(target) === 'profile') {
       if (!this.userProfile) throw new Error('user profile is unavailable')
       return this.userProfile.replace({ ids, content })
     }
@@ -61,14 +65,14 @@ export class ProfiledMemoryStore {
   } = {}) {
     const target = normalizeScope(scope)
     let removed = 0
-    if (['profile', 'all'].includes(target)) {
+    if (scopeTargetsStore(target, 'profile')) {
       removed += this.userProfile?.forget({ query, all }) || 0
     }
-    if (['long_term', 'rules', 'all'].includes(target)) {
+    if (scopeTargetsStore(target, 'memory')) {
       removed += this.memoryStore?.forget(ownerId, {
         query,
         all,
-        scope: target === 'all' ? null : target,
+        scope: target === ALL_SCOPE ? null : target,
       }) || 0
     }
     return removed

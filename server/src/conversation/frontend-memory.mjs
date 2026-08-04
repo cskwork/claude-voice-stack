@@ -6,13 +6,17 @@ import {
 } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { dirname } from 'node:path'
+import { MEMORY_STORE_SCOPES, scopeMeta } from '../core/memory-scopes.mjs'
 
-const MAX_ENTRIES_PER_USER = 32
 const MAX_KEY_CHARS = 64
-const MAX_VALUE_CHARS = 500
-const MAX_RULE_ENTRIES = 16
-const MAX_RULE_CHARS = 200
-const SCOPES = new Set(['long_term', 'rules'])
+const MEMORY_STORE_SCOPE_SET = new Set(MEMORY_STORE_SCOPES)
+const MAX_TOTAL_ENTRIES = MEMORY_STORE_SCOPES.reduce(
+  (total, scope) => total + scopeMeta(scope).maxEntries,
+  0,
+)
+const MAX_QUERY_CHARS = Math.max(
+  ...MEMORY_STORE_SCOPES.map(scope => scopeMeta(scope).maxChars),
+)
 
 function clean(value, maxChars) {
   return [...String(value || '').replace(/\s+/g, ' ').trim()]
@@ -22,18 +26,37 @@ function clean(value, maxChars) {
 
 function normalizeScope(value, fallback = 'long_term') {
   const scope = String(value || fallback).trim().toLowerCase()
-  if (!SCOPES.has(scope)) throw new Error(`unsupported memory scope: ${scope}`)
+  if (!MEMORY_STORE_SCOPE_SET.has(scope)) throw new Error(`unsupported memory scope: ${scope}`)
   return scope
 }
 
 function entryScope(entry) {
-  return SCOPES.has(entry?.scope) ? entry.scope : 'long_term'
+  return MEMORY_STORE_SCOPE_SET.has(entry?.scope) ? entry.scope : 'long_term'
 }
 
 function scopeLimits(scope) {
-  return scope === 'rules'
-    ? { maxEntries: MAX_RULE_ENTRIES, maxChars: MAX_RULE_CHARS, label: '长期约定' }
-    : { maxEntries: MAX_ENTRIES_PER_USER, maxChars: MAX_VALUE_CHARS, label: '前台记忆' }
+  const meta = scopeMeta(scope)
+  return {
+    maxEntries: meta.maxEntries,
+    maxChars: meta.maxChars,
+    label: meta.label,
+  }
+}
+
+// Enforce the per-scope entry cap. The check applies whenever the write adds
+// an entry to the target scope; an in-place update of an entry already in that
+// scope keeps the count unchanged and is always allowed. Counting by scope
+// (not by key existence) prevents cross-scope content collisions from
+// bypassing the cap.
+function assertScopeCapacity(entries, safeKey, targetScope, limits) {
+  const existing = entries.get(safeKey)
+  if (existing && entryScope(existing) === targetScope) return
+  const scopeCount = [...entries.values()].filter(entry => (
+    entryScope(entry) === targetScope
+  )).length
+  if (scopeCount >= limits.maxEntries) {
+    throw new Error(`每个用户最多保存 ${limits.maxEntries} 条${limits.label}`)
+  }
 }
 
 function memoryId(value) {
@@ -97,7 +120,7 @@ export class FrontendMemoryStore {
       if (!entries || typeof entries !== 'object') return
       const normalized = new Map()
       Object.entries(entries)
-        .slice(0, MAX_ENTRIES_PER_USER + MAX_RULE_ENTRIES)
+        .slice(0, MAX_TOTAL_ENTRIES)
         .forEach(([key, entry]) => {
           const safeKey = clean(key, MAX_KEY_CHARS)
           const scope = entryScope(entry)
@@ -214,7 +237,7 @@ export class FrontendMemoryStore {
     this.pruneOwners()
     const safeOwnerId = String(ownerId)
     this.touch(safeOwnerId)
-    const needle = clean(query, MAX_VALUE_CHARS).toLocaleLowerCase()
+    const needle = clean(query, MAX_QUERY_CHARS).toLocaleLowerCase()
     const filteredScope = scope ? normalizeScope(scope) : null
     return [...(this.users.get(safeOwnerId) || new Map()).entries()]
       .filter(([key, entry]) => (
@@ -246,14 +269,7 @@ export class FrontendMemoryStore {
       entry.value.toLocaleLowerCase() === safeValue.toLocaleLowerCase()
     ))?.[0]
     const safeKey = existingKey || memoryId(safeValue).slice(0, MAX_KEY_CHARS)
-    if (!entries.has(safeKey)) {
-      const scopeCount = [...entries.values()].filter(entry => (
-        entryScope(entry) === targetScope
-      )).length
-      if (scopeCount >= limits.maxEntries) {
-        throw new Error(`每个用户最多保存 ${limits.maxEntries} 条${limits.label}`)
-      }
-    }
+    assertScopeCapacity(entries, safeKey, targetScope, limits)
     const previousEntry = entries.get(safeKey)
     const previousAccess = this.ownerAccess.get(safeOwnerId)
     const entry = { value: safeValue, scope: targetScope, updatedAt: this.now() }
@@ -299,16 +315,13 @@ export class FrontendMemoryStore {
       entry.value.toLocaleLowerCase() === safeValue.toLocaleLowerCase()
     ))?.[0]
     const safeKey = existingKey || memoryId(safeValue).slice(0, MAX_KEY_CHARS)
-    if (!entries.has(safeKey)) {
-      const scopeCount = [...entries.values()].filter(entry => (
-        entryScope(entry) === targetScope
-      )).length
-      if (scopeCount >= limits.maxEntries) {
-        this.users.set(safeOwnerId, previousEntries)
-        if (previousAccess === undefined) this.ownerAccess.delete(safeOwnerId)
-        else this.ownerAccess.set(safeOwnerId, previousAccess)
-        throw new Error(`每个用户最多保存 ${limits.maxEntries} 条${limits.label}`)
-      }
+    try {
+      assertScopeCapacity(entries, safeKey, targetScope, limits)
+    } catch (error) {
+      this.users.set(safeOwnerId, previousEntries)
+      if (previousAccess === undefined) this.ownerAccess.delete(safeOwnerId)
+      else this.ownerAccess.set(safeOwnerId, previousAccess)
+      throw error
     }
     const entry = { value: safeValue, scope: targetScope, updatedAt: this.now() }
     entries.set(safeKey, entry)
@@ -327,7 +340,7 @@ export class FrontendMemoryStore {
 
   forget(ownerId, { query = '', all = false, scope = null } = {}) {
     const safeOwnerId = String(ownerId)
-    const needle = clean(query, MAX_VALUE_CHARS).toLocaleLowerCase()
+    const needle = clean(query, MAX_QUERY_CHARS).toLocaleLowerCase()
     const filteredScope = scope ? normalizeScope(scope) : null
     const entries = this.users.get(safeOwnerId)
     if (!entries) return 0

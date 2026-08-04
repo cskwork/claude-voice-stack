@@ -134,6 +134,46 @@ test('moves a memory between scopes through replace', () => {
   assert.equal(store.list('user-one', { scope: 'rules' })[0].id, result.memory.id)
 })
 
+test('enforces the rules cap when content collides with another scope', () => {
+  const store = new FrontendMemoryStore()
+  for (let index = 0; index < 16; index += 1) {
+    store.remember('user-one', `rule-${index}`, { scope: 'rules' })
+  }
+  const longTerm = store.remember('user-one', '跨作用域的同款内容')
+
+  // remember: identical content already lives in long_term, so the write
+  // would migrate that entry into the already full rules scope.
+  assert.throws(
+    () => store.remember('user-one', '跨作用域的同款内容', { scope: 'rules' }),
+    /最多保存 16 条长期约定/,
+  )
+  assert.equal(store.list('user-one', { scope: 'rules' }).length, 16)
+  assert.equal(store.list('user-one', { scope: 'long_term' })[0].id, longTerm.id)
+
+  // replace: the surviving collision entry would be migrated into the full
+  // rules scope; the store must reject the write and roll back.
+  const other = store.remember('user-one', '另一条普通记忆')
+  assert.throws(
+    () => store.replace('user-one', {
+      ids: [other.id],
+      content: '跨作用域的同款内容',
+      scope: 'rules',
+    }),
+    /最多保存 16 条长期约定/,
+  )
+  assert.equal(store.list('user-one', { scope: 'rules' }).length, 16)
+  assert.equal(store.list('user-one', { scope: 'long_term' }).length, 2)
+
+  // An in-place update of an existing rule stays allowed at the cap.
+  const existingRule = store.list('user-one', { scope: 'rules' })[0]
+  assert.doesNotThrow(() => store.replace('user-one', {
+    ids: [existingRule.id],
+    content: '改写后的规则措辞',
+    scope: 'rules',
+  }))
+  assert.equal(store.list('user-one', { scope: 'rules' }).length, 16)
+})
+
 test('forgets by scope without touching the other scopes', () => {
   const store = new FrontendMemoryStore()
   store.remember('user-one', '叫我阿豪', { scope: 'rules' })
