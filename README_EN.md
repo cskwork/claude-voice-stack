@@ -25,6 +25,8 @@ tells you:
 
 ## News
 
+- **2026-08-04 · New**
+  🧠 Adds personalized frontend capabilities with standing user directives and named notes. Now on the main branch and available from source.
 - **2026-08-03 · [v1.3.0](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.3.0)**
   🎙️ Adds a [🤗 speech-to-speech](https://github.com/huggingface/speech-to-speech) frontend for a locally deployed VAD–STT–LLM–TTS pipeline.
 - **2026-08-01 · [v1.2.0](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.2.0)**

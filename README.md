@@ -20,6 +20,8 @@
 
 ## News
 
+- **2026-08-04 · New**
+  🧠 新增个性化前台能力，支持常驻用户规则与命名笔记，已合入主分支，可从源码体验。
 - **2026-08-03 · [v1.3.0](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.3.0)**
   🎙️ 新增 [🤗 speech-to-speech](https://github.com/huggingface/speech-to-speech) 前台接入，支持本地部署 VAD、STT、LLM 与 TTS 全链路。
 - **2026-08-01 · [v1.2.0](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.2.0)**
