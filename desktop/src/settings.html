@@ -142,11 +142,15 @@
               <h2 id="backend-settings-title">后台 Agent</h2>
             </div>
             <div class="settings-card">
-              <div class="setting-row">
-                <label for="agent-protocol">后台 Agent</label>
-                <div class="field-with-action">
-                  <!-- 选项由 settings.js 按本机检测结果动态渲染 -->
-                  <select id="agent-protocol"></select>
+              <div class="setting-row backend-list-row">
+                <span class="setting-label" id="backend-list-label">后台 Agent</span>
+                <div class="field-with-action backend-list-action">
+                  <!-- 行由 settings.js 按本机检测结果动态渲染 -->
+                  <div
+                    id="backend-list"
+                    role="radiogroup"
+                    aria-labelledby="backend-list-label"
+                  ></div>
                   <button
                     id="refresh-backends"
                     class="link-button"
@@ -188,8 +192,8 @@
               </div>
 
               <div class="setting-row">
-                <label for="auto-sleep-seconds">自动休眠</label>
-                <select id="auto-sleep-seconds">
+                <label for="auto-hide-seconds">自动隐藏</label>
+                <select id="auto-hide-seconds">
                   <option value="60">无交互 1 分钟</option>
                   <option value="120">无交互 2 分钟</option>
                   <option value="300">无交互 5 分钟</option>
@@ -198,7 +202,7 @@
               </div>
 
               <div class="setting-row">
-                <label for="wake-shortcut">唤醒快捷键</label>
+                <label for="wake-shortcut">显示快捷键</label>
                 <div class="shortcut-field">
                   <input
                     id="wake-shortcut"
@@ -210,7 +214,7 @@
                     class="shortcut-recorder"
                     type="button"
                     title="点击后按下新的快捷键"
-                  >⌘ ⇧ Space</button>
+                  >⇧ ⌘ Space</button>
                   <button
                     id="reset-wake-shortcut"
                     class="shortcut-reset"

@@ -352,6 +352,13 @@ export function attachRealtimeGateway(server, {
       coordinatorAvailable,
       respondPermission,
       permissionPolicy,
+      requestClientState: state => {
+        if (!clientContext.states?.includes(state)) return
+        send(ws, {
+          type: GatewayServerEvent.CLIENT_STATE,
+          state,
+        })
+      },
     })
     const currentTurn = () => ({
       turnId,
@@ -1463,6 +1470,11 @@ export function attachRealtimeGateway(server, {
           locale: event.locale,
           workingDirectory: event.workingDirectory,
         })
+        clientContext.states = (
+          descriptor.type === 'desktop'
+          && Array.isArray(event.clientStates)
+          && event.clientStates.includes('sleeping')
+        ) ? ['sleeping'] : []
         frontend?.updateAgentContext({
           client: clientContext,
           textOnly: textOnlySession,

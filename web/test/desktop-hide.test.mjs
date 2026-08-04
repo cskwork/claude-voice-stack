@@ -1,17 +1,18 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
-  desktopAutoSleepSeconds,
-  desktopCanSleep,
-  desktopSleepDeadline,
+  desktopAutoHideSeconds,
+  desktopCanHide,
+  desktopHideDeadline,
   desktopWorkSettled,
-} from '../src/desktop-sleep.js'
+} from '../src/desktop-hide.js'
 
-test('uses a 120 second desktop sleep default and supports never', () => {
-  assert.equal(desktopAutoSleepSeconds(''), 120)
-  assert.equal(desktopAutoSleepSeconds('?autoSleepSeconds=300'), 300)
-  assert.equal(desktopAutoSleepSeconds('?autoSleepSeconds=0'), 0)
-  assert.equal(desktopAutoSleepSeconds('?autoSleepSeconds=5'), 120)
+test('uses a 120 second desktop hide default and supports never', () => {
+  assert.equal(desktopAutoHideSeconds(''), 120)
+  assert.equal(desktopAutoHideSeconds('?autoHideSeconds=300'), 300)
+  assert.equal(desktopAutoHideSeconds('?autoHideSeconds=0'), 0)
+  assert.equal(desktopAutoHideSeconds('?autoHideSeconds=5'), 120)
+  assert.equal(desktopAutoHideSeconds('?autoSleepSeconds=300'), 300)
 })
 
 test('waits for tasks, permission prompts, transcripts, and voice playback', () => {
@@ -25,16 +26,16 @@ test('waits for tasks, permission prompts, transcripts, and voice playback', () 
   assert.equal(desktopWorkSettled({ voiceState: 'listening' }), false)
 })
 
-test('only sleeps from a healthy active desktop', () => {
-  assert.equal(desktopCanSleep({
+test('only hides a healthy active desktop', () => {
+  assert.equal(desktopCanHide({
     settled: true,
     connectionState: 'connected',
   }), true)
-  assert.equal(desktopCanSleep({
+  assert.equal(desktopCanHide({
     settled: true,
     connectionState: 'unavailable',
   }), false)
-  assert.equal(desktopCanSleep({
+  assert.equal(desktopCanHide({
     settled: true,
     connectionState: 'connected',
     lifecycle: 'waking',
@@ -42,7 +43,7 @@ test('only sleeps from a healthy active desktop', () => {
 })
 
 test('starts the timeout after both interaction and work have ended', () => {
-  assert.equal(desktopSleepDeadline({
+  assert.equal(desktopHideDeadline({
     lastInteractionAt: 1_000,
     workSettledAt: 10_000,
     timeoutSeconds: 120,

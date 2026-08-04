@@ -11,7 +11,6 @@ import {
   discardUserTranscript,
   finalAssistantContent,
   insertByTurn,
-  normalizeTranscript,
   upsertUserTranscript,
 } from './message-order.js'
 import MessageContent from './MessageContent.jsx'
@@ -32,11 +31,11 @@ import useRealtimeVoice, {
 import { requestedSessionId } from './session.js'
 import { initialVoiceEnabled } from './voice-defaults.js'
 import {
-  desktopAutoSleepSeconds,
-  desktopCanSleep,
-  desktopSleepDeadline,
+  desktopAutoHideSeconds,
+  desktopCanHide,
+  desktopHideDeadline,
   desktopWorkSettled,
-} from './desktop-sleep.js'
+} from './desktop-hide.js'
 
 const desktopOrbMode = (
   new URLSearchParams(window.location.search).get('desktop') === 'orb'
@@ -49,7 +48,7 @@ const orbStyle = (
     ? 'goo'
     : 'fluid'
 )
-const autoSleepSeconds = desktopAutoSleepSeconds(window.location.search)
+const autoHideSeconds = desktopAutoHideSeconds(window.location.search)
 
 function getSessionId() {
   const requested = requestedSessionId(window.location.search)
@@ -72,8 +71,8 @@ function labelFor(state) {
     speaking: '正在说',
     connecting: '正在连接语音前台',
     occupied: '其他入口正在使用',
-    sleeping: '已休眠',
-    waking: '正在唤醒',
+    hidden: '已隐藏',
+    waking: '正在显示',
   }[state] || state
 }
 
@@ -344,6 +343,15 @@ export default function App() {
           ? { ...task, phase: 'disconnected' }
           : task
       )))
+    }
+    if (
+      event.type === 'client.state'
+      && event.state === 'sleeping'
+      && desktopOrbMode
+    ) {
+      window.qwenAudioAgentDesktop?.enterHide()
+        .then(lifecycle => setDesktopLifecycle(lifecycle.state))
+        .catch(() => {})
     }
     if (event.type === 'gateway.connected') {
       fetch(`api/tasks?sessionId=${encodeURIComponent(sessionId)}`)
@@ -624,7 +632,6 @@ export default function App() {
       )))
     }
   }, [
-    backend.label,
     sessionId,
     updateTimelineItem,
     updateUserTranscript,
@@ -637,11 +644,12 @@ export default function App() {
   const voice = useRealtimeVoice({
     sessionId,
     enabled: voiceEnabled,
-    suspended: desktopOrbMode && desktopLifecycle === 'sleeping',
+    suspended: desktopOrbMode && desktopLifecycle === 'hidden',
     outputMuted: false,
     inputOnlyMute: desktopOrbMode,
     clientType: desktopOrbMode ? 'desktop' : 'web',
     clientLabel: desktopOrbMode ? '桌面端' : 'WebUI',
+    clientStates: desktopOrbMode ? ['sleeping'] : [],
     takeover: takeoverRequested,
     realtimeProvider,
     onEvent: onRealtimeEvent,
@@ -657,8 +665,8 @@ export default function App() {
   const voiceConnectionError = (
     !lifecycleTransition && voice.connectionState === 'unavailable'
   )
-  const visualVoiceState = desktopLifecycle === 'sleeping'
-    ? 'sleeping'
+  const visualVoiceState = desktopLifecycle === 'hidden'
+    ? 'hidden'
     : desktopLifecycle === 'waking'
       ? 'waking'
       : voice.ownership.state === 'busy'
@@ -696,8 +704,8 @@ export default function App() {
       if (!lifecycle?.state) return
       setDesktopLifecycle(lifecycle.state)
       if (lifecycle.reason === 'activity') noteInteraction()
-      if (lifecycle.state === 'sleeping') setActivity('已休眠')
-      if (lifecycle.state === 'waking') setActivity('正在恢复实时语音')
+      if (lifecycle.state === 'hidden') setActivity('已隐藏')
+      if (lifecycle.state === 'waking') setActivity('正在显示悬浮球')
       if (lifecycle.state === 'active' && lifecycle.reason === 'ready') {
         setActivity('待命')
         noteInteraction()
@@ -732,20 +740,20 @@ export default function App() {
   ])
 
   useEffect(() => {
-    if (!desktopOrbMode || autoSleepSeconds === 0) return undefined
-    if (!desktopCanSleep({
+    if (!desktopOrbMode || autoHideSeconds === 0) return undefined
+    if (!desktopCanHide({
       settled: workSettled,
       connectionState: voice.connectionState,
       visualError: voice.visualError,
       lifecycle: desktopLifecycle,
     })) return undefined
-    const deadline = desktopSleepDeadline({
+    const deadline = desktopHideDeadline({
       lastInteractionAt,
       workSettledAt: workSettledAtRef.current,
-      timeoutSeconds: autoSleepSeconds,
+      timeoutSeconds: autoHideSeconds,
     })
     const timer = setTimeout(() => {
-      window.qwenAudioAgentDesktop?.enterSleep()
+      window.qwenAudioAgentDesktop?.enterHide()
         .then(lifecycle => setDesktopLifecycle(lifecycle.state))
         .catch(() => {})
     }, Math.max(0, deadline - Date.now()))
@@ -848,10 +856,6 @@ export default function App() {
       suppressOrbClick.current = false
       return
     }
-    if (desktopOrbMode && desktopLifecycle === 'sleeping') {
-      window.qwenAudioAgentDesktop?.wake()
-      return
-    }
     if (voice.state === 'speaking') {
       voice.interrupt()
       return
@@ -876,10 +880,8 @@ export default function App() {
         })}
         aria-label={`qwen-audio · ${voice.visualError || voiceConnectionError ? '连接异常' : labelFor(visualVoiceState)}`}
         title={
-          desktopLifecycle === 'sleeping'
-          ? '已休眠 · 按 ⌘/Ctrl + Shift + Space 唤醒'
-          : desktopLifecycle === 'waking'
-            ? '正在恢复实时语音'
+          desktopLifecycle === 'waking'
+            ? '正在显示悬浮球'
             : voice.error
           || (visualVoiceState === 'occupied' && ownershipLabel
             ? `${ownershipLabel}正在使用语音`
@@ -892,15 +894,6 @@ export default function App() {
         onPointerCancel={endOrbDrag}
       >
         <DesktopFluidOrb style={orbStyle} />
-        {desktopLifecycle === 'sleeping' && <span
-          className="desktop-sleep-badge"
-          aria-hidden="true"
-        >
-          <svg viewBox="0 0 20 20">
-            <path d="M15.7 12.7A6.7 6.7 0 0 1 7.3 4.3a6.7 6.7 0 1 0 8.4 8.4Z" />
-          </svg>
-          <b>Zz</b>
-        </span>}
         <nav
           className="desktop-orb-controls"
           aria-label="语音控制"

@@ -19,7 +19,7 @@ test('reads desktop-owned settings with friendly defaults', () => {
   assert.deepEqual(parseSettings(''), {
     gatewayUrl: 'http://127.0.0.1:3101',
     orbStyle: 'fluid',
-    autoSleepSeconds: 120,
+    autoHideSeconds: 120,
     dashscopeApiKey: '',
     ...REALTIME_DEFAULTS,
     agentProtocol: 'none',
@@ -35,7 +35,7 @@ test('shows effective client settings when user config is empty', () => {
   }), {
     gatewayUrl: 'http://127.0.0.1:3200',
     orbStyle: 'goo',
-    autoSleepSeconds: 120,
+    autoHideSeconds: 120,
     dashscopeApiKey: 'sk-from-env',
     ...REALTIME_DEFAULTS,
     agentProtocol: 'none',
@@ -55,7 +55,7 @@ test('updates client settings without changing Gateway-owned configuration', () 
   ].join('\n'), {
     gatewayUrl: 'http://127.0.0.1:3200',
     orbStyle: 'goo',
-    autoSleepSeconds: 120,
+    autoHideSeconds: 120,
   })
 
   assert.match(content, /CUSTOM_SETTING=keep/)
@@ -68,7 +68,7 @@ test('updates client settings without changing Gateway-owned configuration', () 
   assert.deepEqual(parseSettings(content), {
     gatewayUrl: 'http://127.0.0.1:3200',
     orbStyle: 'goo',
-    autoSleepSeconds: 120,
+    autoHideSeconds: 120,
     dashscopeApiKey: 'secret',
     ...REALTIME_DEFAULTS,
     agentProtocol: 'qoder',
@@ -95,7 +95,7 @@ test('keeps the stored DashScope key when the field is not part of the update', 
   const content = updateSettingsContent('DASHSCOPE_API_KEY=secret\n', {
     gatewayUrl: 'http://127.0.0.1:3101',
     orbStyle: 'fluid',
-    autoSleepSeconds: 120,
+    autoHideSeconds: 120,
   })
 
   assert.match(content, /DASHSCOPE_API_KEY=secret/)
@@ -121,7 +121,7 @@ test('an explicitly empty key and backend override stale process values', () => 
   }), {
     gatewayUrl: 'http://127.0.0.1:3101',
     orbStyle: 'fluid',
-    autoSleepSeconds: 120,
+    autoHideSeconds: 120,
     dashscopeApiKey: '',
     ...REALTIME_DEFAULTS,
     agentProtocol: 'none',
@@ -142,16 +142,19 @@ test('updates the selected backend while preserving unrelated configuration', ()
   assert.match(content, /CUSTOM_SETTING=keep/)
 })
 
-test('reads, updates, and disables desktop auto sleep', () => {
-  const content = updateSettingsContent('', { autoSleepSeconds: 300 })
-  assert.match(content, /QWEN_AUDIO_DESKTOP_AUTO_SLEEP_SECONDS=300/)
-  assert.equal(parseSettings(content).autoSleepSeconds, 300)
+test('reads, updates, and disables desktop auto hide', () => {
+  const content = updateSettingsContent('', { autoHideSeconds: 300 })
+  assert.match(content, /QWEN_AUDIO_DESKTOP_AUTO_HIDE_SECONDS=300/)
+  assert.equal(parseSettings(content).autoHideSeconds, 300)
   assert.equal(parseSettings(
-    'QWEN_AUDIO_DESKTOP_AUTO_SLEEP_SECONDS=0\n',
-  ).autoSleepSeconds, 0)
+    'QWEN_AUDIO_DESKTOP_AUTO_HIDE_SECONDS=0\n',
+  ).autoHideSeconds, 0)
   assert.equal(parseSettings(
-    'QWEN_AUDIO_DESKTOP_AUTO_SLEEP_SECONDS=5\n',
-  ).autoSleepSeconds, 120)
+    'QWEN_AUDIO_DESKTOP_AUTO_HIDE_SECONDS=5\n',
+  ).autoHideSeconds, 120)
+  assert.equal(parseSettings(
+    'QWEN_AUDIO_DESKTOP_AUTO_SLEEP_SECONDS=300\n',
+  ).autoHideSeconds, 300)
 })
 
 test('reads and updates a supported desktop wake shortcut', () => {
@@ -178,6 +181,12 @@ test('reads and updates a supported desktop wake shortcut', () => {
   )
   assert.equal(
     parseSettings('QWEN_AUDIO_DESKTOP_WAKE_SHORTCUT=invalid\n').wakeShortcut,
+    'CommandOrControl+Shift+Space',
+  )
+  assert.equal(
+    parseSettings(
+      'QWEN_AUDIO_DESKTOP_WAKE_SHORTCUT=CommandOrControl+Space\n',
+    ).wakeShortcut,
     'CommandOrControl+Shift+Space',
   )
 })
@@ -320,16 +329,19 @@ test('desktop settings expose the embedded voice service without editing backend
   assert.match(html, /Speech-to-Speech/)
   assert.match(html, /Hugging Face/)
   assert.match(html, /id="get-api-key"/)
-  assert.match(html, /id="agent-protocol"/)
   assert.match(html, /id="realtime-model"/)
   assert.match(html, /id="backend-model"/)
-  assert.match(html, /id="auto-sleep-seconds"/)
+  assert.match(html, /id="auto-hide-seconds"/)
   assert.match(html, /id="wake-shortcut"/)
   assert.match(html, /id="record-wake-shortcut"/)
   assert.match(html, /id="reset-wake-shortcut"/)
+  assert.match(html, />自动隐藏</)
+  assert.match(html, />显示快捷键</)
+  assert.doesNotMatch(html, />自动休眠</)
   assert.doesNotMatch(html, />全局快捷键</)
-  // 后台 Agent 选项按本机可用性检测结果动态渲染，HTML 里只保留空容器
-  assert.match(html, /<select id="agent-protocol"><\/select>/)
+  // 后台 Agent 列表按本机可用性检测结果动态渲染，HTML 里只保留空容器
+  assert.match(html, /<div\s+id="backend-list"/)
+  assert.match(html, /role="radiogroup"/)
   assert.match(html, /id="refresh-backends"/)
   // 版本与自动更新状态由主进程推送渲染
   assert.match(html, /id="updater-status"/)

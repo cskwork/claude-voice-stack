@@ -20,7 +20,9 @@ export {
   USER_MEMORY_TOOL_NAME,
   NOTES_TOOL_NAME,
   RESPOND_AGENT_PERMISSION_TOOL_NAME,
+  ENTER_SLEEP_TOOL_NAME,
   TOOLS,
+  frontendTools,
   buildFrontendInstructions,
 } from './frontend-tools.mjs'
 

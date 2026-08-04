@@ -3,6 +3,7 @@ import {
   DELEGATE_TOOL_NAME,
   GET_AGENT_TASK_STATUS_TOOL_NAME,
   GET_CURRENT_TIME_TOOL_NAME,
+  ENTER_SLEEP_TOOL_NAME,
   NOTES_TOOL_NAME,
   USER_MEMORY_TOOL_NAME,
   RESPOND_AGENT_PERMISSION_TOOL_NAME,
@@ -43,6 +44,7 @@ export class ToolCallHandler {
     onMemoryChanged = () => {},
     respondPermission,
     permissionPolicy,
+    requestClientState = () => {},
   }) {
     this.taskManager = taskManager
     this.ownerId = ownerId
@@ -60,6 +62,7 @@ export class ToolCallHandler {
     this.onMemoryChanged = onMemoryChanged
     this.respondPermission = respondPermission
     this.permissionPolicy = permissionPolicy
+    this.requestClientState = requestClientState
     this.gatewayApprovedPermissions = new Set()
     this.processedCalls = new Set()
     this.turnTasks = new Map()
@@ -223,11 +226,11 @@ export class ToolCallHandler {
       return
     }
     if (toolName === USER_MEMORY_TOOL_NAME) {
-      await this.userMemory(callId, turnId, generation, args)
+      await this.userMemory(callId, turnId, args)
       return
     }
     if (toolName === NOTES_TOOL_NAME) {
-      await this.notes(callId, turnId, generation, args)
+      await this.notes(callId, turnId, args)
       return
     }
     if (toolName === CANCEL_AGENT_TASK_TOOL_NAME) {
@@ -240,6 +243,10 @@ export class ToolCallHandler {
     }
     if (toolName === RESPOND_AGENT_PERMISSION_TOOL_NAME) {
       await this.respondAgentPermission(callId, turnId, args)
+      return
+    }
+    if (toolName === ENTER_SLEEP_TOOL_NAME) {
+      await this.enterSleep(callId, turnId)
       return
     }
     if (toolName !== DELEGATE_TOOL_NAME) {
@@ -435,6 +442,26 @@ export class ToolCallHandler {
         },
       },
     )
+  }
+
+  async enterSleep(callId, turnId) {
+    const supported = this.getClientContext()?.states?.includes('sleeping')
+    if (!supported) {
+      await this.sendOutput(
+        callId,
+        failure('unsupported_client_state', '当前入口不支持休眠。'),
+        turnId,
+      )
+      return
+    }
+    await this.sendOutput(
+      callId,
+      { status: 'sleeping' },
+      turnId,
+      null,
+      { createResponse: false },
+    )
+    this.requestClientState('sleeping')
   }
 
   notifyMemoryChanged() {
@@ -726,7 +753,7 @@ export class ToolCallHandler {
     }, turnId)
   }
 
-  async userMemory(callId, turnId, generation, args) {
+  async userMemory(callId, turnId, args) {
     const action = String(args.action || '').trim().toLowerCase()
     const scope = String(args.scope || '').trim().toLowerCase()
     const content = String(args.content || '').trim()
@@ -793,28 +820,7 @@ export class ToolCallHandler {
         }
       }
     } else {
-      const transcript = await this.transcripts.transcript(turnId)
-      if (this.isStale(turnId, generation)) {
-        await this.closeStaleCall(callId, turnId)
-        return
-      }
-      const explicit = /(?:忘|删除|清空|别再记|不要记|\bforget\b|\bdelete\b|\bclear\b)/i
-        .test(transcript)
-      const explicitAll = /(?:清空|全部.*(?:忘|删除)|(?:忘|删除).*全部|所有.*记忆|\bforget\s+all\b|\bclear\s+all\b)/i
-        .test(transcript)
-      if (!explicit) {
-        output = failure(
-          'explicit_consent_required',
-          '没有听到明确的遗忘请求，因此没有删除记忆。',
-          { status: 'rejected' },
-        )
-      } else if (all && !explicitAll) {
-        output = failure(
-          'clear_all_consent_required',
-          '用户没有明确要求清空全部记忆，因此没有删除。',
-          { status: 'rejected' },
-        )
-      } else if (!all && !query) {
+      if (!all && !query) {
         output = failure('missing_memory_query', '需要明确要遗忘的内容。')
       } else {
         try {
@@ -837,7 +843,7 @@ export class ToolCallHandler {
     await this.sendOutput(callId, output, turnId)
   }
 
-  async notes(callId, turnId, generation, args) {
+  async notes(callId, turnId, args) {
     const action = String(args.action || '').trim().toLowerCase()
     const listName = String(args.list || '').trim()
     const items = Array.isArray(args.items)
@@ -879,29 +885,14 @@ export class ToolCallHandler {
         }
       }
     } else {
-      const transcript = await this.transcripts.transcript(turnId)
-      if (this.isStale(turnId, generation)) {
-        await this.closeStaleCall(callId, turnId)
-        return
-      }
-      const explicit = /(?:清空|删除清单|删掉清单|整个(?:删除|清空)|不要(?:这个|这份|这条)?清单|清单(?:不要了|删掉|删除|删了|清空|扔掉|丢掉)|\b(?:clear|delete|drop)\b)/i
-        .test(transcript)
-      if (!explicit) {
+      try {
+        output = this.notesStore[action](this.ownerId, listName)
+      } catch {
         output = failure(
-          'explicit_consent_required',
-          '没有听到明确的清空或删除请求，因此没有操作清单。',
-          { status: 'rejected' },
+          'notes_write_failed',
+          '暂时无法更新这条清单，请稍后再试。',
+          { retryable: true },
         )
-      } else {
-        try {
-          output = this.notesStore[action](this.ownerId, listName)
-        } catch {
-          output = failure(
-            'notes_write_failed',
-            '暂时无法更新这条清单，请稍后再试。',
-            { retryable: true },
-          )
-        }
       }
     }
     await this.sendOutput(callId, output, turnId)

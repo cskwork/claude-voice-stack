@@ -20,6 +20,8 @@
 
 ## News
 
+- **2026-08-04 · [v1.4.1](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.4.1)**
+  🧰 新增后台 Agent 一键安装；桌面悬浮球支持自动隐藏与快捷键唤回。
 - **2026-08-04 · [v1.4.0](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.4.0)**
   🧠 新增个性化规则与清单管理；桌面版支持自动休眠与快捷键唤醒。
 - **2026-08-03 · [v1.3.0](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.3.0)**
@@ -70,14 +72,14 @@ https://github.com/user-attachments/assets/42022655-36d1-46b2-9c26-ff0765284000
 | 后台 Agent | 接入方式 | 接入准备 | 推荐指数 |
 | --- | --- | --- | --- |
 | 无 | N/A | 仅前台模式，无需配置 | ★★★★★ |
-| OpenCode | 原生 ACP | 支持自动安装和百炼配置 | ★★★★★ |
-| OpenClaw | 内置 ACP 桥接 | 支持自动安装和百炼配置 | ★★★★★ |
-| Qoder | 原生 ACP | 用户自行安装和配置 | ★★★★★ |
-| Kimi Code | 原生 ACP | 用户自行安装和配置 | ★★★★★ |
-| Hermes | 原生 ACP | 用户自行安装和配置 | ★★★★☆ |
-| CodeBuddy | 原生 ACP | 用户自行安装和配置 | ★★★★☆ |
-| Codex | 外部 ACP 适配 | 用户自行安装和配置 | ★★★★☆ |
-| Claude Code | 外部 ACP 适配 | 用户自行安装和配置 | ★★★★☆ |
+| OpenCode | 原生 ACP | 支持一键安装和百炼配置 | ★★★★★ |
+| OpenClaw | 内置 ACP 桥接 | 支持一键安装和百炼配置 | ★★★★★ |
+| Qoder | 原生 ACP | 支持一键安装，需用户配置 | ★★★★★ |
+| Kimi Code | 原生 ACP | 支持一键安装，需用户配置 | ★★★★★ |
+| Hermes | 原生 ACP | macOS / Linux 支持一键安装，需用户配置 | ★★★★☆ |
+| CodeBuddy | 原生 ACP | 支持一键安装，需用户配置 | ★★★★☆ |
+| Codex | 外部 ACP 适配 | 支持一键安装本体与适配器，需用户配置 | ★★★★☆ |
+| Claude Code | 外部 ACP 适配 | 支持一键安装本体与适配器，需用户配置 | ★★★★☆ |
 
 推荐指数综合反映当前集成完整度、兼容性和实际验证程度：五星表示已经过充分测试的
 推荐集成，四星表示正在开发或尚未完成同等范围验证。
@@ -239,9 +241,13 @@ qwenaudio tui --audio-mode full
 ## macOS 桌面版
 
 桌面版提供常驻桌面的语音悬浮球，并内置 Gateway，无需事先启动服务。同一用户配置
-目录已有兼容的本地 Gateway 时会直接复用，否则由桌面版自动启动和管理。首次运行时，
+目录已有本地 Gateway 时会直接连接并以其当前运行配置为准，否则由桌面版自动启动和管理。首次运行时，
 应用会创建配置文件，并引导你在设置页填写 DashScope API Key、选择后台 Agent
 （也可以使用仅前台模式）。
+
+闲置后悬浮球会自动隐藏并断开实时语音；也可以直接说“可以退下了”让它隐藏。应用仍
+常驻菜单栏，可从菜单栏或显示快捷键重新唤出。默认快捷键为 `⇧⌘ Space`，也可以在
+应用设置中更换。
 
 桌面版支持流光声波球和液态渐变球两种外观。下面分别展示它们在思考 / 呼吸状态
 下的原始动态效果：
@@ -311,18 +317,8 @@ AGENT_PROTOCOL=opencode
 AGENT_PROTOCOL=qoder
 ```
 
-后台 Agent 需要用户自行安装并完成原生配置；qwen-audio-agent 会复用其
+已安装并完成原生配置的后台 Agent，qwen-audio-agent 会复用其
 用户级模型、工具、MCP、Skill 和认证。
-
-其中部分 Agent 通过外部 ACP 适配器接入，除本体外，还需要全局安装对应的适配器。
-以 Codex 为例：
-
-```bash
-npm install -g @agentclientprotocol/codex-acp
-```
-
-CLI 模式缺少适配器时会尝试通过 npx 按需启动；桌面版为保证启动可靠，仅使用已安装的
-组件，请提前安装。
 
 使用其他支持 ACP stdio 的 Agent：
 

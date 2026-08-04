@@ -25,6 +25,8 @@ tells you:
 
 ## News
 
+- **2026-08-04 · [v1.4.1](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.4.1)**
+  🧰 Adds one-click backend Agent installation; the desktop orb now supports automatic hiding and shortcut recall.
 - **2026-08-04 · [v1.4.0](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.4.0)**
   🧠 Adds custom behavior rules and list management; desktop adds automatic sleep and shortcut wake-up.
 - **2026-08-03 · [v1.3.0](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.3.0)**
@@ -84,14 +86,14 @@ module walkthrough.
 | Backend Agent | Integration | Setup | Rating |
 | --- | --- | --- | --- |
 | None | N/A | Frontend-only, no setup required | ★★★★★ |
-| OpenCode | Native ACP | Automatic installation and Bailian setup supported | ★★★★★ |
-| OpenClaw | Built-in ACP Bridge | Automatic installation and Bailian setup supported | ★★★★★ |
-| Qoder | Native ACP | User installation and configuration required | ★★★★★ |
-| Kimi Code | Native ACP | User installation and configuration required | ★★★★★ |
-| Hermes | Native ACP | User installation and configuration required | ★★★★☆ |
-| CodeBuddy | Native ACP | User installation and configuration required | ★★★★☆ |
-| Codex | External ACP Adapter | User installation and configuration required | ★★★★☆ |
-| Claude Code | External ACP Adapter | User installation and configuration required | ★★★★☆ |
+| OpenCode | Native ACP | One-click installation and Bailian setup supported | ★★★★★ |
+| OpenClaw | Built-in ACP Bridge | One-click installation and Bailian setup supported | ★★★★★ |
+| Qoder | Native ACP | One-click installation; user configuration required | ★★★★★ |
+| Kimi Code | Native ACP | One-click installation; user configuration required | ★★★★★ |
+| Hermes | Native ACP | One-click installation on macOS / Linux; user configuration required | ★★★★☆ |
+| CodeBuddy | Native ACP | One-click installation; user configuration required | ★★★★☆ |
+| Codex | External ACP Adapter | One-click Agent and adapter installation; user configuration required | ★★★★☆ |
+| Claude Code | External ACP Adapter | One-click Agent and adapter installation; user configuration required | ★★★★☆ |
 
 Ratings reflect the current integration completeness, compatibility, and
 extent of real-world validation. Five stars identify recommended integrations
@@ -264,11 +266,17 @@ qwenaudio tui --audio-mode full
 ## macOS Desktop App
 
 The desktop app provides a persistent voice orb and includes the Gateway, so no
-service needs to be started in advance. It reuses a compatible local Gateway
-already running for the same user configuration directory; otherwise, it
-starts and manages one automatically. On first launch, the app creates its
+service needs to be started in advance. If a local Gateway is already running
+for the same user configuration directory, the desktop app attaches to its
+current runtime configuration; otherwise, it starts and manages one
+automatically. On first launch, the app creates its
 configuration file and guides you to enter a DashScope API Key and choose a
 backend Agent (or frontend-only mode) in Settings.
+
+When idle, the orb hides and disconnects realtime voice; you can also say
+“you can go now” to hide it. The app remains available from the menu bar. Show
+it again from the menu bar or with the default `⇧⌘ Space` shortcut, or choose
+another shortcut in the app.
 
 The desktop app includes a streaming wave orb and a liquid gradient orb. Their
 original animated thinking / breathing states are shown below:
@@ -345,20 +353,8 @@ Use Qoder:
 AGENT_PROTOCOL=qoder
 ```
 
-Backend Agents require the user to install and configure the native Agent
-first. qwen-audio-agent reuses its user-level model, tools, MCP servers,
-Skills, and authentication.
-
-Some Agents connect through external ACP adapters. Besides the Agent itself,
-install the matching adapter globally. For example, for Codex:
-
-```bash
-npm install -g @agentclientprotocol/codex-acp
-```
-
-The CLI falls back to starting a missing adapter on demand with npx; the
-desktop app only uses installed components for reliable startup, so install
-the adapter up front.
+For an installed and natively configured backend Agent, qwen-audio-agent reuses
+its user-level model, tools, MCP servers, Skills, and authentication.
 
 Use another Agent that supports ACP over stdio:
 

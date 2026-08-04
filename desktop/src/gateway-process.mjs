@@ -81,15 +81,17 @@ export function portInUse(host, port, timeoutMs = 300) {
   })
 }
 
-export function assertDesktopGatewayCompatibility(health, env = process.env) {
+export function desktopGatewayCompatibility(health, env = process.env) {
   const expectedRealtime = resolveRealtimeFrontendConfiguration(env)
   if (
     health?.realtimeProvider !== expectedRealtime.provider
     || health?.realtimeConfigurationSignature !== expectedRealtime.signature
   ) {
-    throw new Error(
-      '已有 Gateway 的语音前台配置与桌面设置不一致，请先关闭现有 Gateway',
-    )
+    return {
+      compatible: false,
+      code: 'realtime',
+      reason: '已有 Gateway 的语音前台配置与桌面设置不一致',
+    }
   }
   const expectedProtocol = normalizeBackendProtocol(env.AGENT_PROTOCOL)
   const actualEnabled = health?.backend?.enabled !== false
@@ -100,9 +102,11 @@ export function assertDesktopGatewayCompatibility(health, env = process.env) {
     actualEnabled !== Boolean(expectedProtocol)
     || actualProtocol !== expectedProtocol
   ) {
-    throw new Error(
-      '已有 Gateway 的后台 Agent 与桌面设置不一致，请先关闭现有 Gateway',
-    )
+    return {
+      compatible: false,
+      code: 'backend',
+      reason: '已有 Gateway 的后台 Agent 与桌面设置不一致',
+    }
   }
   if (expectedProtocol) {
     const expectedPermission = String(
@@ -112,19 +116,31 @@ export function assertDesktopGatewayCompatibility(health, env = process.env) {
       health?.backend?.permissionMode || 'native',
     ).toLowerCase()
     if (expectedPermission !== actualPermission) {
-      throw new Error(
-        '已有 Gateway 的后台权限模式与桌面设置不一致，请先关闭现有 Gateway',
-      )
+      return {
+        compatible: false,
+        code: 'permission',
+        reason: '已有 Gateway 的后台权限模式与桌面设置不一致',
+      }
     }
     const expectedModel = String(
       env.QWEN_AUDIO_AGENT_BACKEND_MODEL || '',
     ).trim().toLowerCase()
     const actualModel = String(health?.backend?.model || '').trim().toLowerCase()
     if (expectedModel && expectedModel !== actualModel) {
-      throw new Error(
-        '已有 Gateway 的后台模型与桌面设置不一致，请先关闭现有 Gateway',
-      )
+      return {
+        compatible: false,
+        code: 'model',
+        reason: '已有 Gateway 的后台模型与桌面设置不一致',
+      }
     }
+  }
+  return { compatible: true, code: '', reason: '' }
+}
+
+export function assertDesktopGatewayCompatibility(health, env = process.env) {
+  const result = desktopGatewayCompatibility(health, env)
+  if (!result.compatible) {
+    throw new Error(`${result.reason}，请先关闭现有 Gateway`)
   }
 }
 

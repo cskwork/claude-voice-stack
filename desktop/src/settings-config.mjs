@@ -13,7 +13,7 @@ import {
 const DEFAULTS = {
   gatewayUrl: 'http://127.0.0.1:3101',
   orbStyle: 'fluid',
-  autoSleepSeconds: 120,
+  autoHideSeconds: 120,
   wakeShortcut: 'CommandOrControl+Shift+Space',
   dashscopeApiKey: '',
   realtimeProvider: DEFAULT_REALTIME_PROVIDER,
@@ -27,7 +27,7 @@ const DEFAULTS = {
 const SETTING_KEYS = {
   gatewayUrl: 'QWEN_AUDIO_AGENT_URL',
   orbStyle: 'QWEN_AUDIO_ORB_STYLE',
-  autoSleepSeconds: 'QWEN_AUDIO_DESKTOP_AUTO_SLEEP_SECONDS',
+  autoHideSeconds: 'QWEN_AUDIO_DESKTOP_AUTO_HIDE_SECONDS',
   wakeShortcut: 'QWEN_AUDIO_DESKTOP_WAKE_SHORTCUT',
   dashscopeApiKey: 'DASHSCOPE_API_KEY',
   realtimeProvider: 'QWEN_AUDIO_REALTIME_PROVIDER',
@@ -69,17 +69,20 @@ function cleanAgentProtocol(value) {
   return protocol
 }
 
-function cleanAutoSleepSeconds(value) {
+function cleanAutoHideSeconds(value) {
   const seconds = Number(value)
   if (seconds === 0) return 0
   if (!Number.isInteger(seconds) || seconds < 30 || seconds > 3600) {
-    return DEFAULTS.autoSleepSeconds
+    return DEFAULTS.autoHideSeconds
   }
   return seconds
 }
 
 function cleanWakeShortcut(value) {
   const shortcut = String(value || DEFAULTS.wakeShortcut).trim()
+  if (shortcut === 'CommandOrControl+Space') {
+    return DEFAULTS.wakeShortcut
+  }
   const parts = shortcut.split('+')
   const key = parts.pop() || ''
   const modifiers = new Set(parts)
@@ -167,11 +170,16 @@ export function parseSettings(content = '', fallback = {}) {
     orbStyle: ['fluid', 'goo'].includes(
       String(configuredOrbStyle).toLowerCase(),
     ) ? String(configuredOrbStyle).toLowerCase() : DEFAULTS.orbStyle,
-    autoSleepSeconds: cleanAutoSleepSeconds(configured(
+    autoHideSeconds: cleanAutoHideSeconds(configured(
       values,
-      'QWEN_AUDIO_DESKTOP_AUTO_SLEEP_SECONDS',
-      fallback.QWEN_AUDIO_DESKTOP_AUTO_SLEEP_SECONDS
-        ?? DEFAULTS.autoSleepSeconds,
+      'QWEN_AUDIO_DESKTOP_AUTO_HIDE_SECONDS',
+      configured(
+        values,
+        'QWEN_AUDIO_DESKTOP_AUTO_SLEEP_SECONDS',
+        fallback.QWEN_AUDIO_DESKTOP_AUTO_HIDE_SECONDS
+          ?? fallback.QWEN_AUDIO_DESKTOP_AUTO_SLEEP_SECONDS
+          ?? DEFAULTS.autoHideSeconds,
+      ),
     )),
     wakeShortcut: cleanWakeShortcut(configured(
       values,
@@ -224,8 +232,8 @@ export function normalizeSettings(settings = {}) {
     )
       ? String(settings.orbStyle || DEFAULTS.orbStyle).toLowerCase()
       : DEFAULTS.orbStyle,
-    autoSleepSeconds: cleanAutoSleepSeconds(
-      settings.autoSleepSeconds ?? DEFAULTS.autoSleepSeconds,
+    autoHideSeconds: cleanAutoHideSeconds(
+      settings.autoHideSeconds ?? DEFAULTS.autoHideSeconds,
     ),
     wakeShortcut: cleanWakeShortcut(
       settings.wakeShortcut ?? DEFAULTS.wakeShortcut,

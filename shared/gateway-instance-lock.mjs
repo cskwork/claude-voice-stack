@@ -60,12 +60,16 @@ function replaceLease(path, lease) {
   try {
     writeLease(temporary, lease)
     renameSync(temporary, path)
-  } finally {
+  } catch (error) {
     try {
       unlinkSync(temporary)
-    } catch (error) {
-      if (error?.code !== 'ENOENT') throw error
-    }
+    } catch {}
+    throw error
+  }
+  try {
+    unlinkSync(temporary)
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw error
   }
 }
 

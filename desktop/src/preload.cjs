@@ -10,7 +10,7 @@ contextBridge.exposeInMainWorld('qwenAudioAgentDesktop', {
   dragMove: (x, y) => sendPoint('qwen-audio-agent:drag-move', x, y),
   dragEnd: () => ipcRenderer.send('qwen-audio-agent:drag-end'),
   openSettings: () => ipcRenderer.send('qwen-audio-agent:open-settings'),
-  enterSleep: () => ipcRenderer.invoke('qwen-audio-agent:enter-sleep'),
+  enterHide: () => ipcRenderer.invoke('qwen-audio-agent:enter-hide'),
   wake: () => ipcRenderer.send('qwen-audio-agent:wake'),
   lifecycleReady: () => ipcRenderer.send('qwen-audio-agent:lifecycle-ready'),
   loadLifecycle: () => ipcRenderer.invoke('qwen-audio-agent:lifecycle-load'),
@@ -37,6 +37,19 @@ contextBridge.exposeInMainWorld('qwenAudioAgentDesktop', {
     'qwen-audio-agent:settings-detect-backends',
     { force: options?.force === true },
   ),
+  installBackend: backend => ipcRenderer.invoke(
+    'qwen-audio-agent:backend-install',
+    { backend },
+  ),
+  onBackendInstallProgress: callback => {
+    if (typeof callback !== 'function') return () => {}
+    const listener = (_event, progress) => callback(progress)
+    ipcRenderer.on('qwen-audio-agent:backend-install-progress', listener)
+    return () => ipcRenderer.removeListener(
+      'qwen-audio-agent:backend-install-progress',
+      listener,
+    )
+  },
   loadUpdaterStatus: () => ipcRenderer.invoke(
     'qwen-audio-agent:updater-status',
   ),

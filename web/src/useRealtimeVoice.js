@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   GatewayClientEvent,
   GatewayServerEvent,
@@ -73,6 +73,7 @@ export default function useRealtimeVoice({
   inputOnlyMute = false,
   clientType = 'web',
   clientLabel = 'WebUI',
+  clientStates = [],
   takeover = false,
   realtimeProvider = '',
   onEvent,
@@ -96,6 +97,10 @@ export default function useRealtimeVoice({
   const currentTurnId = useRef('')
   const clientInstanceId = useRef(crypto.randomUUID())
   const inputSampleRate = useRef(DEFAULT_INPUT_RATE)
+  const clientStatesSignature = [...new Set(
+    (Array.isArray(clientStates) ? clientStates : [])
+      .filter(state => typeof state === 'string' && state),
+  )].sort().join(',')
   const enabledRef = useRef(enabled)
   const inputReadyRef = useRef(false)
   const outputMutedRef = useRef(outputMuted)
@@ -114,11 +119,11 @@ export default function useRealtimeVoice({
   enabledRef.current = enabled
   outputMutedRef.current = outputMuted
 
-  const setAudioLevel = value => {
+  const setAudioLevel = useCallback(value => {
     levelElementRef.current?.style.setProperty('--level', String(value))
-  }
+  }, [])
 
-  const activateAudio = () => {
+  const activateAudio = useCallback(() => {
     const AudioContext = window.AudioContext || window.webkitAudioContext
     if (!AudioContext) {
       setError('当前浏览器不支持实时语音播放')
@@ -133,16 +138,16 @@ export default function useRealtimeVoice({
       setVisualError(true)
     })
     return true
-  }
+  }, [])
 
-  const sendSocketEvent = event => {
+  const sendSocketEvent = useCallback(event => {
     const socket = socketRef.current
     if (socket?.readyState !== WebSocket.OPEN) return false
     socket.send(JSON.stringify(event))
     return true
-  }
+  }, [])
 
-  const sendPlaybackEvent = (type, responseId, reason = '') => {
+  const sendPlaybackEvent = useCallback((type, responseId, reason = '') => {
     if (responseId) {
       sendSocketEvent({
         type,
@@ -150,16 +155,16 @@ export default function useRealtimeVoice({
         ...(reason ? { reason } : {}),
       })
     }
-  }
+  }, [sendSocketEvent])
 
-  const stopPlayback = (reason = '') => {
+  const stopPlayback = useCallback((reason = '') => {
     const playback = playbackRef.current
     const activeResponseIds = new Set([
       ...playback.startTimers.keys(),
       ...playback.startedResponses,
       ...playback.sourceCounts.keys(),
     ])
-    for (const [responseId, timer] of playback.startTimers) {
+    for (const timer of playback.startTimers.values()) {
       clearTimeout(timer)
     }
     for (const responseId of activeResponseIds) {
@@ -181,9 +186,9 @@ export default function useRealtimeVoice({
       doneResponses: new Set(),
       failedResponses: new Set(),
     }
-  }
+  }, [sendPlaybackEvent])
 
-  const finishPlaybackIfReady = responseId => {
+  const finishPlaybackIfReady = useCallback(responseId => {
     if (!responseId) return
     const playback = playbackRef.current
     if (
@@ -195,17 +200,17 @@ export default function useRealtimeVoice({
     playback.startedResponses.delete(responseId)
     playback.sourceCounts.delete(responseId)
     playback.doneResponses.delete(responseId)
-  }
+  }, [sendPlaybackEvent])
 
-  const markAudioDone = responseId => {
+  const markAudioDone = useCallback(responseId => {
     if (!responseId) return
     const playback = playbackRef.current
     if (playback.failedResponses.delete(responseId)) return
     playback.doneResponses.add(responseId)
     finishPlaybackIfReady(responseId)
-  }
+  }, [finishPlaybackIfReady])
 
-  const failPlayback = (responseId, reason) => {
+  const failPlayback = useCallback((responseId, reason) => {
     const playback = playbackRef.current
     if (responseId && !playback.failedResponses.has(responseId)) {
       playback.failedResponses.add(responseId)
@@ -223,21 +228,21 @@ export default function useRealtimeVoice({
     }
     setError(reason?.message || String(reason || '语音播放失败'))
     setVisualError(true)
-  }
+  }, [sendPlaybackEvent])
 
-  const consumeMutedAudio = responseId => {
+  const consumeMutedAudio = useCallback(responseId => {
     if (!responseId || mutedPlaybackResponses.current.has(responseId)) return
     mutedPlaybackResponses.current.add(responseId)
     sendPlaybackEvent(GatewayClientEvent.PLAYBACK_STARTED, responseId)
-  }
+  }, [sendPlaybackEvent])
 
-  const finishMutedAudio = responseId => {
+  const finishMutedAudio = useCallback(responseId => {
     if (!responseId || !mutedPlaybackResponses.current.has(responseId)) return
     mutedPlaybackResponses.current.delete(responseId)
     sendPlaybackEvent(GatewayClientEvent.PLAYBACK_ENDED, responseId)
-  }
+  }, [sendPlaybackEvent])
 
-  const play = (base64, sampleRate = OUTPUT_RATE, responseId = '') => {
+  const play = useCallback((base64, sampleRate = OUTPUT_RATE, responseId = '') => {
     const context = audioRef.current
     if (!context) {
       failPlayback(responseId, '语音播放尚未启用')
@@ -318,7 +323,7 @@ export default function useRealtimeVoice({
       playback.sources = playback.sources.filter(item => item !== source)
       failPlayback(responseId, reason)
     }
-  }
+  }, [failPlayback, finishPlaybackIfReady, sendPlaybackEvent])
 
   useEffect(() => {
     if (suspended) {
@@ -328,12 +333,13 @@ export default function useRealtimeVoice({
       setAudioLevel(0)
       setError('')
       setVisualError(false)
-      setConnectionState('sleeping')
+      setConnectionState('hidden')
       return undefined
     }
     let disposed = false
     let reconnectTimer
     let reconnectDelay = 500
+    const mutedResponses = mutedPlaybackResponses.current
     const connect = () => {
       if (disposed) return
       const socket = new WebSocket(socketUrl(sessionId))
@@ -358,6 +364,9 @@ export default function useRealtimeVoice({
           outputEnabled,
           clientType,
           clientLabel,
+          clientStates: clientStatesSignature
+            ? clientStatesSignature.split(',')
+            : [],
           clientInstanceId: clientInstanceId.current,
           takeover,
           // Empty means "keep the server default front end".
@@ -457,24 +466,31 @@ export default function useRealtimeVoice({
     return () => {
       disposed = true
       clearTimeout(reconnectTimer)
-      stopPlayback(suspended ? 'desktop_sleep' : 'connection_closed')
+      stopPlayback(suspended ? 'desktop_hidden' : 'connection_closed')
       socketRef.current?.close()
       socketRef.current = null
-      mutedPlaybackResponses.current.clear()
+      mutedResponses.clear()
     }
   }, [
     clientLabel,
+    clientStatesSignature,
     clientType,
+    consumeMutedAudio,
+    finishMutedAudio,
     inputOnlyMute,
+    markAudioDone,
+    play,
     realtimeProvider,
     sessionId,
+    setAudioLevel,
+    stopPlayback,
     suspended,
     takeover,
   ])
 
   useEffect(() => {
     if (outputMuted) stopPlayback()
-  }, [outputMuted])
+  }, [outputMuted, stopPlayback])
 
   useEffect(() => {
     if (!enabled || suspended) {
@@ -597,7 +613,16 @@ export default function useRealtimeVoice({
       source?.disconnect()
       analyser?.disconnect()
     }
-  }, [enabled, inputOnlyMute, sessionId, suspended, takeover])
+  }, [
+    activateAudio,
+    enabled,
+    inputOnlyMute,
+    sendSocketEvent,
+    sessionId,
+    setAudioLevel,
+    suspended,
+    takeover,
+  ])
 
   useEffect(() => {
     if (!suspended) return

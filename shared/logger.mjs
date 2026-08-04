@@ -1,12 +1,12 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 import {
-  appendFileSync,
-  chmodSync,
-  mkdirSync,
-  renameSync,
-  statSync,
-  unlinkSync,
-} from 'node:fs'
+  appendFile,
+  chmod,
+  mkdir,
+  rename,
+  stat,
+  unlink,
+} from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { resolve } from 'node:path'
 
@@ -114,30 +114,30 @@ function safeEventName(value) {
   return event || 'log'
 }
 
-function rotate(path, maxFiles) {
+async function rotate(path, maxFiles) {
   const backups = Math.max(0, maxFiles - 1)
   if (backups === 0) {
     try {
-      unlinkSync(path)
+      await unlink(path)
     } catch (error) {
       if (error.code !== 'ENOENT') throw error
     }
     return
   }
   try {
-    unlinkSync(`${path}.${backups}`)
+    await unlink(`${path}.${backups}`)
   } catch (error) {
     if (error.code !== 'ENOENT') throw error
   }
   for (let index = backups - 1; index >= 1; index -= 1) {
     try {
-      renameSync(`${path}.${index}`, `${path}.${index + 1}`)
+      await rename(`${path}.${index}`, `${path}.${index + 1}`)
     } catch (error) {
       if (error.code !== 'ENOENT') throw error
     }
   }
   try {
-    renameSync(path, `${path}.1`)
+    await rename(path, `${path}.1`)
   } catch (error) {
     if (error.code !== 'ENOENT') throw error
   }
@@ -157,27 +157,67 @@ export class JsonLineFileSink {
     this.maxFiles = Math.max(1, maxFiles)
     this.onError = onError
     this.failed = false
+    this.initialized = false
+    this.size = 0
+    this.queue = []
+    this.drainPromise = null
   }
 
   write(record) {
-    const line = `${JSON.stringify(record)}\n`
+    this.queue.push(`${JSON.stringify(record)}\n`)
+    this.startDrain()
+  }
+
+  async initialize() {
+    if (this.initialized) return
+    await mkdir(this.directory, { recursive: true, mode: 0o700 })
     try {
-      mkdirSync(this.directory, { recursive: true, mode: 0o700 })
-      let size = 0
-      try {
-        size = statSync(this.path).size
-      } catch (error) {
-        if (error.code !== 'ENOENT') throw error
+      this.size = (await stat(this.path)).size
+      await chmod(this.path, 0o600)
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error
+      this.size = 0
+    }
+    this.initialized = true
+  }
+
+  startDrain() {
+    if (this.drainPromise) return
+    const operation = Promise.resolve().then(() => this.drain())
+    const tracked = operation.finally(() => {
+      if (this.drainPromise !== tracked) return
+      this.drainPromise = null
+      if (this.queue.length) this.startDrain()
+    })
+    this.drainPromise = tracked
+  }
+
+  async drain() {
+    try {
+      await this.initialize()
+      while (this.queue.length) {
+        const line = this.queue.shift()
+        const bytes = Buffer.byteLength(line)
+        if (this.size > 0 && this.size + bytes > this.maxBytes) {
+          await rotate(this.path, this.maxFiles)
+          this.size = 0
+        }
+        await appendFile(this.path, line, { encoding: 'utf8', mode: 0o600 })
+        this.size += bytes
       }
-      if (size > 0 && size + Buffer.byteLength(line) > this.maxBytes) {
-        rotate(this.path, this.maxFiles)
-      }
-      appendFileSync(this.path, line, { encoding: 'utf8', mode: 0o600 })
-      chmodSync(this.path, 0o600)
       this.failed = false
     } catch (error) {
+      this.queue.length = 0
       if (!this.failed) this.onError?.(error)
       this.failed = true
+      this.initialized = false
+    }
+  }
+
+  async flush() {
+    while (this.queue.length || this.drainPromise) {
+      this.startDrain()
+      await this.drainPromise
     }
   }
 }
@@ -283,6 +323,7 @@ export function createLogger({
     warn: (event, fields, message) => emit('warn', event, fields, message),
     error: (event, fields, message) => emit('error', event, fields, message),
     fatal: (event, fields, message) => emit('fatal', event, fields, message),
+    flush: () => fileSink?.flush?.() || Promise.resolve(),
     child: context => createLogger({
       component,
       fileName,

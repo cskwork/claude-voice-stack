@@ -242,105 +242,113 @@ export const config = {
   backendOwnership,
   backendPermissionMode,
   agentTimeoutMs: numberSetting(process.env.AGENT_TIMEOUT_MS, 300000, { min: 10000 }),
-  openClawBaseUrl: (
-    process.env.OPENCLAW_BASE_URL
-    || 'http://127.0.0.1:18789'
-  ).replace(/\/+$/, ''),
-  openClawToken: (
-    process.env.OPENCLAW_GATEWAY_TOKEN
-    || process.env.AGENT_API_KEY
-    || (managedOpenClawBailian
-      ? process.env.QWEN_AUDIO_AGENT_AUTH_SECRET
-      : '')
-    || ''
-  ),
-  openClawTokenFile: (
-    process.env.OPENCLAW_GATEWAY_TOKEN_FILE
-    || resolve(runtimeEnvironment.openClawStateDirectory, 'gateway-token')
-  ),
-  openClawDirectory: resolveOpenClawWorkspace(),
-  openClawCoordinatorAgent: (
-    sharedBackendAgent
-    || legacyBackendAgent(
-      process.env.OPENCLAW_COORDINATOR_AGENT,
-      'voice-coordinator',
-    )
-    || (managedOpenClawBailian ? 'qwen-audio-agent-backend' : '')
-  ),
-  openCodeBaseUrl: (
-    process.env.OPENCODE_BASE_URL
-    || 'http://127.0.0.1:4096'
-  ).replace(/\/+$/, ''),
-  openCodeDirectory: resolveOpenCodeWorkspace(),
-  qoderDirectory: resolveQoderWorkspace(),
-  qoderConfigDirectory: process.env.QODER_CONFIG_DIR
-    ? resolve(process.env.QODER_CONFIG_DIR)
-    : '',
-  qoderCliPath: String(
-    process.env.QODERCLI_PATH || process.env.QODER_CLI_PATH || '',
-  ).trim(),
-  qoderModel: String(
-    backendModels.qoder,
-  ).trim(),
-  kimiDirectory: resolveKimiWorkspace(),
-  kimiCliPath: String(process.env.KIMI_CODE_BIN || '').trim(),
-  kimiModel: String(
-    backendModels.kimi,
-  ).trim(),
-  hermesDirectory: resolveHermesWorkspace(),
-  hermesCliPath: String(process.env.HERMES_BIN || '').trim(),
-  hermesModel: String(
-    backendModels.hermes,
-  ).trim(),
-  codeBuddyDirectory: resolveCodeBuddyWorkspace(),
-  codeBuddyCliPath: String(process.env.CODEBUDDY_BIN || '').trim(),
-  codeBuddyModel: String(
-    backendModels.codeBuddy,
-  ).trim(),
-  codeBuddyModelUrl: (
-    process.env.CODEBUDDY_MODEL_URL
-    || (backendModels.common ? (
-      process.env.DASHSCOPE_WORKSPACE_ID
-        ? `https://${process.env.DASHSCOPE_WORKSPACE_ID}.cn-beijing.maas.aliyuncs.com/compatible-mode/v1/chat/completions`
-        : 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'
-    ) : '')
-  ),
-  codexDirectory: resolveCodexWorkspace(),
-  codexCliPath: String(process.env.CODEX_ACP_BIN || '').trim(),
-  codexModel: String(
-    backendModels.codex,
-  ).trim(),
-  codexModelUrl: (
-    process.env.CODEX_BASE_URL
-    || (backendModels.common ? (
-      process.env.DASHSCOPE_WORKSPACE_ID
-        ? `https://${process.env.DASHSCOPE_WORKSPACE_ID}.cn-beijing.maas.aliyuncs.com/compatible-mode/v1`
-        : 'https://dashscope.aliyuncs.com/compatible-mode/v1'
-    ) : '')
-  ).replace(/\/+$/, ''),
-  claudeDirectory: resolveClaudeWorkspace(),
-  claudeCliPath: String(process.env.CLAUDE_CODE_ACP_BIN || '').trim(),
-  claudeExecutable: String(
-    process.env.CLAUDE_CODE_EXECUTABLE || '',
-  ).trim(),
-  claudeModel: String(
-    backendModels.claude,
-  ).trim(),
-  claudeConfigDirectory: process.env.CLAUDE_CONFIG_DIR
-    ? resolve(process.env.CLAUDE_CONFIG_DIR)
-    : '',
-  acpCommand: String(process.env.ACP_COMMAND || '').trim(),
-  acpArgs: resolveAcpArgs(process.env.ACP_ARGS),
-  acpLabel: String(process.env.ACP_LABEL || 'ACP Agent').trim() || 'ACP Agent',
-  acpDirectory: resolveAcpWorkspace(),
-  acpModel: String(
-    backendModels.acp,
-  ).trim(),
-  acpCoordinatorAgent: String(process.env.ACP_COORDINATOR_AGENT || '').trim(),
-  openCodeModel: backendModels.openCode,
-  openClawModel: backendModels.openClaw,
-  backendModel: backendModels.common,
-  openCodeCoordinatorAgent: resolveOpenCodeCoordinatorAgent(),
+  // Per-backend option namespaces keyed by driver id. AgentClient merges the
+  // selected namespace with optional overrides, so adding a backend only
+  // requires appending one entry here.
+  backends: {
+    opencode: {
+      baseUrl: (
+        process.env.OPENCODE_BASE_URL
+        || 'http://127.0.0.1:4096'
+      ).replace(/\/+$/, ''),
+      model: backendModels.openCode,
+      directory: resolveOpenCodeWorkspace(),
+      coordinatorAgent: resolveOpenCodeCoordinatorAgent(),
+    },
+    openclaw: {
+      baseUrl: (
+        process.env.OPENCLAW_BASE_URL
+        || 'http://127.0.0.1:18789'
+      ).replace(/\/+$/, ''),
+      token: (
+        process.env.OPENCLAW_GATEWAY_TOKEN
+        || process.env.AGENT_API_KEY
+        || (managedOpenClawBailian
+          ? process.env.QWEN_AUDIO_AGENT_AUTH_SECRET
+          : '')
+        || ''
+      ),
+      tokenFile: (
+        process.env.OPENCLAW_GATEWAY_TOKEN_FILE
+        || resolve(runtimeEnvironment.openClawStateDirectory, 'gateway-token')
+      ),
+      model: backendModels.openClaw,
+      directory: resolveOpenClawWorkspace(),
+      coordinatorAgent: (
+        sharedBackendAgent
+        || legacyBackendAgent(
+          process.env.OPENCLAW_COORDINATOR_AGENT,
+          'voice-coordinator',
+        )
+        || (managedOpenClawBailian ? 'qwen-audio-agent-backend' : '')
+      ),
+    },
+    qoder: {
+      model: String(backendModels.qoder).trim(),
+      directory: resolveQoderWorkspace(),
+      cliPath: String(
+        process.env.QODERCLI_PATH || process.env.QODER_CLI_PATH || '',
+      ).trim(),
+      configDirectory: process.env.QODER_CONFIG_DIR
+        ? resolve(process.env.QODER_CONFIG_DIR)
+        : '',
+    },
+    kimi: {
+      model: String(backendModels.kimi).trim(),
+      directory: resolveKimiWorkspace(),
+      cliPath: String(process.env.KIMI_CODE_BIN || '').trim(),
+    },
+    hermes: {
+      model: String(backendModels.hermes).trim(),
+      directory: resolveHermesWorkspace(),
+      cliPath: String(process.env.HERMES_BIN || '').trim(),
+    },
+    codebuddy: {
+      model: String(backendModels.codeBuddy).trim(),
+      modelUrl: (
+        process.env.CODEBUDDY_MODEL_URL
+        || (backendModels.common ? (
+          process.env.DASHSCOPE_WORKSPACE_ID
+            ? `https://${process.env.DASHSCOPE_WORKSPACE_ID}.cn-beijing.maas.aliyuncs.com/compatible-mode/v1/chat/completions`
+            : 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'
+        ) : '')
+      ),
+      directory: resolveCodeBuddyWorkspace(),
+      cliPath: String(process.env.CODEBUDDY_BIN || '').trim(),
+    },
+    codex: {
+      model: String(backendModels.codex).trim(),
+      modelUrl: (
+        process.env.CODEX_BASE_URL
+        || (backendModels.common ? (
+          process.env.DASHSCOPE_WORKSPACE_ID
+            ? `https://${process.env.DASHSCOPE_WORKSPACE_ID}.cn-beijing.maas.aliyuncs.com/compatible-mode/v1`
+            : 'https://dashscope.aliyuncs.com/compatible-mode/v1'
+        ) : '')
+      ).replace(/\/+$/, ''),
+      directory: resolveCodexWorkspace(),
+      cliPath: String(process.env.CODEX_ACP_BIN || '').trim(),
+    },
+    claude: {
+      model: String(backendModels.claude).trim(),
+      directory: resolveClaudeWorkspace(),
+      cliPath: String(process.env.CLAUDE_CODE_ACP_BIN || '').trim(),
+      claudeExecutable: String(
+        process.env.CLAUDE_CODE_EXECUTABLE || '',
+      ).trim(),
+      configDirectory: process.env.CLAUDE_CONFIG_DIR
+        ? resolve(process.env.CLAUDE_CONFIG_DIR)
+        : '',
+    },
+    acp: {
+      model: String(backendModels.acp).trim(),
+      directory: resolveAcpWorkspace(),
+      cliPath: String(process.env.ACP_COMMAND || '').trim(),
+      args: resolveAcpArgs(process.env.ACP_ARGS),
+      label: String(process.env.ACP_LABEL || 'ACP Agent').trim() || 'ACP Agent',
+      coordinatorAgent: String(process.env.ACP_COORDINATOR_AGENT || '').trim(),
+    },
+  },
   announceIntoContext: (
     String(process.env.QWEN_AUDIO_AGENT_ANNOUNCE_INTO_CONTEXT || 'true').toLowerCase()
     === 'true'

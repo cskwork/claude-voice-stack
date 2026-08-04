@@ -9,7 +9,7 @@ import { updaterButtonState, updaterStatusText } from './update-status.mjs'
 const form = document.querySelector('#settings-form')
 const gatewayUrl = document.querySelector('#gateway-url')
 const orbStyle = document.querySelector('#orb-style')
-const autoSleepSeconds = document.querySelector('#auto-sleep-seconds')
+const autoHideSeconds = document.querySelector('#auto-hide-seconds')
 const wakeShortcut = document.querySelector('#wake-shortcut')
 const recordWakeShortcut = document.querySelector('#record-wake-shortcut')
 const resetWakeShortcut = document.querySelector('#reset-wake-shortcut')
@@ -26,7 +26,7 @@ const speechToSpeechRealtimeUrl = document.querySelector(
 const speechToSpeechAuthToken = document.querySelector(
   '#speech-to-speech-token',
 )
-const agentProtocol = document.querySelector('#agent-protocol')
+const backendList = document.querySelector('#backend-list')
 const refreshBackends = document.querySelector('#refresh-backends')
 const realtimeModel = document.querySelector('#realtime-model')
 const backendModel = document.querySelector('#backend-model')
@@ -55,11 +55,12 @@ const macPlatform = /Mac|iPhone|iPad/.test(navigator.platform)
 function renderWakeShortcutStatus(registered) {
   recordWakeShortcut.classList.toggle('invalid', registered === false)
   recordWakeShortcut.title = registered === false
-    ? '这个快捷键已被其他应用占用，点击重新设置'
+    ? '这个显示快捷键已被其他应用占用，点击重新设置'
     : '点击后按下新的快捷键'
 }
 
 function wakeShortcutLabel(value) {
+  if (macPlatform && value === defaultWakeShortcut) return '⇧  ⌘  Space'
   const labels = {
     CommandOrControl: macPlatform ? '⌘' : 'Ctrl',
     Alt: macPlatform ? '⌥' : 'Alt',
@@ -134,7 +135,7 @@ recordWakeShortcut.addEventListener('click', async () => {
     renderWakeShortcut()
     updateApplyState()
   } catch (error) {
-    showMessage(friendlyError(error, '无法开始录制快捷键'), 'error')
+    showMessage(friendlyError(error, '无法开始录制显示快捷键'), 'error')
   }
 })
 
@@ -228,28 +229,180 @@ function truncate(text, max = 80) {
   return value.length > max ? `${value.slice(0, max)}…` : value
 }
 
-// 按本机检测结果重建后台 Agent 下拉列表：可用的正常显示，不可用的
-// 置灰并标注原因；当前生效的值即使不可用也保留，避免下拉框丢值。
+let installingBackend = ''
+let installProgressText = ''
+
+function selectedBackend() {
+  return backendList.querySelector('input[name="agent-protocol"]:checked')
+    ?.value || 'none'
+}
+
+// 按本机检测结果重建后台 Agent 列表：每行 = 单选钮 + 名称 + 状态徽标
+// + 安装按钮（仅“不可用且支持一键安装”时显示）；当前生效的值即使
+// 不可用也保留可选，避免列表丢值。
 function renderBackendOptions(currentValue) {
   const states = backendOptionStates(backendReport)
   if (currentValue && !states.some(state => state.id === currentValue)) {
     states.push({
       id: currentValue,
       label: backendLabel(currentValue),
-      disabled: false,
+      ready: false,
+      selectable: true,
+      installable: false,
+      requiresConfirmation: false,
+      reason: '当前不可用',
       title: '',
     })
   }
-  agentProtocol.replaceChildren(...states.map(state => {
-    const option = document.createElement('option')
-    option.value = state.id
-    option.textContent = state.label
-    option.disabled = state.disabled
-    if (state.title) option.title = state.title
-    return option
+  const selected = currentValue || 'none'
+  backendList.replaceChildren(...states.map(state => {
+    const row = document.createElement('label')
+    row.className = 'backend-row'
+    row.classList.toggle('selected', state.id === selected)
+    row.classList.toggle('installing', installingBackend === state.id)
+    row.classList.toggle(
+      'unavailable',
+      !state.ready && state.id !== 'none',
+    )
+    if (state.title) row.title = state.title
+
+    const input = document.createElement('input')
+    input.type = 'radio'
+    input.name = 'agent-protocol'
+    input.value = state.id
+    input.checked = state.id === selected
+    input.disabled = !state.selectable
+    row.append(input)
+
+    const name = document.createElement('span')
+    name.className = 'backend-name'
+    name.textContent = state.label
+    row.append(name)
+
+    if (installingBackend === state.id) {
+      const progress = document.createElement('span')
+      progress.className = 'backend-progress'
+      progress.textContent = installProgressText || '正在安装…'
+      progress.title = installProgressText
+      row.append(progress)
+    } else if (state.id !== 'none') {
+      const status = document.createElement('span')
+      status.className = `backend-status${state.ready ? ' ready' : ''}`
+      status.textContent = state.ready ? '可用' : state.reason
+      row.append(status)
+    }
+
+    if (state.installable) {
+      const button = document.createElement('button')
+      button.className = 'backend-install'
+      button.type = 'button'
+      button.dataset.backend = state.id
+      button.disabled = Boolean(installingBackend)
+      button.textContent = '安装'
+      button.title = state.requiresConfirmation
+        ? '该后台需要通过官方脚本安装，执行前会再次确认'
+        : '一键安装到本机'
+      row.append(button)
+    }
+    return row
   }))
-  agentProtocol.value = currentValue || 'none'
 }
+
+// npm 缺失时的引导：错误文案 + Node.js 下载链接（经主进程 openExternal）。
+function showNodejsInstallGuidance(text) {
+  showMessage(
+    text || '未找到 npm，请先安装 Node.js（自带 npm）后重试。',
+    'error',
+  )
+  const link = document.createElement('button')
+  link.type = 'button'
+  link.className = 'message-link'
+  link.textContent = '下载 Node.js ↗'
+  link.addEventListener('click', () => {
+    window.qwenAudioAgentDesktop.openExternal('https://nodejs.org/')
+  })
+  message.append(' ', link)
+}
+
+async function installBackendRow(id) {
+  if (installingBackend) return
+  installingBackend = id
+  installProgressText = '正在安装…'
+  showMessage('')
+  renderBackendOptions(selectedBackend())
+  try {
+    const result = await window.qwenAudioAgentDesktop.installBackend(id)
+    if (result?.report) backendReport = result.report
+    if (!result?.ok) {
+      // 用户在确认框取消属于正常操作，不提示；其余失败行内 + 消息条。
+      if (result?.error?.code === 'NPM_MISSING') {
+        showNodejsInstallGuidance(result.error.message)
+      } else if (result?.error?.code !== 'DECLINED') {
+        showMessage(result?.error?.message || '安装失败', 'error')
+      }
+      return
+    }
+    showMessage(
+      result.alreadyInstalled
+        ? `${backendLabel(id)} 已安装并就绪。${result.loginHint || ''}`
+        : `${backendLabel(id)} 安装成功。${result.loginHint || ''}`,
+      'success',
+    )
+  } catch (error) {
+    showMessage(friendlyError(error, '安装失败'), 'error')
+  } finally {
+    installingBackend = ''
+    installProgressText = ''
+    renderBackendOptions(selectedBackend())
+    updateApplyState()
+  }
+}
+
+// 安装进度由主进程流式推送：行内只保留最近一行输出（截断显示）。
+window.qwenAudioAgentDesktop.onBackendInstallProgress(progress => {
+  if (!progress || progress.backend !== installingBackend) return
+  if (progress.phase === 'start') {
+    installProgressText = progress.title || '正在安装…'
+  } else if (progress.phase === 'skip') {
+    installProgressText = `${progress.title || '步骤'} 已就绪，跳过`
+  } else if (progress.phase === 'output') {
+    const line = String(progress.chunk || '')
+      .split('\n')
+      .map(part => part.trim())
+      .filter(Boolean)
+      .pop()
+    if (line) installProgressText = truncate(line, 60)
+  } else if (progress.phase === 'done') {
+    installProgressText = `${progress.title || '步骤'} 完成`
+  }
+  const target = backendList.querySelector(
+    '.backend-row.installing .backend-progress',
+  )
+  if (target) {
+    target.textContent = installProgressText
+    target.title = installProgressText
+  }
+})
+
+backendList.addEventListener('change', event => {
+  if (!event.target.matches('input[name="agent-protocol"]')) return
+  showMessage('')
+  for (const row of backendList.querySelectorAll('.backend-row')) {
+    row.classList.toggle(
+      'selected',
+      row.querySelector('input')?.checked === true,
+    )
+  }
+  updateApplyState()
+})
+
+// 安装按钮在 <label> 行内，必须阻止默认行为，避免触发行选中。
+backendList.addEventListener('click', event => {
+  const button = event.target.closest('.backend-install')
+  if (!button || button.disabled) return
+  event.preventDefault()
+  void installBackendRow(button.dataset.backend)
+})
 
 function backendLabel(value) {
   if (!value || value === 'none') return '未配置'
@@ -295,11 +448,11 @@ function formSettings() {
   return {
     gatewayUrl: gatewayUrl.value,
     orbStyle: orbStyle.value,
-    autoSleepSeconds: Number(autoSleepSeconds.value),
+    autoHideSeconds: Number(autoHideSeconds.value),
     wakeShortcut: wakeShortcut.value,
     dashscopeApiKey: dashscopeApiKey.value,
     realtimeProvider: selectedRealtimeProvider(),
-    agentProtocol: agentProtocol.value,
+    agentProtocol: selectedBackend(),
     realtimeModel: realtimeModel.value,
     speechToSpeechRealtimeUrl: speechToSpeechRealtimeUrl.value,
     speechToSpeechAuthToken: speechToSpeechAuthToken.value,
@@ -311,7 +464,7 @@ function fingerprint(value) {
   return JSON.stringify({
     gatewayUrl: value.gatewayUrl,
     orbStyle: value.orbStyle,
-    autoSleepSeconds: value.autoSleepSeconds,
+    autoHideSeconds: value.autoHideSeconds,
     wakeShortcut: value.wakeShortcut,
     dashscopeApiKey: value.dashscopeApiKey,
     realtimeProvider: value.realtimeProvider,
@@ -440,7 +593,7 @@ async function detectBackendOptions(force = false) {
     backendReport = await window.qwenAudioAgentDesktop.detectBackends(
       force ? { force: true } : undefined,
     )
-    renderBackendOptions(agentProtocol.value || settings?.agentProtocol)
+    renderBackendOptions(selectedBackend() || settings?.agentProtocol)
     updateApplyState()
   } catch (error) {
     showMessage(friendlyError(error, '检测后台 Agent 失败'), 'error')
@@ -456,16 +609,16 @@ refreshBackends.addEventListener('click', () => {
 function render() {
   gatewayUrl.value = settings.gatewayUrl
   orbStyle.value = settings.orbStyle
-  const sleepValue = String(settings.autoSleepSeconds ?? 120)
-  autoSleepSeconds.querySelector('[data-custom]')?.remove()
-  if (![...autoSleepSeconds.options].some(option => option.value === sleepValue)) {
+  const hideValue = String(settings.autoHideSeconds ?? 120)
+  autoHideSeconds.querySelector('[data-custom]')?.remove()
+  if (![...autoHideSeconds.options].some(option => option.value === hideValue)) {
     const custom = document.createElement('option')
-    custom.value = sleepValue
+    custom.value = hideValue
     custom.dataset.custom = 'true'
-    custom.textContent = `自定义 · ${sleepValue} 秒`
-    autoSleepSeconds.append(custom)
+    custom.textContent = `自定义 · ${hideValue} 秒`
+    autoHideSeconds.append(custom)
   }
-  autoSleepSeconds.value = sleepValue
+  autoHideSeconds.value = hideValue
   wakeShortcut.value = settings.wakeShortcut
   recordingWakeShortcut = false
   renderWakeShortcut()
@@ -485,11 +638,10 @@ function render() {
 for (const control of [
   gatewayUrl,
   orbStyle,
-  autoSleepSeconds,
+  autoHideSeconds,
   dashscopeApiKey,
   speechToSpeechRealtimeUrl,
   speechToSpeechAuthToken,
-  agentProtocol,
   realtimeModel,
   backendModel,
   ...realtimeProviderInputs,
@@ -533,7 +685,10 @@ form.addEventListener('submit', async event => {
       )
     }
   } catch (error) {
-    if (String(error?.message || '').includes('快捷键已被其他应用占用')) {
+    if (
+      String(error?.message || '').includes('快捷键')
+      && String(error?.message || '').includes('占用')
+    ) {
       renderWakeShortcutStatus(false)
     }
     showMessage(friendlyError(error, '应用失败'), 'error')
