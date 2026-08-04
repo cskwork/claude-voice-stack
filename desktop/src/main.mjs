@@ -38,7 +38,7 @@ import {
   findRunningGateway,
 } from '../../shared/gateway-instance-lock.mjs'
 import {
-  assertDesktopGatewayCompatibility,
+  desktopGatewayCompatibility,
   desktopGatewayEnvironment,
   EmbeddedGateway,
 } from './gateway-process.mjs'
@@ -159,6 +159,27 @@ function gatewayPort(origin) {
   return Number.isInteger(port) && port > 0 ? port : 3101
 }
 
+function attachRunningGateway(active, environment, event = 'gateway.reused') {
+  const compatibility = desktopGatewayCompatibility(active.health, environment)
+  borrowedGatewayOrigin = active.origin
+  const fields = {
+    origin: active.origin,
+    instanceId: active.lease.instanceId,
+    owner: active.lease.owner,
+    configurationMatch: compatibility.compatible,
+  }
+  if (compatibility.compatible) {
+    logger.info(event, fields)
+  } else {
+    logger.warn(`${event}_with_runtime_configuration`, {
+      ...fields,
+      mismatch: compatibility.code,
+      reason: compatibility.reason,
+    })
+  }
+  return active.origin
+}
+
 async function startLocalGateway(origin) {
   if (!isLoopbackUrl(origin)) return origin
   if (embeddedGateway?.running) return embeddedGateway.start()
@@ -167,14 +188,7 @@ async function startLocalGateway(origin) {
     readHealth: readGatewayHealth,
   })
   if (active) {
-    assertDesktopGatewayCompatibility(active.health, environment)
-    borrowedGatewayOrigin = active.origin
-    logger.info('gateway.reused', {
-      origin: active.origin,
-      instanceId: active.lease.instanceId,
-      owner: active.lease.owner,
-    })
-    return active.origin
+    return attachRunningGateway(active, environment)
   }
   borrowedGatewayOrigin = ''
   if (!embeddedGateway) {
@@ -222,15 +236,12 @@ async function startLocalGateway(origin) {
       },
     )
     if (!winner) throw error
-    assertDesktopGatewayCompatibility(winner.health, environment)
     embeddedGateway = null
-    borrowedGatewayOrigin = winner.origin
-    logger.info('gateway.reused_after_race', {
-      origin: winner.origin,
-      instanceId: winner.lease.instanceId,
-      owner: winner.lease.owner,
-    })
-    return winner.origin
+    return attachRunningGateway(
+      winner,
+      environment,
+      'gateway.reused_after_race',
+    )
   }
   borrowedGatewayOrigin = ''
   gatewayCrashCount = 0
@@ -776,11 +787,23 @@ ipcMain.handle('qwen-audio-agent:settings-save', async (event, settings) => {
   if (!remote && borrowedGatewayOrigin && gatewayRuntimeChanged) {
     const borrowedHealth = await readGatewayHealth(borrowedGatewayOrigin)
     if (borrowedHealth) {
-      throw new Error(
-        '当前正在复用由其他进程启动的 Gateway，请先停止该 Gateway 后再修改运行配置',
+      const nextEnvironment = desktopGatewayEnvironment({
+        env: process.env,
+        configured: parseEnv(content),
+        runtimeRoot,
+        sourceRoot,
+      })
+      const compatibility = desktopGatewayCompatibility(
+        borrowedHealth,
+        nextEnvironment,
       )
+      if (!compatibility.compatible) {
+        throw new Error(
+          `${compatibility.reason}；当前 Gateway 由其他进程管理，请先停止它再应用该设置`,
+        )
+      }
     }
-    borrowedGatewayOrigin = ''
+    if (!borrowedHealth) borrowedGatewayOrigin = ''
   }
   if (
     wakeShortcutChanged

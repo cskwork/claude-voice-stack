@@ -3,6 +3,7 @@ import { EventEmitter } from 'node:events'
 import test from 'node:test'
 import {
   assertDesktopGatewayCompatibility,
+  desktopGatewayCompatibility,
   desktopExecutablePath,
   desktopGatewayEnvironment,
   EmbeddedGateway,
@@ -79,7 +80,7 @@ function compatibleHealth(env) {
   }
 }
 
-test('accepts a reusable Gateway only when desktop runtime settings match', () => {
+test('strict compatibility validation rejects mismatched runtime settings', () => {
   const env = {
     DASHSCOPE_API_KEY: 'desktop-key',
     AGENT_PROTOCOL: 'opencode',
@@ -101,6 +102,19 @@ test('accepts a reusable Gateway only when desktop runtime settings match', () =
     }),
     /语音前台配置.*不一致/,
   )
+})
+
+test('reports a runtime mismatch without preventing a frontend attachment', () => {
+  const env = {
+    DASHSCOPE_API_KEY: 'desktop-key',
+    AGENT_PROTOCOL: 'qoder',
+  }
+  const result = desktopGatewayCompatibility(compatibleHealth(env), env)
+  assert.deepEqual(result, {
+    compatible: false,
+    code: 'backend',
+    reason: '已有 Gateway 的后台 Agent 与桌面设置不一致',
+  })
 })
 
 test('starts the embedded gateway on the preferred port and adopts the reported origin', async () => {
