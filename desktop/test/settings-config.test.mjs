@@ -224,6 +224,22 @@ test('reads and updates the Speech-to-Speech desktop configuration', () => {
   assert.match(content, /SPEECH_TO_SPEECH_AUTH_TOKEN=private-token/)
 })
 
+test('uses the standard Speech-to-Speech URL as an effective default', () => {
+  const settings = parseSettings(
+    'QWEN_AUDIO_REALTIME_PROVIDER=speech-to-speech\n',
+  )
+
+  assert.equal(
+    settings.speechToSpeechRealtimeUrl,
+    'ws://127.0.0.1:8765/v1/realtime',
+  )
+  assert.equal(realtimeSettingsConfigured(settings), true)
+  assert.equal(realtimeSettingsConfigured({
+    realtimeProvider: 'speech-to-speech',
+    speechToSpeechRealtimeUrl: '',
+  }), true)
+})
+
 test('supports the compact S2S aliases when reading existing configuration', () => {
   const settings = parseSettings([
     'QWEN_AUDIO_REALTIME_PROVIDER=s2s',

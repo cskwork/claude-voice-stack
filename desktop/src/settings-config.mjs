@@ -115,6 +115,11 @@ function encoded(value) {
 
 export function parseSettings(content = '', fallback = {}) {
   const values = parseEnv(content)
+  const realtimeProvider = normalizeRealtimeProvider(configured(
+    values,
+    'QWEN_AUDIO_REALTIME_PROVIDER',
+    fallback.QWEN_AUDIO_REALTIME_PROVIDER || DEFAULTS.realtimeProvider,
+  ))
   const configuredApiKey = configured(
     values,
     'DASHSCOPE_API_KEY',
@@ -174,11 +179,7 @@ export function parseSettings(content = '', fallback = {}) {
       fallback.QWEN_AUDIO_DESKTOP_WAKE_SHORTCUT ?? DEFAULTS.wakeShortcut,
     )),
     dashscopeApiKey: String(configuredApiKey || '').trim(),
-    realtimeProvider: normalizeRealtimeProvider(configured(
-      values,
-      'QWEN_AUDIO_REALTIME_PROVIDER',
-      fallback.QWEN_AUDIO_REALTIME_PROVIDER || DEFAULTS.realtimeProvider,
-    )),
+    realtimeProvider,
     agentProtocol: cleanAgentProtocol(configured(
       values,
       'AGENT_PROTOCOL',
@@ -190,7 +191,10 @@ export function parseSettings(content = '', fallback = {}) {
       fallback.QWEN_AUDIO_REALTIME_MODEL || DEFAULTS.realtimeModel,
     ) || DEFAULTS.realtimeModel).trim(),
     speechToSpeechRealtimeUrl: String(
-      configuredS2sUrl || DEFAULTS.speechToSpeechRealtimeUrl,
+      configuredS2sUrl
+      || (realtimeProvider === 'speech-to-speech'
+        ? DEFAULT_SPEECH_TO_SPEECH_REALTIME_URL
+        : DEFAULTS.speechToSpeechRealtimeUrl),
     ).trim(),
     speechToSpeechAuthToken: String(configuredS2sToken || '').trim(),
     backendModel: String(configured(
@@ -264,7 +268,7 @@ export function realtimeSettingsConfigured(settings = {}) {
   try {
     return Boolean(cleanRealtimeUrl(
       settings.speechToSpeechRealtimeUrl,
-      DEFAULTS.speechToSpeechRealtimeUrl,
+      DEFAULT_SPEECH_TO_SPEECH_REALTIME_URL,
     ))
   } catch {
     return false
