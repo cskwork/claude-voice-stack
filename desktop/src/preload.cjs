@@ -10,6 +10,25 @@ contextBridge.exposeInMainWorld('qwenAudioAgentDesktop', {
   dragMove: (x, y) => sendPoint('qwen-audio-agent:drag-move', x, y),
   dragEnd: () => ipcRenderer.send('qwen-audio-agent:drag-end'),
   openSettings: () => ipcRenderer.send('qwen-audio-agent:open-settings'),
+  enterSleep: () => ipcRenderer.invoke('qwen-audio-agent:enter-sleep'),
+  wake: () => ipcRenderer.send('qwen-audio-agent:wake'),
+  lifecycleReady: () => ipcRenderer.send('qwen-audio-agent:lifecycle-ready'),
+  loadLifecycle: () => ipcRenderer.invoke('qwen-audio-agent:lifecycle-load'),
+  pauseWakeShortcut: () => ipcRenderer.invoke(
+    'qwen-audio-agent:wake-shortcut-pause',
+  ),
+  resumeWakeShortcut: () => ipcRenderer.invoke(
+    'qwen-audio-agent:wake-shortcut-resume',
+  ),
+  onLifecycle: callback => {
+    if (typeof callback !== 'function') return () => {}
+    const listener = (_event, lifecycle) => callback(lifecycle)
+    ipcRenderer.on('qwen-audio-agent:lifecycle', listener)
+    return () => ipcRenderer.removeListener(
+      'qwen-audio-agent:lifecycle',
+      listener,
+    )
+  },
   loadSettings: () => ipcRenderer.invoke('qwen-audio-agent:settings-load'),
   loadRuntimeStatus: () => ipcRenderer.invoke(
     'qwen-audio-agent:settings-runtime-status',

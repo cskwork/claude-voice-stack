@@ -8,6 +8,7 @@ import {
 } from '../src/settings-config.mjs'
 
 const REALTIME_DEFAULTS = {
+  wakeShortcut: 'CommandOrControl+Shift+Space',
   realtimeProvider: 'dashscope',
   realtimeModel: 'qwen-audio-3.0-realtime-plus',
   speechToSpeechRealtimeUrl: '',
@@ -18,6 +19,7 @@ test('reads desktop-owned settings with friendly defaults', () => {
   assert.deepEqual(parseSettings(''), {
     gatewayUrl: 'http://127.0.0.1:3101',
     orbStyle: 'fluid',
+    autoSleepSeconds: 120,
     dashscopeApiKey: '',
     ...REALTIME_DEFAULTS,
     agentProtocol: 'none',
@@ -33,6 +35,7 @@ test('shows effective client settings when user config is empty', () => {
   }), {
     gatewayUrl: 'http://127.0.0.1:3200',
     orbStyle: 'goo',
+    autoSleepSeconds: 120,
     dashscopeApiKey: 'sk-from-env',
     ...REALTIME_DEFAULTS,
     agentProtocol: 'none',
@@ -52,6 +55,7 @@ test('updates client settings without changing Gateway-owned configuration', () 
   ].join('\n'), {
     gatewayUrl: 'http://127.0.0.1:3200',
     orbStyle: 'goo',
+    autoSleepSeconds: 120,
   })
 
   assert.match(content, /CUSTOM_SETTING=keep/)
@@ -64,6 +68,7 @@ test('updates client settings without changing Gateway-owned configuration', () 
   assert.deepEqual(parseSettings(content), {
     gatewayUrl: 'http://127.0.0.1:3200',
     orbStyle: 'goo',
+    autoSleepSeconds: 120,
     dashscopeApiKey: 'secret',
     ...REALTIME_DEFAULTS,
     agentProtocol: 'qoder',
@@ -90,6 +95,7 @@ test('keeps the stored DashScope key when the field is not part of the update', 
   const content = updateSettingsContent('DASHSCOPE_API_KEY=secret\n', {
     gatewayUrl: 'http://127.0.0.1:3101',
     orbStyle: 'fluid',
+    autoSleepSeconds: 120,
   })
 
   assert.match(content, /DASHSCOPE_API_KEY=secret/)
@@ -115,6 +121,7 @@ test('an explicitly empty key and backend override stale process values', () => 
   }), {
     gatewayUrl: 'http://127.0.0.1:3101',
     orbStyle: 'fluid',
+    autoSleepSeconds: 120,
     dashscopeApiKey: '',
     ...REALTIME_DEFAULTS,
     agentProtocol: 'none',
@@ -133,6 +140,46 @@ test('updates the selected backend while preserving unrelated configuration', ()
 
   assert.match(content, /AGENT_PROTOCOL=opencode/)
   assert.match(content, /CUSTOM_SETTING=keep/)
+})
+
+test('reads, updates, and disables desktop auto sleep', () => {
+  const content = updateSettingsContent('', { autoSleepSeconds: 300 })
+  assert.match(content, /QWEN_AUDIO_DESKTOP_AUTO_SLEEP_SECONDS=300/)
+  assert.equal(parseSettings(content).autoSleepSeconds, 300)
+  assert.equal(parseSettings(
+    'QWEN_AUDIO_DESKTOP_AUTO_SLEEP_SECONDS=0\n',
+  ).autoSleepSeconds, 0)
+  assert.equal(parseSettings(
+    'QWEN_AUDIO_DESKTOP_AUTO_SLEEP_SECONDS=5\n',
+  ).autoSleepSeconds, 120)
+})
+
+test('reads and updates a supported desktop wake shortcut', () => {
+  const content = updateSettingsContent('', {
+    wakeShortcut: 'CommandOrControl+Alt+Space',
+  })
+  assert.match(
+    content,
+    /QWEN_AUDIO_DESKTOP_WAKE_SHORTCUT=CommandOrControl\+Alt\+Space/,
+  )
+  assert.equal(
+    parseSettings(content).wakeShortcut,
+    'CommandOrControl+Alt+Space',
+  )
+  assert.equal(
+    parseSettings(
+      'QWEN_AUDIO_DESKTOP_WAKE_SHORTCUT=CommandOrControl+Alt+Shift+J\n',
+    ).wakeShortcut,
+    'CommandOrControl+Alt+Shift+J',
+  )
+  assert.equal(
+    parseSettings('QWEN_AUDIO_DESKTOP_WAKE_SHORTCUT=F13\n').wakeShortcut,
+    'F13',
+  )
+  assert.equal(
+    parseSettings('QWEN_AUDIO_DESKTOP_WAKE_SHORTCUT=invalid\n').wakeShortcut,
+    'CommandOrControl+Shift+Space',
+  )
 })
 
 test('updates the realtime model and clears an explicit backend model', () => {
@@ -175,6 +222,22 @@ test('reads and updates the Speech-to-Speech desktop configuration', () => {
     /SPEECH_TO_SPEECH_REALTIME_URL=wss:\/\/voice\.example\.test\/v1\/realtime/,
   )
   assert.match(content, /SPEECH_TO_SPEECH_AUTH_TOKEN=private-token/)
+})
+
+test('uses the standard Speech-to-Speech URL as an effective default', () => {
+  const settings = parseSettings(
+    'QWEN_AUDIO_REALTIME_PROVIDER=speech-to-speech\n',
+  )
+
+  assert.equal(
+    settings.speechToSpeechRealtimeUrl,
+    'ws://127.0.0.1:8765/v1/realtime',
+  )
+  assert.equal(realtimeSettingsConfigured(settings), true)
+  assert.equal(realtimeSettingsConfigured({
+    realtimeProvider: 'speech-to-speech',
+    speechToSpeechRealtimeUrl: '',
+  }), true)
 })
 
 test('supports the compact S2S aliases when reading existing configuration', () => {
@@ -260,6 +323,11 @@ test('desktop settings expose the embedded voice service without editing backend
   assert.match(html, /id="agent-protocol"/)
   assert.match(html, /id="realtime-model"/)
   assert.match(html, /id="backend-model"/)
+  assert.match(html, /id="auto-sleep-seconds"/)
+  assert.match(html, /id="wake-shortcut"/)
+  assert.match(html, /id="record-wake-shortcut"/)
+  assert.match(html, /id="reset-wake-shortcut"/)
+  assert.doesNotMatch(html, />全局快捷键</)
   // 后台 Agent 选项按本机可用性检测结果动态渲染，HTML 里只保留空容器
   assert.match(html, /<select id="agent-protocol"><\/select>/)
   assert.match(html, /id="refresh-backends"/)

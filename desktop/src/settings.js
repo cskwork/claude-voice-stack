@@ -9,6 +9,10 @@ import { updaterButtonState, updaterStatusText } from './update-status.mjs'
 const form = document.querySelector('#settings-form')
 const gatewayUrl = document.querySelector('#gateway-url')
 const orbStyle = document.querySelector('#orb-style')
+const autoSleepSeconds = document.querySelector('#auto-sleep-seconds')
+const wakeShortcut = document.querySelector('#wake-shortcut')
+const recordWakeShortcut = document.querySelector('#record-wake-shortcut')
+const resetWakeShortcut = document.querySelector('#reset-wake-shortcut')
 const dashscopeApiKey = document.querySelector('#dashscope-api-key')
 const realtimeProviderInputs = [
   ...document.querySelectorAll('input[name="realtime-provider"]'),
@@ -44,6 +48,132 @@ let applying = false
 let refreshingRuntime = false
 let updaterState = null
 let startupError = null
+let recordingWakeShortcut = false
+const defaultWakeShortcut = 'CommandOrControl+Shift+Space'
+const macPlatform = /Mac|iPhone|iPad/.test(navigator.platform)
+
+function renderWakeShortcutStatus(registered) {
+  recordWakeShortcut.classList.toggle('invalid', registered === false)
+  recordWakeShortcut.title = registered === false
+    ? '这个快捷键已被其他应用占用，点击重新设置'
+    : '点击后按下新的快捷键'
+}
+
+function wakeShortcutLabel(value) {
+  const labels = {
+    CommandOrControl: macPlatform ? '⌘' : 'Ctrl',
+    Alt: macPlatform ? '⌥' : 'Alt',
+    Shift: '⇧',
+    Space: 'Space',
+    Up: '↑',
+    Down: '↓',
+    Left: '←',
+    Right: '→',
+  }
+  return String(value || defaultWakeShortcut)
+    .split('+')
+    .map(part => labels[part] || part)
+    .join('  ')
+}
+
+function renderWakeShortcut() {
+  recordWakeShortcut.textContent = recordingWakeShortcut
+    ? '请按快捷键…'
+    : wakeShortcutLabel(wakeShortcut.value)
+  recordWakeShortcut.classList.toggle('recording', recordingWakeShortcut)
+  resetWakeShortcut.hidden = wakeShortcut.value === defaultWakeShortcut
+}
+
+async function restoreWakeShortcutRegistration() {
+  try {
+    const registered = await window.qwenAudioAgentDesktop.resumeWakeShortcut()
+    renderWakeShortcutStatus(registered)
+  } catch {
+    renderWakeShortcutStatus(false)
+  }
+}
+
+function capturedWakeShortcut(event) {
+  let key = event.key
+  if (key === ' ') key = 'Space'
+  if (key.startsWith('Arrow')) key = key.slice(5)
+  if (key.length === 1 && /^[a-z0-9]$/i.test(key)) key = key.toUpperCase()
+  const functionKey = /^F(?:[1-9]|1\d|2[0-4])$/.test(key)
+  const regularKey = (
+    key === 'Space'
+    || /^[A-Z0-9]$/.test(key)
+    || ['Up', 'Down', 'Left', 'Right'].includes(key)
+  )
+  if (!functionKey && !regularKey) return ''
+  const command = event.metaKey || event.ctrlKey
+  if (!functionKey && !command && !event.altKey) return ''
+  const shortcut = [
+    command ? 'CommandOrControl' : '',
+    event.altKey ? 'Alt' : '',
+    event.shiftKey ? 'Shift' : '',
+    key,
+  ].filter(Boolean).join('+')
+  if (['CommandOrControl+Q', 'CommandOrControl+W'].includes(shortcut)) {
+    return ''
+  }
+  return shortcut
+}
+
+recordWakeShortcut.addEventListener('click', async () => {
+  if (recordingWakeShortcut) {
+    recordingWakeShortcut = false
+    renderWakeShortcut()
+    updateApplyState()
+    await restoreWakeShortcutRegistration()
+    return
+  }
+  try {
+    await window.qwenAudioAgentDesktop.pauseWakeShortcut()
+    recordingWakeShortcut = true
+    recordWakeShortcut.blur()
+    renderWakeShortcut()
+    updateApplyState()
+  } catch (error) {
+    showMessage(friendlyError(error, '无法开始录制快捷键'), 'error')
+  }
+})
+
+resetWakeShortcut.addEventListener('click', () => {
+  const wasRecording = recordingWakeShortcut
+  recordingWakeShortcut = false
+  wakeShortcut.value = defaultWakeShortcut
+  recordWakeShortcut.classList.remove('invalid')
+  showMessage('')
+  renderWakeShortcut()
+  updateApplyState()
+  if (wasRecording) void restoreWakeShortcutRegistration()
+})
+
+window.addEventListener('keydown', event => {
+  if (!recordingWakeShortcut) return
+  event.preventDefault()
+  event.stopPropagation()
+  if (event.key === 'Escape') {
+    recordingWakeShortcut = false
+    renderWakeShortcut()
+    updateApplyState()
+    void restoreWakeShortcutRegistration()
+    return
+  }
+  if (['Meta', 'Control', 'Alt', 'Shift'].includes(event.key)) return
+  const shortcut = capturedWakeShortcut(event)
+  if (!shortcut) {
+    showMessage('请使用 ⌘/Ctrl 或 Alt 组合键，也可以直接使用 F1–F24。', 'error')
+    return
+  }
+  wakeShortcut.value = shortcut
+  recordingWakeShortcut = false
+  recordWakeShortcut.classList.remove('invalid')
+  showMessage('')
+  renderWakeShortcut()
+  updateApplyState()
+  void restoreWakeShortcutRegistration()
+}, true)
 
 // 更新状态由主进程推送（onUpdaterStatus）与打开时拉取（loadUpdaterStatus）
 // 共同驱动；下载完成前按钮禁用，完成后变为“重启更新”。
@@ -165,6 +295,8 @@ function formSettings() {
   return {
     gatewayUrl: gatewayUrl.value,
     orbStyle: orbStyle.value,
+    autoSleepSeconds: Number(autoSleepSeconds.value),
+    wakeShortcut: wakeShortcut.value,
     dashscopeApiKey: dashscopeApiKey.value,
     realtimeProvider: selectedRealtimeProvider(),
     agentProtocol: agentProtocol.value,
@@ -179,6 +311,8 @@ function fingerprint(value) {
   return JSON.stringify({
     gatewayUrl: value.gatewayUrl,
     orbStyle: value.orbStyle,
+    autoSleepSeconds: value.autoSleepSeconds,
+    wakeShortcut: value.wakeShortcut,
     dashscopeApiKey: value.dashscopeApiKey,
     realtimeProvider: value.realtimeProvider,
     agentProtocol: value.agentProtocol,
@@ -190,7 +324,11 @@ function fingerprint(value) {
 }
 
 function updateApplyState() {
-  submit.disabled = applying || fingerprint(formSettings()) === appliedFingerprint
+  submit.disabled = (
+    applying
+    || recordingWakeShortcut
+    || fingerprint(formSettings()) === appliedFingerprint
+  )
 }
 
 function setBackendStatus(text, connected) {
@@ -318,6 +456,19 @@ refreshBackends.addEventListener('click', () => {
 function render() {
   gatewayUrl.value = settings.gatewayUrl
   orbStyle.value = settings.orbStyle
+  const sleepValue = String(settings.autoSleepSeconds ?? 120)
+  autoSleepSeconds.querySelector('[data-custom]')?.remove()
+  if (![...autoSleepSeconds.options].some(option => option.value === sleepValue)) {
+    const custom = document.createElement('option')
+    custom.value = sleepValue
+    custom.dataset.custom = 'true'
+    custom.textContent = `自定义 · ${sleepValue} 秒`
+    autoSleepSeconds.append(custom)
+  }
+  autoSleepSeconds.value = sleepValue
+  wakeShortcut.value = settings.wakeShortcut
+  recordingWakeShortcut = false
+  renderWakeShortcut()
   dashscopeApiKey.value = settings.dashscopeApiKey || ''
   renderBackendOptions(settings.agentProtocol || 'none')
   realtimeModel.value = settings.realtimeModel
@@ -334,6 +485,7 @@ function render() {
 for (const control of [
   gatewayUrl,
   orbStyle,
+  autoSleepSeconds,
   dashscopeApiKey,
   speechToSpeechRealtimeUrl,
   speechToSpeechAuthToken,
@@ -368,6 +520,7 @@ form.addEventListener('submit', async event => {
     const result = await window.qwenAudioAgentDesktop.saveSettings(formSettings())
     settings = result.settings
     runtime = result.runtime
+    renderWakeShortcutStatus(result.wakeShortcutRegistered)
     render()
     if (!runtime.gatewayConnected) {
       showMessage('配置已保存，Gateway 正在启动…', 'notice')
@@ -380,6 +533,9 @@ form.addEventListener('submit', async event => {
       )
     }
   } catch (error) {
+    if (String(error?.message || '').includes('快捷键已被其他应用占用')) {
+      renderWakeShortcutStatus(false)
+    }
     showMessage(friendlyError(error, '应用失败'), 'error')
   } finally {
     applying = false
@@ -390,6 +546,7 @@ form.addEventListener('submit', async event => {
 window.qwenAudioAgentDesktop.loadSettings().then(value => {
   settings = value.settings
   runtime = value.runtime
+  renderWakeShortcutStatus(value.wakeShortcutRegistered)
   render()
   void detectBackendOptions()
   if (value.runtimeError) {

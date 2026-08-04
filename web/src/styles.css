@@ -251,6 +251,53 @@ header .voice.waiting { color: #ded5ff; border-color: #927cf480; }
 .desktop-orb-stage.error .fluid-orb::before {
   animation: desktop-orb-error 2.2s ease-in-out infinite;
 }
+.desktop-orb-stage.sleeping .fluid-orb,
+.desktop-orb-stage.waking .fluid-orb {
+  --orb-halo: #7f9be04d;
+  --orb-ring: #a7bdf071;
+}
+.desktop-orb-stage.sleeping .fluid {
+  animation-play-state: paused;
+}
+.desktop-orb-stage.sleeping .fluid .blob,
+.desktop-orb-stage.sleeping .fluid-orb::before,
+.desktop-orb-stage.sleeping .fluid-orb::after {
+  animation-play-state: paused;
+}
+.desktop-sleep-badge {
+  position: absolute;
+  z-index: 4;
+  top: 12px;
+  right: 14px;
+  min-width: 38px;
+  height: 25px;
+  padding: 0 7px 0 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  border: 1px solid #d8d4ff70;
+  border-radius: 13px;
+  color: #f0edff;
+  background: linear-gradient(145deg, #292c52eb, #4b3f74e8);
+  box-shadow: 0 5px 14px #14152a66, inset 0 1px #ffffff1f;
+  backdrop-filter: blur(8px);
+  pointer-events: none;
+}
+.desktop-sleep-badge svg {
+  width: 13px;
+  height: 13px;
+  fill: currentColor;
+  opacity: .92;
+}
+.desktop-sleep-badge b {
+  font: 650 9.5px/1 system-ui, sans-serif;
+  letter-spacing: -.25px;
+}
+.desktop-orb-stage.waking .fluid {
+  filter: grayscale(.55) saturate(.48) brightness(.84);
+  animation-duration: 3s;
+}
 .goo {
   position: relative; width: 176px; height: 176px; overflow: hidden;
   background: #6b8def;
@@ -285,6 +332,17 @@ header .voice.waiting { color: #ded5ff; border-color: #927cf480; }
 .desktop-orb-stage.error .goo,
 .desktop-orb-stage.error .goo .fill {
   animation-play-state: paused;
+}
+.desktop-orb-stage.sleeping .goo {
+  filter: blur(1.2px) brightness(1.12) saturate(1.08);
+}
+.desktop-orb-stage.sleeping .goo,
+.desktop-orb-stage.sleeping .goo .fill {
+  animation-play-state: paused;
+}
+.desktop-orb-stage.waking .goo {
+  filter: blur(1.2px) grayscale(.58) saturate(.45) brightness(.82);
+  animation-duration: 4s;
 }
 
 .desktop-orb-stage {
@@ -324,6 +382,9 @@ header .voice.waiting { color: #ded5ff; border-color: #927cf480; }
   opacity: 1;
   pointer-events: auto;
   transform: translate(-50%, 0) scale(1);
+}
+.desktop-orb-stage.sleeping .desktop-orb-controls {
+  display: none;
 }
 .desktop-orb-controls button {
   width: 27px;

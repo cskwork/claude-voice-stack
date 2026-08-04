@@ -13,6 +13,8 @@ import {
 const DEFAULTS = {
   gatewayUrl: 'http://127.0.0.1:3101',
   orbStyle: 'fluid',
+  autoSleepSeconds: 120,
+  wakeShortcut: 'CommandOrControl+Shift+Space',
   dashscopeApiKey: '',
   realtimeProvider: DEFAULT_REALTIME_PROVIDER,
   agentProtocol: 'none',
@@ -25,6 +27,8 @@ const DEFAULTS = {
 const SETTING_KEYS = {
   gatewayUrl: 'QWEN_AUDIO_AGENT_URL',
   orbStyle: 'QWEN_AUDIO_ORB_STYLE',
+  autoSleepSeconds: 'QWEN_AUDIO_DESKTOP_AUTO_SLEEP_SECONDS',
+  wakeShortcut: 'QWEN_AUDIO_DESKTOP_WAKE_SHORTCUT',
   dashscopeApiKey: 'DASHSCOPE_API_KEY',
   realtimeProvider: 'QWEN_AUDIO_REALTIME_PROVIDER',
   agentProtocol: 'AGENT_PROTOCOL',
@@ -65,6 +69,44 @@ function cleanAgentProtocol(value) {
   return protocol
 }
 
+function cleanAutoSleepSeconds(value) {
+  const seconds = Number(value)
+  if (seconds === 0) return 0
+  if (!Number.isInteger(seconds) || seconds < 30 || seconds > 3600) {
+    return DEFAULTS.autoSleepSeconds
+  }
+  return seconds
+}
+
+function cleanWakeShortcut(value) {
+  const shortcut = String(value || DEFAULTS.wakeShortcut).trim()
+  const parts = shortcut.split('+')
+  const key = parts.pop() || ''
+  const modifiers = new Set(parts)
+  const validModifiers = parts.every(part => (
+    ['CommandOrControl', 'Alt', 'Shift'].includes(part)
+  )) && modifiers.size === parts.length
+  const validKey = (
+    key === 'Space'
+    || /^[A-Z0-9]$/.test(key)
+    || /^F(?:[1-9]|1\d|2[0-4])$/.test(key)
+    || ['Up', 'Down', 'Left', 'Right'].includes(key)
+  )
+  const functionKey = /^F(?:[1-9]|1\d|2[0-4])$/.test(key)
+  const hasCommandModifier = (
+    modifiers.has('CommandOrControl') || modifiers.has('Alt')
+  )
+  if (!validModifiers || !validKey || (!functionKey && !hasCommandModifier)) {
+    return DEFAULTS.wakeShortcut
+  }
+  return [
+    modifiers.has('CommandOrControl') ? 'CommandOrControl' : '',
+    modifiers.has('Alt') ? 'Alt' : '',
+    modifiers.has('Shift') ? 'Shift' : '',
+    key,
+  ].filter(Boolean).join('+')
+}
+
 function encoded(value) {
   const text = String(value ?? '')
   if (/^[A-Za-z0-9_./:@+-]*$/.test(text)) return text
@@ -73,6 +115,11 @@ function encoded(value) {
 
 export function parseSettings(content = '', fallback = {}) {
   const values = parseEnv(content)
+  const realtimeProvider = normalizeRealtimeProvider(configured(
+    values,
+    'QWEN_AUDIO_REALTIME_PROVIDER',
+    fallback.QWEN_AUDIO_REALTIME_PROVIDER || DEFAULTS.realtimeProvider,
+  ))
   const configuredApiKey = configured(
     values,
     'DASHSCOPE_API_KEY',
@@ -120,12 +167,19 @@ export function parseSettings(content = '', fallback = {}) {
     orbStyle: ['fluid', 'goo'].includes(
       String(configuredOrbStyle).toLowerCase(),
     ) ? String(configuredOrbStyle).toLowerCase() : DEFAULTS.orbStyle,
-    dashscopeApiKey: String(configuredApiKey || '').trim(),
-    realtimeProvider: normalizeRealtimeProvider(configured(
+    autoSleepSeconds: cleanAutoSleepSeconds(configured(
       values,
-      'QWEN_AUDIO_REALTIME_PROVIDER',
-      fallback.QWEN_AUDIO_REALTIME_PROVIDER || DEFAULTS.realtimeProvider,
+      'QWEN_AUDIO_DESKTOP_AUTO_SLEEP_SECONDS',
+      fallback.QWEN_AUDIO_DESKTOP_AUTO_SLEEP_SECONDS
+        ?? DEFAULTS.autoSleepSeconds,
     )),
+    wakeShortcut: cleanWakeShortcut(configured(
+      values,
+      'QWEN_AUDIO_DESKTOP_WAKE_SHORTCUT',
+      fallback.QWEN_AUDIO_DESKTOP_WAKE_SHORTCUT ?? DEFAULTS.wakeShortcut,
+    )),
+    dashscopeApiKey: String(configuredApiKey || '').trim(),
+    realtimeProvider,
     agentProtocol: cleanAgentProtocol(configured(
       values,
       'AGENT_PROTOCOL',
@@ -137,7 +191,10 @@ export function parseSettings(content = '', fallback = {}) {
       fallback.QWEN_AUDIO_REALTIME_MODEL || DEFAULTS.realtimeModel,
     ) || DEFAULTS.realtimeModel).trim(),
     speechToSpeechRealtimeUrl: String(
-      configuredS2sUrl || DEFAULTS.speechToSpeechRealtimeUrl,
+      configuredS2sUrl
+      || (realtimeProvider === 'speech-to-speech'
+        ? DEFAULT_SPEECH_TO_SPEECH_REALTIME_URL
+        : DEFAULTS.speechToSpeechRealtimeUrl),
     ).trim(),
     speechToSpeechAuthToken: String(configuredS2sToken || '').trim(),
     backendModel: String(configured(
@@ -167,6 +224,12 @@ export function normalizeSettings(settings = {}) {
     )
       ? String(settings.orbStyle || DEFAULTS.orbStyle).toLowerCase()
       : DEFAULTS.orbStyle,
+    autoSleepSeconds: cleanAutoSleepSeconds(
+      settings.autoSleepSeconds ?? DEFAULTS.autoSleepSeconds,
+    ),
+    wakeShortcut: cleanWakeShortcut(
+      settings.wakeShortcut ?? DEFAULTS.wakeShortcut,
+    ),
     dashscopeApiKey: String(
       settings.dashscopeApiKey ?? DEFAULTS.dashscopeApiKey,
     ).trim(),
@@ -205,7 +268,7 @@ export function realtimeSettingsConfigured(settings = {}) {
   try {
     return Boolean(cleanRealtimeUrl(
       settings.speechToSpeechRealtimeUrl,
-      DEFAULTS.speechToSpeechRealtimeUrl,
+      DEFAULT_SPEECH_TO_SPEECH_REALTIME_URL,
     ))
   } catch {
     return false

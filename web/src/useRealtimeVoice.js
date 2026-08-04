@@ -68,6 +68,7 @@ export function microphoneControlEvent({
 export default function useRealtimeVoice({
   sessionId,
   enabled,
+  suspended = false,
   outputMuted = false,
   inputOnlyMute = false,
   clientType = 'web',
@@ -79,6 +80,7 @@ export default function useRealtimeVoice({
 }) {
   const [state, setState] = useState('idle')
   const [inputActive, setInputActive] = useState(false)
+  const [inputReady, setInputReady] = useState(false)
   const [error, setError] = useState('')
   const [visualError, setVisualError] = useState(false)
   const [connectionState, setConnectionState] = useState('connecting')
@@ -319,6 +321,16 @@ export default function useRealtimeVoice({
   }
 
   useEffect(() => {
+    if (suspended) {
+      setState('idle')
+      setInputActive(false)
+      setInputReady(false)
+      setAudioLevel(0)
+      setError('')
+      setVisualError(false)
+      setConnectionState('sleeping')
+      return undefined
+    }
     let disposed = false
     let reconnectTimer
     let reconnectDelay = 500
@@ -445,20 +457,29 @@ export default function useRealtimeVoice({
     return () => {
       disposed = true
       clearTimeout(reconnectTimer)
+      stopPlayback(suspended ? 'desktop_sleep' : 'connection_closed')
       socketRef.current?.close()
       socketRef.current = null
-      stopPlayback()
       mutedPlaybackResponses.current.clear()
     }
-  }, [clientLabel, clientType, inputOnlyMute, realtimeProvider, sessionId, takeover])
+  }, [
+    clientLabel,
+    clientType,
+    inputOnlyMute,
+    realtimeProvider,
+    sessionId,
+    suspended,
+    takeover,
+  ])
 
   useEffect(() => {
     if (outputMuted) stopPlayback()
   }, [outputMuted])
 
   useEffect(() => {
-    if (!enabled) {
+    if (!enabled || suspended) {
       inputReadyRef.current = false
+      setInputReady(false)
       sendSocketEvent(microphoneControlEvent({
         enabled: false,
         inputOnlyMute,
@@ -480,6 +501,7 @@ export default function useRealtimeVoice({
     const failInput = reason => {
       const message = reason?.message || String(reason || '无法打开麦克风')
       inputReadyRef.current = false
+      setInputReady(false)
       sendSocketEvent(microphoneControlEvent({
         enabled: false,
         inputOnlyMute,
@@ -532,6 +554,7 @@ export default function useRealtimeVoice({
         source.connect(processor)
         processor.connect(context.destination)
         inputReadyRef.current = true
+        setInputReady(true)
         sendSocketEvent(microphoneControlEvent({
           enabled: true,
           inputOnlyMute,
@@ -566,6 +589,7 @@ export default function useRealtimeVoice({
     return () => {
       disposed = true
       inputReadyRef.current = false
+      setInputReady(false)
       cancelAnimationFrame(animation)
       setInputActive(false)
       media?.getTracks().forEach(track => track.stop())
@@ -573,7 +597,14 @@ export default function useRealtimeVoice({
       source?.disconnect()
       analyser?.disconnect()
     }
-  }, [enabled, inputOnlyMute, sessionId, takeover])
+  }, [enabled, inputOnlyMute, sessionId, suspended, takeover])
+
+  useEffect(() => {
+    if (!suspended) return
+    const audio = audioRef.current
+    audioRef.current = null
+    audio?.close()
+  }, [suspended])
 
   useEffect(() => () => {
     audioRef.current?.close()
@@ -587,7 +618,8 @@ export default function useRealtimeVoice({
 
   return {
     state,
-    visualState: visualVoiceState(state, inputActive, enabled),
+    visualState: visualVoiceState(state, inputActive, enabled && !suspended),
+    inputReady,
     error,
     visualError,
     connectionState,
