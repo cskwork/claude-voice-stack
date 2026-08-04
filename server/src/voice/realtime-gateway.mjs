@@ -344,7 +344,7 @@ export function attachRealtimeGateway(server, {
         sessionId,
       }),
       onMemoryChanged: () => frontend?.updateAgentContext({
-        memories: memoryStore?.list(ownerId) || [],
+        memories: memoryStore?.list(ownerId, { limit: 64 }) || [],
       }),
       coordinator,
       coordinatorAvailable,
@@ -1276,7 +1276,7 @@ export function attachRealtimeGateway(server, {
         agentContext: {
           client: clientContext,
           textOnly: textOnlySession,
-          memories: memoryStore?.list(ownerId) || [],
+          memories: memoryStore?.list(ownerId, { limit: 64 }) || [],
           recentMessages: conversationSync.frontendContext({ ownerId, sessionId }),
           activeTasks,
         },
