@@ -3,6 +3,12 @@ import { parentPort, workerData } from 'node:worker_threads'
 import { inspectBackendSetupsAsync } from '../../shared/backend-setup.mjs'
 import { refreshProcessPath } from './process-path.mjs'
 
+function compactComponent(component) {
+  if (!component || typeof component !== 'object') return undefined
+  // 组件级就绪状态供一键安装判断“只补缺失组件”（如仅缺 ACP 适配器）。
+  return { ready: component.ready === true, source: component.source || '' }
+}
+
 function compactReport(report) {
   return {
     selected: report.selected,
@@ -12,6 +18,8 @@ function compactReport(report) {
       ready: item.ready,
       selected: item.selected,
       issues: item.issues,
+      backend: compactComponent(item.backend),
+      adapter: compactComponent(item.adapter),
     })),
   }
 }

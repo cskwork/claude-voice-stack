@@ -297,6 +297,17 @@ OpenCode 和 OpenClaw 支持自动下载安装；配置
 qwenaudio setup
 ```
 
+一键安装未就绪的后台 Agent（含 Codex、Claude Code 所需的 ACP 适配器）：
+
+```bash
+qwenaudio install codex
+```
+
+安装命令使用各 Agent 的官方 npm 包或官方安装脚本（脚本类步骤执行前会逐个
+确认，`--yes` 跳过确认），安装完成后自动复检可用状态；需要登录的 Agent 会
+给出登录提示。通用 `acp` 后台需自行安装并通过 `ACP_COMMAND` 配置。桌面版
+设置页的“后台 Agent”列表中，未安装的后台行尾也会出现同款“安装”按钮。
+
 使用 OpenClaw：
 
 ```dotenv
@@ -315,18 +326,20 @@ AGENT_PROTOCOL=opencode
 AGENT_PROTOCOL=qoder
 ```
 
-后台 Agent 需要用户自行安装并完成原生配置；qwen-audio-agent 会复用其
+后台 Agent 可通过 `qwenaudio install <名称>` 一键安装，也可按各 Agent 官方
+文档手动安装；安装后需完成其原生登录配置，qwen-audio-agent 会复用其
 用户级模型、工具、MCP、Skill 和认证。
 
-其中部分 Agent 通过外部 ACP 适配器接入，除本体外，还需要全局安装对应的适配器。
-以 Codex 为例：
+其中部分 Agent 通过外部 ACP 适配器接入，除本体外，还需要全局安装对应的适配器
+（`qwenaudio install` 会连同适配器一起安装）。以 Codex 为例：
 
 ```bash
 npm install -g @agentclientprotocol/codex-acp
 ```
 
 CLI 模式缺少适配器时会尝试通过 npx 按需启动；桌面版为保证启动可靠，仅使用已安装的
-组件，请提前安装。
+组件——未就绪的后台可直接在设置页点“安装”一键补齐：原生 ACP 后台装好即可用；
+未安装的后台装本体；本体已装、仅缺适配器时只装适配器。
 
 使用其他支持 ACP stdio 的 Agent：
 

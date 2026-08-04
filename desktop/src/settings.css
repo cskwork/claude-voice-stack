@@ -441,6 +441,142 @@ select:focus {
   gap: 8px;
 }
 
+/* 后台 Agent 列表：每行 = 单选钮 + 名称 + 状态徽标 + 安装按钮 */
+.backend-list-row {
+  align-items: start;
+  padding: 13px 0;
+}
+
+.backend-list-row > .setting-label {
+  padding-top: 9px;
+}
+
+.backend-list-action {
+  align-items: start;
+}
+
+.backend-list-action > .link-button {
+  height: 32px;
+}
+
+.backend-list {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid #d5dcdf;
+  border-radius: 9px;
+  background: #fff;
+}
+
+.backend-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 3px 8px 3px 11px;
+  border-bottom: 1px solid #edf1f2;
+  cursor: pointer;
+  transition: background .15s ease;
+}
+
+.backend-row:last-child {
+  border-bottom: 0;
+}
+
+.backend-row:hover {
+  background: #f6f9f9;
+}
+
+.backend-row.selected {
+  background: #f0faf8;
+}
+
+.backend-row.unavailable .backend-name {
+  color: #8a9499;
+}
+
+.backend-row input[type="radio"] {
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 0;
+  accent-color: #356f70;
+  cursor: pointer;
+}
+
+.backend-row input[type="radio"]:disabled {
+  cursor: default;
+}
+
+.backend-name {
+  min-width: 0;
+  overflow: hidden;
+  color: #3e484f;
+  font-size: 12.5px;
+  font-weight: 560;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.backend-status {
+  padding: 2px 7px;
+  border-radius: 999px;
+  color: #8a6d35;
+  background: #faf3e3;
+  font-size: 10.5px;
+  font-weight: 620;
+  white-space: nowrap;
+}
+
+.backend-status.ready {
+  color: #397e68;
+  background: #e8f5ef;
+}
+
+.backend-progress {
+  max-width: 190px;
+  overflow: hidden;
+  color: #58757b;
+  font-size: 10.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.backend-install {
+  height: 24px;
+  padding: 0 9px;
+  border: 1px solid #a9c8c7;
+  border-radius: 7px;
+  color: #285e61;
+  background: linear-gradient(180deg, #f5ffff, #eaf6f4);
+  font-size: 11px;
+  font-weight: 640;
+  white-space: nowrap;
+  transition: border-color .15s ease;
+}
+
+.backend-install:hover:not(:disabled) {
+  border-color: #7fb0ad;
+}
+
+.backend-install:disabled {
+  opacity: .55;
+  cursor: default;
+}
+
+.message-link {
+  padding: 0;
+  border: 0;
+  color: #315f68;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 620;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 button {
   border: 0;
   font: inherit;

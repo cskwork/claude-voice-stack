@@ -37,6 +37,19 @@ contextBridge.exposeInMainWorld('qwenAudioAgentDesktop', {
     'qwen-audio-agent:settings-detect-backends',
     { force: options?.force === true },
   ),
+  installBackend: backend => ipcRenderer.invoke(
+    'qwen-audio-agent:backend-install',
+    { backend },
+  ),
+  onBackendInstallProgress: callback => {
+    if (typeof callback !== 'function') return () => {}
+    const listener = (_event, progress) => callback(progress)
+    ipcRenderer.on('qwen-audio-agent:backend-install-progress', listener)
+    return () => ipcRenderer.removeListener(
+      'qwen-audio-agent:backend-install-progress',
+      listener,
+    )
+  },
   loadUpdaterStatus: () => ipcRenderer.invoke(
     'qwen-audio-agent:updater-status',
   ),

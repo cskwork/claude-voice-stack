@@ -142,11 +142,15 @@
               <h2 id="backend-settings-title">后台 Agent</h2>
             </div>
             <div class="settings-card">
-              <div class="setting-row">
-                <label for="agent-protocol">后台 Agent</label>
-                <div class="field-with-action">
-                  <!-- 选项由 settings.js 按本机检测结果动态渲染 -->
-                  <select id="agent-protocol"></select>
+              <div class="setting-row backend-list-row">
+                <span class="setting-label" id="backend-list-label">后台 Agent</span>
+                <div class="field-with-action backend-list-action">
+                  <!-- 行由 settings.js 按本机检测结果动态渲染 -->
+                  <div
+                    id="backend-list"
+                    role="radiogroup"
+                    aria-labelledby="backend-list-label"
+                  ></div>
                   <button
                     id="refresh-backends"
                     class="link-button"

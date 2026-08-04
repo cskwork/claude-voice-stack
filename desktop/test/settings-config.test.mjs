@@ -329,7 +329,6 @@ test('desktop settings expose the embedded voice service without editing backend
   assert.match(html, /Speech-to-Speech/)
   assert.match(html, /Hugging Face/)
   assert.match(html, /id="get-api-key"/)
-  assert.match(html, /id="agent-protocol"/)
   assert.match(html, /id="realtime-model"/)
   assert.match(html, /id="backend-model"/)
   assert.match(html, /id="auto-hide-seconds"/)
@@ -340,8 +339,9 @@ test('desktop settings expose the embedded voice service without editing backend
   assert.match(html, />显示快捷键</)
   assert.doesNotMatch(html, />自动休眠</)
   assert.doesNotMatch(html, />全局快捷键</)
-  // 后台 Agent 选项按本机可用性检测结果动态渲染，HTML 里只保留空容器
-  assert.match(html, /<select id="agent-protocol"><\/select>/)
+  // 后台 Agent 列表按本机可用性检测结果动态渲染，HTML 里只保留空容器
+  assert.match(html, /<div\s+id="backend-list"/)
+  assert.match(html, /role="radiogroup"/)
   assert.match(html, /id="refresh-backends"/)
   // 版本与自动更新状态由主进程推送渲染
   assert.match(html, /id="updater-status"/)
