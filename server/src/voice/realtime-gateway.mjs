@@ -91,6 +91,7 @@ function clientDescriptor(event = {}) {
 export function attachRealtimeGateway(server, {
   identityManager,
   memoryStore,
+  notesStore,
   coordinator,
   coordinatorAvailable = async () => true,
   respondPermission,
@@ -338,6 +339,7 @@ export function attachRealtimeGateway(server, {
       getTurnId: () => committedTurnId,
       getTurnGeneration: () => committedTurnGeneration,
       memoryStore,
+      notesStore,
       getClientContext: () => clientContext,
       getConversationContext: () => conversationSync.frontendContext({
         ownerId,

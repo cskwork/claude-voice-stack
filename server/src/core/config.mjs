@@ -381,6 +381,9 @@ export const config = {
   frontendMemoryPath: process.env.QWEN_AUDIO_AGENT_FRONTEND_MEMORY_PATH
     ? resolve(root, process.env.QWEN_AUDIO_AGENT_FRONTEND_MEMORY_PATH)
     : runtimeEnvironment.frontendMemoryPath,
+  frontendNotesPath: process.env.QWEN_AUDIO_AGENT_FRONTEND_NOTES_PATH
+    ? resolve(root, process.env.QWEN_AUDIO_AGENT_FRONTEND_NOTES_PATH)
+    : runtimeEnvironment.frontendNotesPath,
   userProfilePath: process.env.QWEN_AUDIO_AGENT_USER_PROFILE_PATH
     ? resolve(root, process.env.QWEN_AUDIO_AGENT_USER_PROFILE_PATH)
     : runtimeEnvironment.userProfilePath,

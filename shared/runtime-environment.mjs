@@ -324,6 +324,7 @@ export function loadRuntimeEnvironment({
     ? resolve(configDirectory, 'USER.md')
     : ensureUserProfile(configDirectory)
   const frontendMemoryPath = resolve(configDirectory, 'frontend-memory.json')
+  const frontendNotesPath = resolve(configDirectory, 'frontend-notes.json')
   const taskStatePath = resolve(configDirectory, 'tasks.json')
   const defaultOpenCodeWorkspace = !env.OPENCODE_WORKSPACE
   const openCodeWorkspace = env.OPENCODE_WORKSPACE
@@ -451,6 +452,7 @@ export function loadRuntimeEnvironment({
     configPath,
     userProfilePath,
     frontendMemoryPath,
+    frontendNotesPath,
     taskStatePath,
     openCodeWorkspace,
     openClawWorkspace,

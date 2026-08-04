@@ -9,6 +9,7 @@ import { logger, runWithLogContext } from '../core/logger.mjs'
 import { conversationSync } from '../conversation/conversation-sync.mjs'
 import { IdentityManager } from '../core/identity.mjs'
 import { FrontendMemoryStore } from '../conversation/frontend-memory.mjs'
+import { FrontendNotesStore } from '../conversation/frontend-notes.mjs'
 import { ProfiledMemoryStore } from '../conversation/profiled-memory-store.mjs'
 import { UserProfile } from '../conversation/user-profile.mjs'
 import { enforceSameOrigin } from '../core/request-security.mjs'
@@ -60,6 +61,12 @@ const frontendMemory = new ProfiledMemoryStore({
         }),
       })
     : null,
+})
+const notesStore = new FrontendNotesStore({
+  filePath: config.frontendNotesPath,
+  maxOwners: config.maxFrontendMemoryOwners,
+  ownerTtlMs: config.frontendMemoryOwnerTtlMs,
+  onWarning: warning => logger.warn('notes.persistence_warning', { warning }),
 })
 const app = express()
 const permissionPolicy = new SessionPermissionPolicy({
@@ -118,6 +125,7 @@ app.get('/api/health', async (req, res) => {
     announcementBatchMs: config.announcementBatchMs,
     announcementQuietMs: config.announcementQuietMs,
     frontendMemory: frontendMemory.health(),
+    notes: notesStore.health(),
     taskStore: taskStore.health(),
     identityMode: config.identityMode,
     voiceClients: realtimeGateway?.status() || {
@@ -274,6 +282,7 @@ export { server }
 realtimeGateway = attachRealtimeGateway(server, {
   identityManager,
   memoryStore: frontendMemory,
+  notesStore,
   coordinator,
   coordinatorAvailable: async () => ({
     enabled: agent.enabled,
