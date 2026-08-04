@@ -374,6 +374,66 @@ select:focus {
   font-weight: 620;
 }
 
+.shortcut-field {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+  min-width: 0;
+}
+
+.shortcut-recorder {
+  min-width: 132px;
+  height: 32px;
+  padding: 0 11px;
+  border: 1px solid #d5dcdf;
+  border-radius: 9px;
+  color: #56646b;
+  background: #f8f9f9;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .015em;
+  transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
+}
+
+.shortcut-recorder:hover,
+.shortcut-recorder:focus-visible {
+  border-color: #9db6ba;
+  outline: none;
+  background: #fff;
+}
+
+.shortcut-recorder.recording {
+  border-color: #6c9da3;
+  color: #346b70;
+  background: #f2fbfa;
+  box-shadow: 0 0 0 3px #5d929a18;
+}
+
+.shortcut-recorder.invalid {
+  border-color: #d3a0a6;
+  color: #95535d;
+  background: #fff8f8;
+}
+
+.shortcut-reset {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 8px;
+  color: #9aa4a9;
+  background: transparent;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.shortcut-reset:hover,
+.shortcut-reset:focus-visible {
+  color: #50636a;
+  outline: none;
+  background: #edf1f2;
+}
+
 .field-with-action {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

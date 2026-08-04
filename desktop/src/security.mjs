@@ -35,9 +35,12 @@ export function isSafeExternalUrl(value) {
   }
 }
 
-export function desktopOrbUrl(value, { orbStyle } = {}) {
+export function desktopOrbUrl(value, { orbStyle, autoSleepSeconds } = {}) {
   const url = new URL(value)
   url.searchParams.set('desktop', 'orb')
   if (orbStyle) url.searchParams.set('orbStyle', orbStyle)
+  if (Number.isFinite(autoSleepSeconds)) {
+    url.searchParams.set('autoSleepSeconds', String(autoSleepSeconds))
+  }
   return url.href
 }

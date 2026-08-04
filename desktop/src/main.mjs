@@ -2,6 +2,7 @@ import {
   app,
   BrowserWindow,
   dialog,
+  globalShortcut,
   ipcMain,
   screen,
   shell,
@@ -116,6 +117,10 @@ let borrowedGatewayOrigin = ''
 let gatewayCrashCount = 0
 let lastRuntimeError = ''
 let desktopUpdater = null
+let desktopLifecycle = 'active'
+let wakeShortcutRegistered = false
+let registeredWakeShortcut = ''
+let wakeShortcutPaused = false
 
 const MAX_GATEWAY_CRASH_RESTARTS = 3
 
@@ -182,7 +187,11 @@ async function startLocalGateway(origin) {
           lastRuntimeError = ''
           appOrigin = restarted
           process.env.QWEN_AUDIO_AGENT_URL = restarted
-          if (mainWindow && !mainWindow.isDestroyed()) {
+          if (
+            mainWindow
+            && !mainWindow.isDestroyed()
+            && desktopLifecycle !== 'sleeping'
+          ) {
             void loadQwenAudioAgent(mainWindow)
           }
         }).catch(error => {
@@ -327,12 +336,55 @@ async function loadQwenAudioAgent(window) {
     )
     await window.loadURL(desktopOrbUrl(rendererServer.baseUrl, {
       orbStyle: settings.orbStyle,
+      autoSleepSeconds: settings.autoSleepSeconds,
     }))
     clearTimeout(reconnectTimer)
     reconnectTimer = null
   } catch {
     await showUnavailable(window)
   }
+}
+
+function sendDesktopLifecycle(state, reason = '') {
+  desktopLifecycle = state
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('qwen-audio-agent:lifecycle', {
+      state,
+      reason,
+    })
+  }
+}
+
+function wakeDesktop(reason = 'shortcut') {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  if (mainWindow.isMinimized()) mainWindow.restore()
+  mainWindow.show()
+  mainWindow.focus()
+  if (desktopLifecycle === 'sleeping') {
+    sendDesktopLifecycle('waking', reason)
+    return
+  }
+  mainWindow.webContents.send('qwen-audio-agent:lifecycle', {
+    state: desktopLifecycle,
+    reason: 'activity',
+  })
+}
+
+function registerWakeShortcut(accelerator) {
+  if (registeredWakeShortcut === accelerator && wakeShortcutRegistered) {
+    return true
+  }
+  const registered = globalShortcut.register(
+    accelerator,
+    () => wakeDesktop('shortcut'),
+  )
+  if (!registered) return false
+  if (registeredWakeShortcut && registeredWakeShortcut !== accelerator) {
+    globalShortcut.unregister(registeredWakeShortcut)
+  }
+  registeredWakeShortcut = accelerator
+  wakeShortcutRegistered = true
+  return true
 }
 
 function createWindow() {
@@ -421,7 +473,13 @@ function createSettingsWindow() {
   window.webContents.on('will-navigate', event => event.preventDefault())
   window.once('ready-to-show', () => window.show())
   window.on('closed', () => {
-    if (settingsWindow === window) settingsWindow = null
+    if (settingsWindow === window) {
+      settingsWindow = null
+      if (wakeShortcutPaused) {
+        wakeShortcutPaused = false
+        wakeShortcutRegistered = registerWakeShortcut(registeredWakeShortcut)
+      }
+    }
   })
   void window.loadFile(settingsPage)
   return window
@@ -476,6 +534,62 @@ ipcMain.on('qwen-audio-agent:open-settings', event => {
   if (mainWindow && event.sender === mainWindow.webContents) showSettings()
 })
 
+ipcMain.handle('qwen-audio-agent:lifecycle-load', event => {
+  if (!mainWindow || event.sender !== mainWindow.webContents) {
+    throw new Error('无权读取桌面状态')
+  }
+  return { state: desktopLifecycle }
+})
+
+ipcMain.handle('qwen-audio-agent:wake-shortcut-pause', event => {
+  if (!settingsWindow || event.sender !== settingsWindow.webContents) {
+    throw new Error('无权修改唤醒快捷键')
+  }
+  if (registeredWakeShortcut && wakeShortcutRegistered) {
+    globalShortcut.unregister(registeredWakeShortcut)
+  }
+  wakeShortcutPaused = true
+  wakeShortcutRegistered = false
+  return true
+})
+
+ipcMain.handle('qwen-audio-agent:wake-shortcut-resume', event => {
+  if (!settingsWindow || event.sender !== settingsWindow.webContents) {
+    throw new Error('无权修改唤醒快捷键')
+  }
+  wakeShortcutPaused = false
+  wakeShortcutRegistered = registerWakeShortcut(registeredWakeShortcut)
+  return wakeShortcutRegistered
+})
+
+ipcMain.handle('qwen-audio-agent:enter-sleep', event => {
+  if (!mainWindow || event.sender !== mainWindow.webContents) {
+    throw new Error('无权修改桌面状态')
+  }
+  if (desktopLifecycle === 'active') {
+    sendDesktopLifecycle('sleeping', 'inactivity')
+    logger.info('desktop.sleeping')
+  }
+  return { state: desktopLifecycle }
+})
+
+ipcMain.on('qwen-audio-agent:wake', event => {
+  if (mainWindow && event.sender === mainWindow.webContents) {
+    wakeDesktop('orb')
+  }
+})
+
+ipcMain.on('qwen-audio-agent:lifecycle-ready', event => {
+  if (
+    mainWindow
+    && event.sender === mainWindow.webContents
+    && desktopLifecycle === 'waking'
+  ) {
+    sendDesktopLifecycle('active', 'ready')
+    logger.info('desktop.awake')
+  }
+})
+
 const ALLOWED_EXTERNAL_HOSTS = new Set(['bailian.console.aliyun.com'])
 
 ipcMain.on('qwen-audio-agent:open-external', (event, value) => {
@@ -515,6 +629,7 @@ ipcMain.handle('qwen-audio-agent:settings-load', async event => {
       : await runtimeStatus(),
     setupRequired,
     runtimeError: lastRuntimeError || null,
+    wakeShortcutRegistered,
     restartRequired: false,
   }
 })
@@ -644,6 +759,10 @@ ipcMain.handle('qwen-audio-agent:settings-save', async (event, settings) => {
   )
   const backendModelChanged = previous.backendModel !== normalized.backendModel
   const orbStyleChanged = previous.orbStyle !== normalized.orbStyle
+  const autoSleepChanged = (
+    previous.autoSleepSeconds !== normalized.autoSleepSeconds
+  )
+  const wakeShortcutChanged = previous.wakeShortcut !== normalized.wakeShortcut
   const gatewayRuntimeChanged = (
     gatewayChanged
     || apiKeyChanged
@@ -662,10 +781,21 @@ ipcMain.handle('qwen-audio-agent:settings-save', async (event, settings) => {
     }
     borrowedGatewayOrigin = ''
   }
-  writeFileSync(runtimeEnvironment.configPath, content, {
-    encoding: 'utf8',
-    mode: 0o600,
-  })
+  if (
+    wakeShortcutChanged
+    && !registerWakeShortcut(normalized.wakeShortcut)
+  ) {
+    throw new Error('这个唤醒快捷键已被其他应用占用，请选择另一个')
+  }
+  try {
+    writeFileSync(runtimeEnvironment.configPath, content, {
+      encoding: 'utf8',
+      mode: 0o600,
+    })
+  } catch (error) {
+    if (wakeShortcutChanged) registerWakeShortcut(previous.wakeShortcut)
+    throw error
+  }
   chmodSync(runtimeEnvironment.configPath, 0o600)
   logger.info('settings.applied', {
     realtimeProvider: normalized.realtimeProvider,
@@ -680,6 +810,8 @@ ipcMain.handle('qwen-audio-agent:settings-save', async (event, settings) => {
       speechToSpeech: speechToSpeechChanged,
       backendModel: backendModelChanged,
       orbStyle: orbStyleChanged,
+      autoSleep: autoSleepChanged,
+      wakeShortcut: wakeShortcutChanged,
     },
   })
   let restarted = false
@@ -710,7 +842,7 @@ ipcMain.handle('qwen-audio-agent:settings-save', async (event, settings) => {
   await ensureDesktopUi()
   const runtime = await runtimeStatus(appOrigin)
   if (
-    (restarted || gatewayChanged || orbStyleChanged)
+    (restarted || gatewayChanged || orbStyleChanged || autoSleepChanged)
     && mainWindow
     && !mainWindow.isDestroyed()
   ) {
@@ -721,6 +853,7 @@ ipcMain.handle('qwen-audio-agent:settings-save', async (event, settings) => {
     restarted,
     restartRequired: false,
     runtime,
+    wakeShortcutRegistered,
   }
 })
 
@@ -744,6 +877,12 @@ if (!app.requestSingleInstanceLock()) {
     if (process.platform === 'darwin' && process.defaultApp) {
       app.setActivationPolicy('accessory')
       app.dock?.hide()
+    }
+    wakeShortcutRegistered = registerWakeShortcut(initialSettings.wakeShortcut)
+    if (!wakeShortcutRegistered) {
+      logger.warn('desktop.wake_shortcut_unavailable', {
+        accelerator: initialSettings.wakeShortcut,
+      })
     }
     desktopUpdater = createDesktopUpdater({
       currentVersion: app.getVersion(),
@@ -791,6 +930,7 @@ if (!app.requestSingleInstanceLock()) {
 
   app.on('before-quit', () => {
     logger.info('desktop.stopping')
+    globalShortcut.unregisterAll()
     void rendererServer?.close()
     rendererServer = null
     const gateway = embeddedGateway
