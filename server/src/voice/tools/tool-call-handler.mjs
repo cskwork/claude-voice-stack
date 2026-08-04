@@ -3,6 +3,7 @@ import {
   DELEGATE_TOOL_NAME,
   GET_AGENT_TASK_STATUS_TOOL_NAME,
   GET_CURRENT_TIME_TOOL_NAME,
+  NOTES_TOOL_NAME,
   USER_MEMORY_TOOL_NAME,
   RESPOND_AGENT_PERMISSION_TOOL_NAME,
 } from '../realtime-provider.mjs'
@@ -35,6 +36,7 @@ export class ToolCallHandler {
     coordinator,
     coordinatorAvailable = async () => true,
     memoryStore,
+    notesStore,
     getClientContext = () => ({}),
     getConversationContext = () => [],
     onMemoryChanged = () => {},
@@ -51,6 +53,7 @@ export class ToolCallHandler {
     this.coordinator = coordinator
     this.coordinatorAvailable = coordinatorAvailable
     this.memoryStore = memoryStore
+    this.notesStore = notesStore
     this.getClientContext = getClientContext
     this.getConversationContext = getConversationContext
     this.onMemoryChanged = onMemoryChanged
@@ -220,6 +223,10 @@ export class ToolCallHandler {
     }
     if (toolName === USER_MEMORY_TOOL_NAME) {
       await this.userMemory(callId, turnId, generation, args)
+      return
+    }
+    if (toolName === NOTES_TOOL_NAME) {
+      await this.notes(callId, turnId, generation, args)
       return
     }
     if (toolName === CANCEL_AGENT_TASK_TOOL_NAME) {
@@ -821,6 +828,76 @@ export class ToolCallHandler {
           output = failure(
             'memory_write_failed',
             '暂时无法删除这项记忆，请稍后再试。',
+            { retryable: true },
+          )
+        }
+      }
+    }
+    await this.sendOutput(callId, output, turnId)
+  }
+
+  async notes(callId, turnId, generation, args) {
+    const action = String(args.action || '').trim().toLowerCase()
+    const listName = String(args.list || '').trim()
+    const items = Array.isArray(args.items)
+      ? args.items.map(item => String(item || '').trim()).filter(Boolean).slice(0, 20)
+      : []
+    let output
+    if (!this.notesStore) {
+      output = failure('notes_unavailable', '清单功能当前不可用。')
+    } else if (!['lists', 'show', 'add', 'remove', 'clear', 'drop'].includes(action)) {
+      output = failure('invalid_notes_action', '没有识别出要执行的清单操作。')
+    } else if (action === 'lists') {
+      const lists = this.notesStore.lists(this.ownerId)
+      output = {
+        status: lists.length ? 'ok' : 'empty',
+        lists,
+      }
+    } else if (!listName) {
+      output = failure('missing_notes_target', '需要明确要操作的清单名称。')
+    } else if (action === 'show') {
+      output = this.notesStore.show(this.ownerId, listName)
+    } else if (action === 'add' || action === 'remove') {
+      if (!items.length) {
+        output = failure('missing_notes_items', '需要明确要添加或划掉的内容。')
+      } else if (items.some(item => SENSITIVE_MEMORY.test(item))) {
+        output = failure(
+          'sensitive_notes',
+          '为了安全，不会保存密码、密钥、验证码或令牌。',
+          { status: 'rejected' },
+        )
+      } else {
+        try {
+          output = this.notesStore[action](this.ownerId, { list: listName, items })
+        } catch {
+          output = failure(
+            'notes_write_failed',
+            '暂时无法更新这条清单，请稍后再试。',
+            { retryable: true },
+          )
+        }
+      }
+    } else {
+      const transcript = await this.transcripts.transcript(turnId)
+      if (this.isStale(turnId, generation)) {
+        await this.closeStaleCall(callId, turnId)
+        return
+      }
+      const explicit = /(?:清空|删除清单|删掉清单|整个(?:删除|清空)|不要(?:这个|这份|这条)?清单|清单(?:不要了|删掉|删除|删了|清空|扔掉|丢掉)|\b(?:clear|delete|drop)\b)/i
+        .test(transcript)
+      if (!explicit) {
+        output = failure(
+          'explicit_consent_required',
+          '没有听到明确的清空或删除请求，因此没有操作清单。',
+          { status: 'rejected' },
+        )
+      } else {
+        try {
+          output = this.notesStore[action](this.ownerId, listName)
+        } catch {
+          output = failure(
+            'notes_write_failed',
+            '暂时无法更新这条清单，请稍后再试。',
             { retryable: true },
           )
         }

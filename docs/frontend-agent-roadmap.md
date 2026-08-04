@@ -118,10 +118,10 @@ control query（排在 running turn 之后、普通队列之前）已验证该�
 **依据**："购物清单加牛奶"语义上是易变列表，硬塞进 long_term 既污染记忆
 又难管理；前台自有小 store，读写毫秒级。
 
-- [ ] **N1** notes store（owner 作用域，多条命名清单，增删查列）
-- [ ] **N2** `notes` 工具（list/add/remove/show）
-- [ ] **N3** PROMPT.md：识别清单类请求；明确与 rules/long_term 的语义分工
-- [ ] **N4** 测试
+- [x] **N1** notes store（owner 作用域，多条命名清单，增删查列）
+- [x] **N2** `notes` 工具（list/add/remove/show）
+- [x] **N3** PROMPT.md：识别清单类请求；明确与 rules/long_term 的语义分工
+- [x] **N4** 测试
 
 ### P3 - 回放/重述
 

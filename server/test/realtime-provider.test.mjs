@@ -14,6 +14,7 @@ const FRONTEND_TOOL_NAMES = [
   'get_agent_task_status',
   'get_current_time',
   'user_memory',
+  'notes',
   'respond_agent_permission',
 ]
 
@@ -417,6 +418,16 @@ test('builds frontend identity, time, memory and reconnect context', () => {
     memory.function.parameters.properties.memory_ids.items.type,
     'string',
   )
+
+  const notes = REALTIME_PROVIDERS.qwen
+    .buildSession({ configured: false })
+    .tools.find(tool => tool.function.name === 'notes')
+  assert.deepEqual(
+    notes.function.parameters.properties.action.enum,
+    ['lists', 'show', 'add', 'remove', 'clear', 'drop'],
+  )
+  assert.match(notes.function.description, /破坏性操作/)
+  assert.deepEqual(notes.function.parameters.required, ['action'])
 
   const delegate = REALTIME_PROVIDERS.qwen
     .buildSession({ configured: false })

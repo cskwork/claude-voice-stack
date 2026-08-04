@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { TaskManager } from '../src/task/task-manager.mjs'
 import { ToolCallHandler } from '../src/voice/tools/tool-call-handler.mjs'
+import { FrontendNotesStore } from '../src/conversation/frontend-notes.mjs'
 import { SessionPermissionPolicy } from '../src/voice/session-permission-policy.mjs'
 import { TurnTranscripts } from '../src/voice/tools/turn-transcripts.mjs'
 
@@ -9,6 +10,7 @@ function harness({
   coordinator,
   manager = new TaskManager(),
   memoryStore = null,
+  notesStore = null,
   onMemoryChanged = () => {},
   coordinatorAvailable = async () => true,
   respondPermission,
@@ -31,6 +33,7 @@ function harness({
     },
     coordinatorAvailable,
     memoryStore,
+    notesStore,
     onMemoryChanged,
     respondPermission,
     permissionPolicy,
@@ -791,4 +794,116 @@ test('rejects secrets and an ambiguous memory scope', async () => {
     }),
   })
   assert.equal(kit.outputs.at(-1)[1].error_code, 'missing_memory')
+})
+
+test('notes: adds items to a named list and reports ambiguous removals', async () => {
+  const notesStore = new FrontendNotesStore()
+  const kit = harness({ notesStore })
+
+  await kit.handler.handle({
+    call_id: 'notes-add',
+    name: 'notes',
+    arguments: JSON.stringify({
+      action: 'add',
+      list: '购物清单',
+      items: ['牛奶', '面包'],
+    }),
+  })
+  const added = kit.outputs.at(-1)[1]
+  assert.equal(added.status, 'ok')
+  assert.deepEqual(added.added, ['牛奶', '面包'])
+
+  await kit.handler.handle({
+    call_id: 'notes-remove-fuzzy',
+    name: 'notes',
+    arguments: JSON.stringify({
+      action: 'remove',
+      list: '购物清单',
+      items: ['面包'],
+    }),
+  })
+  assert.deepEqual(kit.outputs.at(-1)[1].removed, ['面包'])
+
+  await kit.handler.handle({
+    call_id: 'notes-show',
+    name: 'notes',
+    arguments: JSON.stringify({ action: 'show', list: '购物清单' }),
+  })
+  assert.deepEqual(
+    kit.outputs.at(-1)[1].items.map(item => item.text),
+    ['牛奶'],
+  )
+})
+
+test('notes: requires explicit user language before clearing or dropping a list', async () => {
+  const notesStore = new FrontendNotesStore()
+  const kit = harness({ notesStore })
+  await kit.handler.handle({
+    call_id: 'notes-seed',
+    name: 'notes',
+    arguments: JSON.stringify({ action: 'add', list: '购物清单', items: ['牛奶'] }),
+  })
+
+  await kit.handler.handle({
+    call_id: 'notes-clear-rejected',
+    name: 'notes',
+    arguments: JSON.stringify({ action: 'clear', list: '购物清单' }),
+  })
+  assert.equal(kit.outputs.at(-1)[1].error_code, 'explicit_consent_required')
+  assert.equal(notesStore.show('owner', '购物清单').items.length, 1)
+
+  kit.transcripts.record('turn-one', '把购物清单清空吧')
+  await kit.handler.handle({
+    call_id: 'notes-clear-ok',
+    name: 'notes',
+    arguments: JSON.stringify({ action: 'clear', list: '购物清单' }),
+  })
+  assert.equal(kit.outputs.at(-1)[1].status, 'ok')
+  assert.equal(kit.outputs.at(-1)[1].removed, 1)
+  assert.equal(notesStore.show('owner', '购物清单').items.length, 0)
+
+  kit.transcripts.record('turn-one', '购物清单不要了，删掉')
+  await kit.handler.handle({
+    call_id: 'notes-drop-ok',
+    name: 'notes',
+    arguments: JSON.stringify({ action: 'drop', list: '购物清单' }),
+  })
+  assert.equal(kit.outputs.at(-1)[1].status, 'ok')
+  assert.deepEqual(notesStore.lists('owner'), [])
+})
+
+test('notes: rejects secrets and missing arguments', async () => {
+  const notesStore = new FrontendNotesStore()
+  const kit = harness({ notesStore })
+
+  await kit.handler.handle({
+    call_id: 'notes-secret',
+    name: 'notes',
+    arguments: JSON.stringify({ action: 'add', list: '购物清单', items: ['我的密码是 12345'] }),
+  })
+  assert.equal(kit.outputs.at(-1)[1].error_code, 'sensitive_notes')
+
+  await kit.handler.handle({
+    call_id: 'notes-no-list',
+    name: 'notes',
+    arguments: JSON.stringify({ action: 'show' }),
+  })
+  assert.equal(kit.outputs.at(-1)[1].error_code, 'missing_notes_target')
+
+  await kit.handler.handle({
+    call_id: 'notes-no-items',
+    name: 'notes',
+    arguments: JSON.stringify({ action: 'add', list: '购物清单' }),
+  })
+  assert.equal(kit.outputs.at(-1)[1].error_code, 'missing_notes_items')
+})
+
+test('notes: unavailable without a notes store', async () => {
+  const kit = harness({})
+  await kit.handler.handle({
+    call_id: 'notes-unavailable',
+    name: 'notes',
+    arguments: JSON.stringify({ action: 'lists' }),
+  })
+  assert.equal(kit.outputs.at(-1)[1].error_code, 'notes_unavailable')
 })
