@@ -73,6 +73,7 @@ export default function useRealtimeVoice({
   inputOnlyMute = false,
   clientType = 'web',
   clientLabel = 'WebUI',
+  clientStates = [],
   takeover = false,
   realtimeProvider = '',
   onEvent,
@@ -96,6 +97,10 @@ export default function useRealtimeVoice({
   const currentTurnId = useRef('')
   const clientInstanceId = useRef(crypto.randomUUID())
   const inputSampleRate = useRef(DEFAULT_INPUT_RATE)
+  const clientStatesSignature = [...new Set(
+    (Array.isArray(clientStates) ? clientStates : [])
+      .filter(state => typeof state === 'string' && state),
+  )].sort().join(',')
   const enabledRef = useRef(enabled)
   const inputReadyRef = useRef(false)
   const outputMutedRef = useRef(outputMuted)
@@ -328,7 +333,7 @@ export default function useRealtimeVoice({
       setAudioLevel(0)
       setError('')
       setVisualError(false)
-      setConnectionState('sleeping')
+      setConnectionState('hidden')
       return undefined
     }
     let disposed = false
@@ -358,6 +363,9 @@ export default function useRealtimeVoice({
           outputEnabled,
           clientType,
           clientLabel,
+          clientStates: clientStatesSignature
+            ? clientStatesSignature.split(',')
+            : [],
           clientInstanceId: clientInstanceId.current,
           takeover,
           // Empty means "keep the server default front end".
@@ -457,13 +465,14 @@ export default function useRealtimeVoice({
     return () => {
       disposed = true
       clearTimeout(reconnectTimer)
-      stopPlayback(suspended ? 'desktop_sleep' : 'connection_closed')
+      stopPlayback(suspended ? 'desktop_hidden' : 'connection_closed')
       socketRef.current?.close()
       socketRef.current = null
       mutedPlaybackResponses.current.clear()
     }
   }, [
     clientLabel,
+    clientStatesSignature,
     clientType,
     inputOnlyMute,
     realtimeProvider,

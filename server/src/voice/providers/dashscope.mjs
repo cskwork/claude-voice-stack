@@ -1,7 +1,7 @@
 import { config, realtimeUrl } from '../../core/config.mjs'
 import {
-  TOOLS,
   buildFrontendInstructions,
+  frontendTools,
   resultResponseInstructions,
   speakResponseInstructions,
   permissionResponseInstructions,
@@ -45,7 +45,7 @@ export const dashscopeProvider = {
     const textOnly = agentContext?.textOnly === true
     const session = {
       instructions: buildFrontendInstructions(agentContext),
-      tools: TOOLS,
+      tools: frontendTools(agentContext),
     }
     if (!configured) {
       session.modalities = textOnly ? ['text'] : ['text', 'audio']

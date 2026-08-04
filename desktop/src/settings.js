@@ -9,7 +9,7 @@ import { updaterButtonState, updaterStatusText } from './update-status.mjs'
 const form = document.querySelector('#settings-form')
 const gatewayUrl = document.querySelector('#gateway-url')
 const orbStyle = document.querySelector('#orb-style')
-const autoSleepSeconds = document.querySelector('#auto-sleep-seconds')
+const autoHideSeconds = document.querySelector('#auto-hide-seconds')
 const wakeShortcut = document.querySelector('#wake-shortcut')
 const recordWakeShortcut = document.querySelector('#record-wake-shortcut')
 const resetWakeShortcut = document.querySelector('#reset-wake-shortcut')
@@ -55,11 +55,12 @@ const macPlatform = /Mac|iPhone|iPad/.test(navigator.platform)
 function renderWakeShortcutStatus(registered) {
   recordWakeShortcut.classList.toggle('invalid', registered === false)
   recordWakeShortcut.title = registered === false
-    ? '这个快捷键已被其他应用占用，点击重新设置'
+    ? '这个显示快捷键已被其他应用占用，点击重新设置'
     : '点击后按下新的快捷键'
 }
 
 function wakeShortcutLabel(value) {
+  if (macPlatform && value === defaultWakeShortcut) return '⇧  ⌘  Space'
   const labels = {
     CommandOrControl: macPlatform ? '⌘' : 'Ctrl',
     Alt: macPlatform ? '⌥' : 'Alt',
@@ -134,7 +135,7 @@ recordWakeShortcut.addEventListener('click', async () => {
     renderWakeShortcut()
     updateApplyState()
   } catch (error) {
-    showMessage(friendlyError(error, '无法开始录制快捷键'), 'error')
+    showMessage(friendlyError(error, '无法开始录制显示快捷键'), 'error')
   }
 })
 
@@ -295,7 +296,7 @@ function formSettings() {
   return {
     gatewayUrl: gatewayUrl.value,
     orbStyle: orbStyle.value,
-    autoSleepSeconds: Number(autoSleepSeconds.value),
+    autoHideSeconds: Number(autoHideSeconds.value),
     wakeShortcut: wakeShortcut.value,
     dashscopeApiKey: dashscopeApiKey.value,
     realtimeProvider: selectedRealtimeProvider(),
@@ -311,7 +312,7 @@ function fingerprint(value) {
   return JSON.stringify({
     gatewayUrl: value.gatewayUrl,
     orbStyle: value.orbStyle,
-    autoSleepSeconds: value.autoSleepSeconds,
+    autoHideSeconds: value.autoHideSeconds,
     wakeShortcut: value.wakeShortcut,
     dashscopeApiKey: value.dashscopeApiKey,
     realtimeProvider: value.realtimeProvider,
@@ -456,16 +457,16 @@ refreshBackends.addEventListener('click', () => {
 function render() {
   gatewayUrl.value = settings.gatewayUrl
   orbStyle.value = settings.orbStyle
-  const sleepValue = String(settings.autoSleepSeconds ?? 120)
-  autoSleepSeconds.querySelector('[data-custom]')?.remove()
-  if (![...autoSleepSeconds.options].some(option => option.value === sleepValue)) {
+  const hideValue = String(settings.autoHideSeconds ?? 120)
+  autoHideSeconds.querySelector('[data-custom]')?.remove()
+  if (![...autoHideSeconds.options].some(option => option.value === hideValue)) {
     const custom = document.createElement('option')
-    custom.value = sleepValue
+    custom.value = hideValue
     custom.dataset.custom = 'true'
-    custom.textContent = `自定义 · ${sleepValue} 秒`
-    autoSleepSeconds.append(custom)
+    custom.textContent = `自定义 · ${hideValue} 秒`
+    autoHideSeconds.append(custom)
   }
-  autoSleepSeconds.value = sleepValue
+  autoHideSeconds.value = hideValue
   wakeShortcut.value = settings.wakeShortcut
   recordingWakeShortcut = false
   renderWakeShortcut()
@@ -485,7 +486,7 @@ function render() {
 for (const control of [
   gatewayUrl,
   orbStyle,
-  autoSleepSeconds,
+  autoHideSeconds,
   dashscopeApiKey,
   speechToSpeechRealtimeUrl,
   speechToSpeechAuthToken,
@@ -533,7 +534,10 @@ form.addEventListener('submit', async event => {
       )
     }
   } catch (error) {
-    if (String(error?.message || '').includes('快捷键已被其他应用占用')) {
+    if (
+      String(error?.message || '').includes('快捷键')
+      && String(error?.message || '').includes('占用')
+    ) {
       renderWakeShortcutStatus(false)
     }
     showMessage(friendlyError(error, '应用失败'), 'error')

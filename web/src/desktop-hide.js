@@ -13,10 +13,13 @@ const ACTIVE_VOICE_STATES = new Set([
   'speaking',
 ])
 
-export function desktopAutoSleepSeconds(search = '') {
+export function desktopAutoHideSeconds(search = '') {
   const params = new URLSearchParams(search)
-  if (!params.has('autoSleepSeconds')) return 120
-  const value = Number(params.get('autoSleepSeconds'))
+  const configured = params.has('autoHideSeconds')
+    ? params.get('autoHideSeconds')
+    : params.get('autoSleepSeconds')
+  if (configured === null) return 120
+  const value = Number(configured)
   if (value === 0) return 0
   return Number.isInteger(value) && value >= 30 && value <= 3600
     ? value
@@ -38,7 +41,7 @@ export function desktopWorkSettled({
   )
 }
 
-export function desktopCanSleep({
+export function desktopCanHide({
   settled,
   connectionState,
   visualError = false,
@@ -52,7 +55,7 @@ export function desktopCanSleep({
   )
 }
 
-export function desktopSleepDeadline({
+export function desktopHideDeadline({
   lastInteractionAt,
   workSettledAt,
   timeoutSeconds,

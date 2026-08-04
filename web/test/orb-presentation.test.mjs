@@ -18,12 +18,12 @@ test('exposes listening level, error, and dragging states to the desktop orb', (
   }), 'desktop-orb-stage listening enabled error dragging')
 })
 
-test('keeps sleeping lifecycle distinct from an error', () => {
+test('keeps the waking lifecycle distinct from an error', () => {
   const className = desktopOrbClassName({
-    state: 'sleeping',
+    state: 'waking',
     enabled: true,
-    lifecycle: 'sleeping',
+    lifecycle: 'waking',
   })
-  assert.match(className, /\bsleeping\b/)
+  assert.match(className, /\bwaking\b/)
   assert.doesNotMatch(className, /\berror\b/)
 })

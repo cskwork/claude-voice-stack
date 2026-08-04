@@ -270,6 +270,33 @@ test('configures a text-only Qwen session without Smart Turn', () => {
   )
 })
 
+test('offers the sleep tool only to a client that advertises the state', () => {
+  const ordinary = REALTIME_PROVIDERS.qwen.buildSession({
+    configured: false,
+    agentContext: { client: { states: [] } },
+  })
+  const desktop = REALTIME_PROVIDERS.qwen.buildSession({
+    configured: false,
+    agentContext: { client: { states: ['sleeping'] } },
+  })
+  const s2sDesktop = REALTIME_PROVIDERS['speech-to-speech'].buildSession({
+    agentContext: { client: { states: ['sleeping'] } },
+  })
+
+  assert.equal(
+    ordinary.tools.some(tool => tool.function.name === 'enter_sleep'),
+    false,
+  )
+  assert.equal(
+    desktop.tools.some(tool => tool.function.name === 'enter_sleep'),
+    true,
+  )
+  assert.equal(
+    s2sDesktop.tools.some(tool => tool.name === 'enter_sleep'),
+    true,
+  )
+})
+
 test('adds an event id to realtime client events', () => {
   const frontend = createQwenFrontend()
   let sent

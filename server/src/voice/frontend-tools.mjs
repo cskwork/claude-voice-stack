@@ -12,6 +12,7 @@ export const GET_CURRENT_TIME_TOOL_NAME = 'get_current_time'
 export const USER_MEMORY_TOOL_NAME = 'user_memory'
 export const NOTES_TOOL_NAME = 'notes'
 export const RESPOND_AGENT_PERMISSION_TOOL_NAME = 'respond_agent_permission'
+export const ENTER_SLEEP_TOOL_NAME = 'enter_sleep'
 
 const delegateTool = {
   type: 'function',
@@ -182,6 +183,19 @@ const respondAgentPermissionTool = {
   },
 }
 
+const enterSleepTool = {
+  type: 'function',
+  function: {
+    name: ENTER_SLEEP_TOOL_NAME,
+    description: '让当前语音前台进入休眠状态。仅当用户明确让你“退下、隐藏、收起、先休息、暂时离开”时调用；不要用于取消后台工作、静音或退出应用。直接调用，不必先口头确认。',
+    parameters: {
+      type: 'object',
+      properties: {},
+      additionalProperties: false,
+    },
+  },
+}
+
 export const TOOLS = [
   delegateTool,
   cancelAgentTaskTool,
@@ -191,6 +205,15 @@ export const TOOLS = [
   notesTool,
   respondAgentPermissionTool,
 ]
+
+export function frontendTools(agentContext = {}) {
+  const states = Array.isArray(agentContext.client?.states)
+    ? agentContext.client.states
+    : []
+  return states.includes('sleeping')
+    ? [...TOOLS, enterSleepTool]
+    : TOOLS
+}
 
 export const resultResponseInstructions = [
   '这是先前提交工作的最终结果，不是用户的新请求。',

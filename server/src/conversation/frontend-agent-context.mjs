@@ -168,6 +168,11 @@ export function buildFrontendContext({
           '- When the user says “当前目录”“这个目录” or asks where they started the TUI, they mean this client working directory. Do not substitute the backend Agent workspace.',
         ]
       : []),
+    ...(client.states?.includes('sleeping')
+      ? [
+          '- Sleep is available. When the user explicitly says “可以退下了” or otherwise asks you to leave, hide, withdraw, or rest, call enter_sleep immediately without a spoken acknowledgement. Sleep does not cancel background work or quit the app; its visual behavior is owned by the client.',
+        ]
+      : []),
     '- The session-start clock can become stale. For the current date, time, or weekday, call get_current_time before answering.',
     ...directivesSection(memories),
     ...memorySection(memories),

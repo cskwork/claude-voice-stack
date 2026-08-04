@@ -270,6 +270,11 @@ starts and manages one automatically. On first launch, the app creates its
 configuration file and guides you to enter a DashScope API Key and choose a
 backend Agent (or frontend-only mode) in Settings.
 
+When idle, the orb hides and disconnects realtime voice; you can also say
+“you can go now” to hide it. The app remains available from the menu bar. Show
+it again from the menu bar or with the default `⇧⌘ Space` shortcut, or choose
+another shortcut in the app.
+
 The desktop app includes a streaming wave orb and a liquid gradient orb. Their
 original animated thinking / breathing states are shown below:
 

@@ -10,7 +10,7 @@ contextBridge.exposeInMainWorld('qwenAudioAgentDesktop', {
   dragMove: (x, y) => sendPoint('qwen-audio-agent:drag-move', x, y),
   dragEnd: () => ipcRenderer.send('qwen-audio-agent:drag-end'),
   openSettings: () => ipcRenderer.send('qwen-audio-agent:open-settings'),
-  enterSleep: () => ipcRenderer.invoke('qwen-audio-agent:enter-sleep'),
+  enterHide: () => ipcRenderer.invoke('qwen-audio-agent:enter-hide'),
   wake: () => ipcRenderer.send('qwen-audio-agent:wake'),
   lifecycleReady: () => ipcRenderer.send('qwen-audio-agent:lifecycle-ready'),
   loadLifecycle: () => ipcRenderer.invoke('qwen-audio-agent:lifecycle-load'),

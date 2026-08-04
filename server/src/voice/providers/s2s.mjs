@@ -1,7 +1,7 @@
 import { config } from '../../core/config.mjs'
 import {
-  TOOLS,
   buildFrontendInstructions,
+  frontendTools,
   resultResponseInstructions,
   speakResponseInstructions,
   permissionResponseInstructions,
@@ -68,7 +68,7 @@ export const s2sProvider = {
       type: 'realtime',
       instructions: buildFrontendInstructions(agentContext),
       // GA tools are flat objects rather than the beta { type, function } shape.
-      tools: TOOLS.map(tool => ({
+      tools: frontendTools(agentContext).map(tool => ({
         type: 'function',
         name: tool.function.name,
         description: tool.function.description,

@@ -3,6 +3,7 @@ import {
   DELEGATE_TOOL_NAME,
   GET_AGENT_TASK_STATUS_TOOL_NAME,
   GET_CURRENT_TIME_TOOL_NAME,
+  ENTER_SLEEP_TOOL_NAME,
   NOTES_TOOL_NAME,
   USER_MEMORY_TOOL_NAME,
   RESPOND_AGENT_PERMISSION_TOOL_NAME,
@@ -43,6 +44,7 @@ export class ToolCallHandler {
     onMemoryChanged = () => {},
     respondPermission,
     permissionPolicy,
+    requestClientState = () => {},
   }) {
     this.taskManager = taskManager
     this.ownerId = ownerId
@@ -60,6 +62,7 @@ export class ToolCallHandler {
     this.onMemoryChanged = onMemoryChanged
     this.respondPermission = respondPermission
     this.permissionPolicy = permissionPolicy
+    this.requestClientState = requestClientState
     this.gatewayApprovedPermissions = new Set()
     this.processedCalls = new Set()
     this.turnTasks = new Map()
@@ -240,6 +243,10 @@ export class ToolCallHandler {
     }
     if (toolName === RESPOND_AGENT_PERMISSION_TOOL_NAME) {
       await this.respondAgentPermission(callId, turnId, args)
+      return
+    }
+    if (toolName === ENTER_SLEEP_TOOL_NAME) {
+      await this.enterSleep(callId, turnId)
       return
     }
     if (toolName !== DELEGATE_TOOL_NAME) {
@@ -435,6 +442,26 @@ export class ToolCallHandler {
         },
       },
     )
+  }
+
+  async enterSleep(callId, turnId) {
+    const supported = this.getClientContext()?.states?.includes('sleeping')
+    if (!supported) {
+      await this.sendOutput(
+        callId,
+        failure('unsupported_client_state', '当前入口不支持休眠。'),
+        turnId,
+      )
+      return
+    }
+    await this.sendOutput(
+      callId,
+      { status: 'sleeping' },
+      turnId,
+      null,
+      { createResponse: false },
+    )
+    this.requestClientState('sleeping')
   }
 
   notifyMemoryChanged() {

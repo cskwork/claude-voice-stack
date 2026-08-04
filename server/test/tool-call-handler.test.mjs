@@ -15,6 +15,8 @@ function harness({
   coordinatorAvailable = async () => true,
   respondPermission,
   permissionPolicy,
+  clientContext = {},
+  requestClientState,
 } = {}) {
   const outputs = []
   const transcripts = new TurnTranscripts({ waitMs: 5 })
@@ -37,12 +39,44 @@ function harness({
     onMemoryChanged,
     respondPermission,
     permissionPolicy,
+    getClientContext: () => clientContext,
+    requestClientState,
     getConversationContext: () => [
       { role: 'user', content: '之前在改首页' },
     ],
   })
   return { outputs, manager, transcripts, handler }
 }
+
+test('asks a capable client to enter sleep without creating another response', async () => {
+  const states = []
+  const kit = harness({
+    clientContext: { states: ['sleeping'] },
+    requestClientState: state => states.push(state),
+  })
+
+  await kit.handler.handle({
+    call_id: 'call-hide',
+    name: 'enter_sleep',
+    arguments: '{}',
+  }, { turnId: 'turn-one', turnGeneration: 1 })
+
+  assert.deepEqual(states, ['sleeping'])
+  assert.equal(kit.outputs[0][1].status, 'sleeping')
+  assert.equal(kit.outputs[0][3].createResponse, false)
+})
+
+test('rejects sleep when the client did not advertise that state', async () => {
+  const kit = harness()
+
+  await kit.handler.handle({
+    call_id: 'call-hide-unsupported',
+    name: 'enter_sleep',
+    arguments: '{}',
+  }, { turnId: 'turn-one', turnGeneration: 1 })
+
+  assert.equal(kit.outputs[0][1].error_code, 'unsupported_client_state')
+})
 
 async function permissionHarness({
   answer,

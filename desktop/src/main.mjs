@@ -4,8 +4,11 @@ import {
   dialog,
   globalShortcut,
   ipcMain,
+  Menu,
+  nativeImage,
   screen,
   shell,
+  Tray,
 } from 'electron'
 import {
   chmodSync,
@@ -35,13 +38,13 @@ import {
   findRunningGateway,
 } from '../../shared/gateway-instance-lock.mjs'
 import {
-  inspectBackendSetups,
-} from '../../shared/backend-setup.mjs'
-import {
   assertDesktopGatewayCompatibility,
   desktopGatewayEnvironment,
   EmbeddedGateway,
 } from './gateway-process.mjs'
+import {
+  detectBackendSetups,
+} from './backend-detection.mjs'
 import {
   parseSettings,
   realtimeSettingsConfigured,
@@ -52,7 +55,6 @@ import {
 } from './renderer-server.mjs'
 import {
   expandProcessPath,
-  refreshProcessPath,
 } from './process-path.mjs'
 import {
   createDesktopUpdater,
@@ -121,6 +123,7 @@ let desktopLifecycle = 'active'
 let wakeShortcutRegistered = false
 let registeredWakeShortcut = ''
 let wakeShortcutPaused = false
+let tray = null
 
 const MAX_GATEWAY_CRASH_RESTARTS = 3
 
@@ -190,7 +193,7 @@ async function startLocalGateway(origin) {
           if (
             mainWindow
             && !mainWindow.isDestroyed()
-            && desktopLifecycle !== 'sleeping'
+            && desktopLifecycle !== 'hidden'
           ) {
             void loadQwenAudioAgent(mainWindow)
           }
@@ -336,7 +339,7 @@ async function loadQwenAudioAgent(window) {
     )
     await window.loadURL(desktopOrbUrl(rendererServer.baseUrl, {
       orbStyle: settings.orbStyle,
-      autoSleepSeconds: settings.autoSleepSeconds,
+      autoHideSeconds: settings.autoHideSeconds,
     }))
     clearTimeout(reconnectTimer)
     reconnectTimer = null
@@ -360,7 +363,7 @@ function wakeDesktop(reason = 'shortcut') {
   if (mainWindow.isMinimized()) mainWindow.restore()
   mainWindow.show()
   mainWindow.focus()
-  if (desktopLifecycle === 'sleeping') {
+  if (desktopLifecycle === 'hidden') {
     sendDesktopLifecycle('waking', reason)
     return
   }
@@ -368,6 +371,57 @@ function wakeDesktop(reason = 'shortcut') {
     state: desktopLifecycle,
     reason: 'activity',
   })
+}
+
+function showDesktop(reason = 'tray') {
+  if (setupRequired) {
+    showSettings()
+    return
+  }
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    wakeDesktop(reason)
+    return
+  }
+  startConfiguredRuntime().then(() => {
+    wakeDesktop(reason)
+  }).catch(error => {
+    lastRuntimeError = error?.message || String(error)
+    logger.error('runtime.show_failed', { error })
+    showSettings()
+  })
+}
+
+function createTray() {
+  if (tray) return tray
+  const iconPath = resolve(
+    sourceRoot,
+    process.platform === 'darwin'
+      ? 'desktop/build/trayTemplate.png'
+      : 'desktop/build/icon.png',
+  )
+  let icon = nativeImage.createFromPath(iconPath)
+  if (process.platform !== 'darwin' && !icon.isEmpty()) {
+    icon = icon.resize({ width: 18, height: 18 })
+  }
+  if (process.platform === 'darwin') icon.setTemplateImage(true)
+  tray = new Tray(icon)
+  tray.setToolTip('Qwen Audio Agent')
+  tray.setContextMenu(Menu.buildFromTemplate([
+    {
+      label: '显示悬浮球',
+      click: () => showDesktop('tray'),
+    },
+    {
+      label: '设置…',
+      click: () => showSettings(),
+    },
+    { type: 'separator' },
+    {
+      label: '退出 Qwen Audio Agent',
+      click: () => app.quit(),
+    },
+  ]))
+  return tray
 }
 
 function registerWakeShortcut(accelerator) {
@@ -543,7 +597,7 @@ ipcMain.handle('qwen-audio-agent:lifecycle-load', event => {
 
 ipcMain.handle('qwen-audio-agent:wake-shortcut-pause', event => {
   if (!settingsWindow || event.sender !== settingsWindow.webContents) {
-    throw new Error('无权修改唤醒快捷键')
+    throw new Error('无权修改显示快捷键')
   }
   if (registeredWakeShortcut && wakeShortcutRegistered) {
     globalShortcut.unregister(registeredWakeShortcut)
@@ -555,20 +609,21 @@ ipcMain.handle('qwen-audio-agent:wake-shortcut-pause', event => {
 
 ipcMain.handle('qwen-audio-agent:wake-shortcut-resume', event => {
   if (!settingsWindow || event.sender !== settingsWindow.webContents) {
-    throw new Error('无权修改唤醒快捷键')
+    throw new Error('无权修改显示快捷键')
   }
   wakeShortcutPaused = false
   wakeShortcutRegistered = registerWakeShortcut(registeredWakeShortcut)
   return wakeShortcutRegistered
 })
 
-ipcMain.handle('qwen-audio-agent:enter-sleep', event => {
+ipcMain.handle('qwen-audio-agent:enter-hide', event => {
   if (!mainWindow || event.sender !== mainWindow.webContents) {
     throw new Error('无权修改桌面状态')
   }
   if (desktopLifecycle === 'active') {
-    sendDesktopLifecycle('sleeping', 'inactivity')
-    logger.info('desktop.sleeping')
+    sendDesktopLifecycle('hidden', 'inactivity')
+    mainWindow.hide()
+    logger.info('desktop.hidden')
   }
   return { state: desktopLifecycle }
 })
@@ -586,7 +641,7 @@ ipcMain.on('qwen-audio-agent:lifecycle-ready', event => {
     && desktopLifecycle === 'waking'
   ) {
     sendDesktopLifecycle('active', 'ready')
-    logger.info('desktop.awake')
+    logger.info('desktop.visible')
   }
 })
 
@@ -657,10 +712,11 @@ ipcMain.handle('qwen-audio-agent:open-logs', async event => {
 // INSTALLED_ONLY 与 gateway-process.mjs 保持一致：桌面版运行时禁止
 // npx 按需回退，检测口径必须与运行时一致，只认已安装的组件。
 // 检测结果按会话缓存：重复打开设置页直接复用；“刷新”按钮（force）
-// 或缓存过期才真正重跑。真正检测前同步刷新登录 shell PATH，
-// 保证刚安装的命令立即可见。
+// 或缓存过期才真正重跑。登录 shell 与版本命令都在 Worker 中执行，
+// 避免设置页首次打开时阻塞 Electron 主进程。
 const BACKEND_REPORT_TTL_MS = 10 * 60 * 1000
 let backendReportCache = null
+let backendReportPending = null
 
 ipcMain.handle('qwen-audio-agent:settings-detect-backends', async (event, options) => {
   if (!settingsWindow || event.sender !== settingsWindow.webContents) {
@@ -674,29 +730,27 @@ ipcMain.handle('qwen-audio-agent:settings-detect-backends', async (event, option
   ) {
     return backendReportCache.report
   }
-  refreshProcessPath()
+  if (backendReportPending) return backendReportPending
   const configured = existsSync(runtimeEnvironment.configPath)
     ? parseEnv(readFileSync(runtimeEnvironment.configPath, 'utf8'))
     : {}
-  const report = inspectBackendSetups({
+  const detection = detectBackendSetups({
     env: {
       ...process.env,
       ...configured,
       QWEN_AUDIO_AGENT_DESKTOP_INSTALLED_ONLY: '1',
     },
   })
-  const result = {
-    selected: report.selected,
-    backends: report.backends.map(item => ({
-      id: item.id,
-      label: item.label,
-      ready: item.ready,
-      selected: item.selected,
-      issues: item.issues,
-    })),
-  }
-  backendReportCache = { report: result, time: now }
-  return result
+  backendReportPending = detection.then(result => {
+    // 主进程沿用 Worker 刚读取到的 PATH，确保刷新后启动 Gateway 时也能
+    // 找到用户新安装的 Agent；这里只赋值，不再执行任何阻塞命令。
+    if (result.path) process.env.PATH = result.path
+    backendReportCache = { report: result.report, time: Date.now() }
+    return result.report
+  }).finally(() => {
+    backendReportPending = null
+  })
+  return backendReportPending
 })
 
 ipcMain.handle('qwen-audio-agent:updater-status', event => {
@@ -759,8 +813,8 @@ ipcMain.handle('qwen-audio-agent:settings-save', async (event, settings) => {
   )
   const backendModelChanged = previous.backendModel !== normalized.backendModel
   const orbStyleChanged = previous.orbStyle !== normalized.orbStyle
-  const autoSleepChanged = (
-    previous.autoSleepSeconds !== normalized.autoSleepSeconds
+  const autoHideChanged = (
+    previous.autoHideSeconds !== normalized.autoHideSeconds
   )
   const wakeShortcutChanged = previous.wakeShortcut !== normalized.wakeShortcut
   const gatewayRuntimeChanged = (
@@ -785,7 +839,7 @@ ipcMain.handle('qwen-audio-agent:settings-save', async (event, settings) => {
     wakeShortcutChanged
     && !registerWakeShortcut(normalized.wakeShortcut)
   ) {
-    throw new Error('这个唤醒快捷键已被其他应用占用，请选择另一个')
+    throw new Error('这个显示快捷键已被其他应用占用，请选择另一个')
   }
   try {
     writeFileSync(runtimeEnvironment.configPath, content, {
@@ -810,7 +864,7 @@ ipcMain.handle('qwen-audio-agent:settings-save', async (event, settings) => {
       speechToSpeech: speechToSpeechChanged,
       backendModel: backendModelChanged,
       orbStyle: orbStyleChanged,
-      autoSleep: autoSleepChanged,
+      autoHide: autoHideChanged,
       wakeShortcut: wakeShortcutChanged,
     },
   })
@@ -842,7 +896,7 @@ ipcMain.handle('qwen-audio-agent:settings-save', async (event, settings) => {
   await ensureDesktopUi()
   const runtime = await runtimeStatus(appOrigin)
   if (
-    (restarted || gatewayChanged || orbStyleChanged || autoSleepChanged)
+    (restarted || gatewayChanged || orbStyleChanged || autoHideChanged)
     && mainWindow
     && !mainWindow.isDestroyed()
   ) {
@@ -869,8 +923,7 @@ if (!app.requestSingleInstanceLock()) {
       showSettings()
       return
     }
-    if (mainWindow.isMinimized()) mainWindow.restore()
-    mainWindow.focus()
+    wakeDesktop('second-instance')
   })
 
   app.whenReady().then(async () => {
@@ -878,6 +931,7 @@ if (!app.requestSingleInstanceLock()) {
       app.setActivationPolicy('accessory')
       app.dock?.hide()
     }
+    createTray()
     wakeShortcutRegistered = registerWakeShortcut(initialSettings.wakeShortcut)
     if (!wakeShortcutRegistered) {
       logger.warn('desktop.wake_shortcut_unavailable', {
@@ -914,8 +968,10 @@ if (!app.requestSingleInstanceLock()) {
         return
       }
       if (!BrowserWindow.getAllWindows().length) {
-        void ensureDesktopUi()
+        void ensureDesktopUi().then(() => wakeDesktop('activate'))
+        return
       }
+      wakeDesktop('activate')
     })
   }).catch(error => {
     const message = error?.stack || error?.message || String(error)
@@ -931,6 +987,8 @@ if (!app.requestSingleInstanceLock()) {
   app.on('before-quit', () => {
     logger.info('desktop.stopping')
     globalShortcut.unregisterAll()
+    tray?.destroy()
+    tray = null
     void rendererServer?.close()
     rendererServer = null
     const gateway = embeddedGateway
