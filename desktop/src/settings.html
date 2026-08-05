@@ -42,10 +42,44 @@
       </section>
 
       <form id="settings-form">
+        <nav class="settings-tabs" role="tablist" aria-label="设置分类">
+          <button
+            id="voice-tab"
+            class="settings-tab active"
+            type="button"
+            role="tab"
+            aria-selected="true"
+            aria-controls="voice-settings"
+            data-settings-tab="voice"
+          >语音前台</button>
+          <button
+            id="backend-tab"
+            class="settings-tab"
+            type="button"
+            role="tab"
+            aria-selected="false"
+            aria-controls="backend-settings"
+            data-settings-tab="backend"
+          >后台 Agent</button>
+          <button
+            id="app-tab"
+            class="settings-tab"
+            type="button"
+            role="tab"
+            aria-selected="false"
+            aria-controls="app-settings"
+            data-settings-tab="app"
+          >应用</button>
+        </nav>
         <div class="settings-groups">
-          <section class="settings-group" aria-labelledby="voice-settings-title">
-            <div class="settings-group-heading">
-              <h2 id="voice-settings-title">语音前台</h2>
+          <section
+            id="voice-settings"
+            class="settings-group"
+            role="tabpanel"
+            aria-labelledby="voice-tab"
+            data-settings-panel="voice"
+          >
+            <div class="settings-group-heading provider-heading">
               <fieldset
                 id="realtime-provider"
                 class="provider-segmented"
@@ -137,10 +171,14 @@
             </div>
           </section>
 
-          <section class="settings-group" aria-labelledby="backend-settings-title">
-            <div class="settings-group-heading">
-              <h2 id="backend-settings-title">后台 Agent</h2>
-            </div>
+          <section
+            id="backend-settings"
+            class="settings-group"
+            role="tabpanel"
+            aria-labelledby="backend-tab"
+            data-settings-panel="backend"
+            hidden
+          >
             <div class="settings-card">
               <div class="setting-row backend-list-row">
                 <span class="setting-label" id="backend-list-label">后台 Agent</span>
@@ -173,10 +211,14 @@
             </div>
           </section>
 
-          <section class="settings-group" aria-labelledby="app-settings-title">
-            <div class="settings-group-heading">
-              <h2 id="app-settings-title">应用</h2>
-            </div>
+          <section
+            id="app-settings"
+            class="settings-group"
+            role="tabpanel"
+            aria-labelledby="app-tab"
+            data-settings-panel="app"
+            hidden
+          >
             <div class="settings-card">
               <div class="setting-row">
                 <label for="gateway-url">Gateway</label>

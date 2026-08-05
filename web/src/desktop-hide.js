@@ -1,3 +1,5 @@
+import { GatewayServerEvent } from '../../shared/realtime-events.mjs'
+
 const ACTIVE_TASK_PHASES = new Set([
   'queued',
   'running',
@@ -62,4 +64,23 @@ export function desktopHideDeadline({
 }) {
   if (!timeoutSeconds) return Infinity
   return Math.max(lastInteractionAt, workSettledAt) + timeoutSeconds * 1000
+}
+
+// Client state is a provider- and Gateway-level capability. This adapter owns
+// only its desktop presentation: the generic "sleeping" state hides the orb.
+export async function applyDesktopClientState(event, {
+  desktop = false,
+  bridge,
+  onLifecycle = () => {},
+} = {}) {
+  if (
+    !desktop
+    || event?.type !== GatewayServerEvent.CLIENT_STATE
+    || event.state !== 'sleeping'
+    || typeof bridge?.enterHide !== 'function'
+  ) return false
+
+  const lifecycle = await bridge.enterHide()
+  if (lifecycle?.state) onLifecycle(lifecycle.state)
+  return lifecycle?.state === 'hidden'
 }

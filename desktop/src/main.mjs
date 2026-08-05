@@ -49,11 +49,12 @@ import {
   backendDefinition,
 } from '../../shared/backend-catalog.mjs'
 import {
-  withInstallSupport,
+  withBackendLifecycle,
 } from '../../shared/backend-install.mjs'
 import {
   createBackendInstaller,
 } from './backend-installer.mjs'
+import { openBackendAuthentication } from './backend-authentication.mjs'
 import {
   parseSettings,
   realtimeSettingsConfigured,
@@ -490,9 +491,9 @@ function createWindow() {
 function createSettingsWindow() {
   const window = new BrowserWindow({
     width: 540,
-    height: 860,
+    height: 760,
     minWidth: 460,
-    minHeight: 640,
+    minHeight: 620,
     title: '设置',
     backgroundColor: '#f5f6f7',
     autoHideMenuBar: true,
@@ -704,7 +705,7 @@ function runBackendDetection() {
   return detectBackendSetups({ env: backendDetectionEnvironment() })
     .then(result => {
       if (result.path) process.env.PATH = result.path
-      return withInstallSupport(result.report, {
+      return withBackendLifecycle(result.report, {
         env: backendDetectionEnvironment(),
       })
     })
@@ -737,6 +738,7 @@ ipcMain.handle('qwen-audio-agent:settings-detect-backends', async (event, option
 // 与安装后的整体重检。脚本类步骤的确认发生在可信主进程（原生对话框
 // 展示完整命令文本），渲染层无法绕过。
 const backendInstaller = createBackendInstaller({
+  env: backendDetectionEnvironment,
   confirmScript: async step => {
     if (!settingsWindow || settingsWindow.isDestroyed()) return false
     const { response } = await dialog.showMessageBox(settingsWindow, {
@@ -790,6 +792,20 @@ ipcMain.handle('qwen-audio-agent:backend-install', async (event, payload) => {
       return report
     },
   })
+})
+
+ipcMain.handle('qwen-audio-agent:backend-authenticate', async (event, payload) => {
+  if (!settingsWindow || event.sender !== settingsWindow.webContents) {
+    throw new Error('无权启动后台 Agent 登录')
+  }
+  const id = typeof payload === 'string' ? payload : payload?.backend
+  const definition = backendDefinition(id)
+  if (!definition) throw new Error(`不支持的后台：${String(id || '')}`)
+  await openBackendAuthentication(definition.id, {
+    env: backendDetectionEnvironment(),
+  })
+  logger.info('backend.authentication_opened', { backend: definition.id })
+  return { ok: true }
 })
 
 ipcMain.handle('qwen-audio-agent:updater-status', event => {

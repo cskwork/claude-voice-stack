@@ -3,6 +3,7 @@ import { EventEmitter } from 'node:events'
 import test from 'node:test'
 import { backendNames } from '../../shared/backend-catalog.mjs'
 import {
+  authenticationSupport,
   installBackend,
   installSupport,
   withInstallSupport,
@@ -105,6 +106,21 @@ test('withInstallSupport annotates every reported backend', () => {
   assert.equal(report.backends[1].install.supported, false)
 })
 
+test('preserves observed authentication instead of guessing from installation', () => {
+  const report = withInstallSupport({
+    selected: '',
+    backends: [{
+      id: 'opencode',
+      ready: true,
+      authentication: { status: 'authenticated' },
+    }],
+  }, { env: {}, platform: 'darwin' })
+  assert.equal(report.backends[0].authentication.status, 'authenticated')
+  assert.equal(report.backends[0].authentication.required, false)
+  assert.equal(report.backends[0].authentication.actionAvailable, false)
+  assert.equal(report.backends[0].lifecycle.state, 'installed')
+})
+
 test('installs npm packages globally and verifies readiness', async () => {
   const { calls, options } = installOptions()
   const events = []
@@ -113,7 +129,9 @@ test('installs npm packages globally and verifies readiness', async () => {
     onProgress: event => events.push(event),
   })
   assert.equal(result.ok, true)
-  assert.match(result.loginHint, /opencode/)
+  assert.match(result.loginHint, /OpenCode/)
+  assert.equal(result.authentication.status, 'unknown')
+  assert.equal(result.authentication.required, false)
   assert.deepEqual(calls, [[
     '/usr/local/bin/npm',
     ['install', '-g', 'opencode-ai@1.18.5'],
@@ -123,6 +141,32 @@ test('installs npm packages globally and verifies readiness', async () => {
     ['start', 'done'],
   )
   assert.equal(events[0].display, 'npm install -g opencode-ai@1.18.5')
+})
+
+test('describes backend-owned authentication actions', () => {
+  assert.deepEqual(authenticationSupport('qoder', {
+    env: {},
+    platform: 'darwin',
+  }), {
+    required: true,
+    supported: true,
+    command: 'qodercli login',
+  })
+  assert.deepEqual(authenticationSupport('codebuddy', {
+    env: {},
+    platform: 'darwin',
+  }), {
+    required: true,
+    supported: true,
+    command: 'codebuddy',
+  })
+  assert.equal(authenticationSupport('opencode', {
+    env: {
+      DASHSCOPE_API_KEY: 'key',
+      QWEN_AUDIO_AGENT_BACKEND_MODEL: 'qwen3.7-max',
+    },
+    platform: 'darwin',
+  }).required, false)
 })
 
 test('runs multi-step installs in order and stops on failure', async () => {

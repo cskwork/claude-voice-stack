@@ -56,7 +56,9 @@ test('loads one canonical frontend policy separately from runtime context', () =
 
   assert.match(prompt, /# Operating model/)
   assert.match(prompt, /# Completed work/)
-  assert.match(prompt, /# Basic tools/)
+  assert.match(prompt, /# User memory/)
+  assert.match(prompt, /调用专用工具/)
+  assert.match(prompt, /不要用口头回应代替工具产生的操作/)
   assert.doesNotMatch(context, /# Operating model/)
   assert.match(context, /## Runtime Context/)
 })

@@ -1,11 +1,31 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
+  applyDesktopClientState,
   desktopAutoHideSeconds,
   desktopCanHide,
   desktopHideDeadline,
   desktopWorkSettled,
 } from '../src/desktop-hide.js'
+
+test('maps a supported sleeping client state to the desktop bridge', async () => {
+  const lifecycle = []
+  const hidden = await applyDesktopClientState({
+    type: 'client.state',
+    state: 'sleeping',
+  }, {
+    desktop: true,
+    bridge: { enterHide: async () => ({ state: 'hidden' }) },
+    onLifecycle: state => lifecycle.push(state),
+  })
+
+  assert.equal(hidden, true)
+  assert.deepEqual(lifecycle, ['hidden'])
+  assert.equal(await applyDesktopClientState({
+    type: 'client.state',
+    state: 'sleeping',
+  }), false)
+})
 
 test('uses a 120 second desktop hide default and supports never', () => {
   assert.equal(desktopAutoHideSeconds(''), 120)

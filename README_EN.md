@@ -25,6 +25,8 @@ tells you:
 
 ## News
 
+- **2026-08-05 · [v1.4.2](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.4.2)**
+  🔧 Refines desktop backend Agent installation, login, and status detection, with more reliable long-term memory behavior.
 - **2026-08-04 · [v1.4.1](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.4.1)**
   🧰 Adds one-click backend Agent installation; the desktop orb now supports automatic hiding and shortcut recall.
 - **2026-08-04 · [v1.4.0](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.4.0)**

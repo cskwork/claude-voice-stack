@@ -90,7 +90,7 @@ const userMemoryTool = {
   type: 'function',
   function: {
     name: USER_MEMORY_TOOL_NAME,
-    description: '管理千问Audio前台持有的用户记忆与长期约定。profile 用于称呼、时区、语言和稳定交互偏好；long_term 用于用户明确希望跨会话保留的个人事实、喜好、目标和约定；rules 用于用户亲自设定的长期约定——说话方式、称呼习惯、默认做法等“以后都……”类要求，设定后长期生效并优先于默认风格；不要保存项目执行历史或后台工作细节。使用 recall 回忆，remember 新增，replace 用新内容替换明确相关的旧记录，forget 遗忘。',
+    description: '管理千问Audio前台持有的用户记忆与长期约定。用户明确要求记住、修改、遗忘某项信息，或询问你记得什么时必须调用，不要只口头回应。profile 用于称呼、时区、语言和稳定交互偏好；long_term 用于用户明确希望跨会话保留的个人事实、喜好、目标和约定；rules 用于用户亲自设定的长期约定——说话方式、称呼习惯、默认做法等“以后都……”类要求，设定后长期生效并优先于默认风格；不要保存项目执行历史或后台工作细节，也不要保存密码、密钥、验证码或令牌。使用 recall 回忆，remember 新增，replace 用新内容替换明确相关的旧记录，forget 遗忘。',
     parameters: {
       type: 'object',
       properties: {
@@ -187,7 +187,7 @@ const enterSleepTool = {
   type: 'function',
   function: {
     name: ENTER_SLEEP_TOOL_NAME,
-    description: '让当前语音前台进入休眠状态。仅当用户明确让你“退下、隐藏、收起、先休息、暂时离开”时调用；不要用于取消后台工作、静音或退出应用。直接调用，不必先口头确认。',
+    description: '让当前语音入口进入其支持的休眠状态。仅在此工具可用且用户明确要求当前语音入口退下、隐藏、收起、暂时休息或离开时，必须立即调用；不要只口头回应，也不要先确认。不得用于取消后台工作、静音、退出应用，或用户未明确表达休眠意图的情况。',
     parameters: {
       type: 'object',
       properties: {},

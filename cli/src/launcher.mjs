@@ -181,10 +181,15 @@ export async function main(argv, {
     }
     stdout.write(
       result.alreadyInstalled
-        ? `✓ ${label} 已安装并就绪\n`
+        ? `✓ ${label} 已安装\n`
         : `✓ ${label} 安装完成\n`,
     )
-    if (result.loginHint) stdout.write(`${result.loginHint}\n`)
+    if (
+      result.loginHint
+      && result.authentication?.status !== 'authenticated'
+    ) {
+      stdout.write(`${result.loginHint}\n`)
+    }
     return 0
   }
 

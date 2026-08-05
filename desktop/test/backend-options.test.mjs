@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { backendOptionStates } from '../src/backend-options.mjs'
+import {
+  backendOptionStates,
+  backendRuntimeReady,
+} from '../src/backend-options.mjs'
 
 function report(backends) {
   return { selected: '', readOnly: true, backends }
@@ -27,6 +30,8 @@ test('always offers the none option first, even without a report', () => {
     selectable: true,
     installable: false,
     requiresConfirmation: false,
+    authenticationRequired: false,
+    authenticatable: false,
     reason: '',
     title: '',
   }])
@@ -48,6 +53,11 @@ test('ready backends are selectable and never installable', () => {
     selectable: true,
     installable: false,
     requiresConfirmation: false,
+    authenticationRequired: false,
+    authenticatable: false,
+    authenticationLabel: '登录',
+    lifecycleState: 'installed',
+    statusLabel: '已安装',
     reason: '',
     title: '',
   })
@@ -82,7 +92,45 @@ test('script-based installs mark the row as requiring confirmation', () => {
   assert.equal(states[1].requiresConfirmation, true)
 })
 
-test('backends without an install spec are not installable', () => {
+test('offers official authentication only after an Agent is installed', () => {
+  const states = backendOptionStates(report([
+    backend({
+      id: 'qoder',
+      ready: true,
+      authentication: { required: true, supported: true },
+    }),
+    backend({
+      id: 'codebuddy',
+      ready: true,
+      authentication: { required: false, supported: false },
+    }),
+  ]))
+  assert.equal(states[1].authenticationRequired, true)
+  assert.equal(states[1].authenticatable, true)
+  assert.equal(states[1].authenticationLabel, '登录')
+  assert.equal(states[1].statusLabel, '待登录')
+  assert.equal(states[2].authenticationRequired, false)
+  assert.equal(states[2].authenticatable, false)
+})
+
+test('offers login when backend-owned authentication is inconclusive', () => {
+  const states = backendOptionStates(report([
+    backend({
+      id: 'kimi',
+      ready: true,
+      authentication: {
+        required: false,
+        supported: true,
+        actionAvailable: true,
+        status: 'unknown',
+      },
+    }),
+  ]))
+  assert.equal(states[1].authenticatable, true)
+  assert.equal(states[1].authenticationLabel, '登录')
+})
+
+test('does not expose the generic ACP backend in desktop options', () => {
   const states = backendOptionStates(report([
     backend({
       id: 'acp',
@@ -94,8 +142,8 @@ test('backends without an install spec are not installable', () => {
       },
     }),
   ]))
-  assert.equal(states[1].installable, false)
-  assert.equal(states[1].reason, '需要配置')
+  assert.equal(states.length, 1)
+  assert.equal(states[0].id, 'none')
 })
 
 test('missing install information falls back to not installable', () => {
@@ -123,6 +171,25 @@ test('keeps the selected backend selectable even when unavailable', () => {
   ]))
   assert.equal(states[1].selectable, true)
   assert.equal(states[1].installable, true)
+})
+
+test('never reports an uninstalled backend ready from a stale runtime alone', () => {
+  assert.equal(backendRuntimeReady({ id: 'codebuddy', ready: false }, {
+    selectedBackend: 'codebuddy',
+    runtimeBackend: { connected: true },
+  }), false)
+  assert.equal(backendRuntimeReady({ id: 'codebuddy', ready: true }, {
+    selectedBackend: 'codebuddy',
+    runtimeBackend: { connected: true },
+  }), true)
+  assert.equal(backendRuntimeReady({
+    id: 'codebuddy',
+    ready: true,
+    authenticationRequired: true,
+  }, {
+    selectedBackend: 'codebuddy',
+    runtimeBackend: { connected: true },
+  }), false)
 })
 
 test('classifies issue texts into short reasons', () => {

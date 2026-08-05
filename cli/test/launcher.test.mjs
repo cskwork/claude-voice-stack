@@ -429,7 +429,7 @@ test('reports an already installed backend without rerunning steps', async () =>
     .filter(call => call[0] === 'stdout')
     .map(call => call[1])
     .join('')
-  assert.match(output, /✓ Codex 已安装并就绪/)
+  assert.match(output, /✓ Codex 已安装/)
   assert.doesNotMatch(output, /步骤/)
 })
 

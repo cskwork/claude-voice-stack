@@ -217,6 +217,7 @@ jobs:
           name: macos-dmg
           path: |
             dist/desktop/*.dmg
+            dist/desktop/*.zip
             dist/desktop/*.blockmap
             dist/desktop/latest-mac.yml
           if-no-files-found: error
