@@ -811,6 +811,10 @@ export function attachRealtimeGateway(server, {
         return
       }
       if (event.type === 'task.notification.pending') {
+        if (sleeping) {
+          wakeFromSleep()
+          return
+        }
         if (task.sessionId === sessionId) {
           claimPendingNotifications([task.id])
         }
@@ -825,6 +829,10 @@ export function attachRealtimeGateway(server, {
       })
       if (event.type === 'task.permission.requested') {
         refreshActiveTaskContext()
+        if (sleeping) {
+          wakeFromSleep()
+          return
+        }
         announcePermission(task)
       }
       if (event.type === 'task.permission.resolved') {
