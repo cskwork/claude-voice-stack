@@ -187,7 +187,7 @@ const enterSleepTool = {
   type: 'function',
   function: {
     name: ENTER_SLEEP_TOOL_NAME,
-    description: '让当前语音前台进入休眠状态。仅当用户明确让你“退下、隐藏、收起、先休息、暂时离开”时调用；不要用于取消后台工作、静音或退出应用。直接调用，不必先口头确认。',
+    description: '让当前语音入口进入其支持的休眠状态。仅在此工具可用且用户明确要求当前语音入口退下、隐藏、收起、暂时休息或离开时，必须立即调用；不要只口头回应，也不要先确认。不得用于取消后台工作、静音、退出应用，或用户未明确表达休眠意图的情况。',
     parameters: {
       type: 'object',
       properties: {},

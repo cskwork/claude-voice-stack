@@ -291,6 +291,11 @@ test('offers the sleep tool only to a client that advertises the state', () => {
     desktop.tools.some(tool => tool.function.name === 'enter_sleep'),
     true,
   )
+  const sleepTool = desktop.tools.find(
+    tool => tool.function.name === 'enter_sleep',
+  )
+  assert.match(sleepTool.function.description, /必须立即调用/)
+  assert.match(sleepTool.function.description, /不要只口头回应/)
   assert.equal(
     s2sDesktop.tools.some(tool => tool.name === 'enter_sleep'),
     true,

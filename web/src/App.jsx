@@ -31,6 +31,7 @@ import useRealtimeVoice, {
 import { requestedSessionId } from './session.js'
 import { initialVoiceEnabled } from './voice-defaults.js'
 import {
+  applyDesktopClientState,
   desktopAutoHideSeconds,
   desktopCanHide,
   desktopHideDeadline,
@@ -344,15 +345,11 @@ export default function App() {
           : task
       )))
     }
-    if (
-      event.type === 'client.state'
-      && event.state === 'sleeping'
-      && desktopOrbMode
-    ) {
-      window.qwenAudioAgentDesktop?.enterHide()
-        .then(lifecycle => setDesktopLifecycle(lifecycle.state))
-        .catch(() => {})
-    }
+    void applyDesktopClientState(event, {
+      desktop: desktopOrbMode,
+      bridge: window.qwenAudioAgentDesktop,
+      onLifecycle: setDesktopLifecycle,
+    }).catch(() => {})
     if (event.type === 'gateway.connected') {
       fetch(`api/tasks?sessionId=${encodeURIComponent(sessionId)}`)
         .then(response => response.ok ? response.json() : Promise.reject())
