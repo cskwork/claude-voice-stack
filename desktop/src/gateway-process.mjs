@@ -174,6 +174,7 @@ export class EmbeddedGateway {
     this.startPromise = null
     this.stopPromise = null
     this.onUnexpectedExit = null
+    this.onGatewayMessage = null
   }
 
   get running() {
@@ -246,6 +247,13 @@ export class EmbeddedGateway {
     operation.childState = childState
     this.child = child
     this.childState = childState
+    // Persistent message handler: survives after waitUntilReady's
+    // temporary handler is removed. Used for offline notifications
+    // and other runtime IPC from the gateway child process.
+    child.on('message', message => {
+      if (message?.type === GATEWAY_READY_MESSAGE) return
+      this.onGatewayMessage?.(message)
+    })
     child.once('exit', (code, signal) => {
       this.logger?.[childState.planned ? 'info' : 'error']('gateway.exited', {
         code,

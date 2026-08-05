@@ -756,6 +756,36 @@ export function attachRealtimeGateway(server, {
     const unsubscribeTasks = taskManager.subscribe(event => {
       const task = event.task
       if (event.ownerId !== ownerId) return
+      if (event.type === 'task.progress.check') {
+        if (task.sessionId !== sessionId) return
+        if (!outputEnabled || !frontend?.ready) return
+        const progressContext = {
+          taskId: task.id,
+          turnId: null,
+          taskIds: [task.id],
+          deliverySequence: null,
+        }
+        const progressText = [
+          '[PROGRESS]',
+          '<qwen_audio_agent_progress>',
+          '这是后台任务的进度更新，不是最终结果，也不是用户的新请求。',
+          '用一句自然的话简短说明进度，不要调用工具。',
+          event.message,
+          '</qwen_audio_agent_progress>',
+        ].join('\n')
+        frontend.injectResult(
+          progressText,
+          'progress',
+          progressContext,
+          { injectContext: true },
+        ).catch(error => {
+          connectionLogger.warn('progress.injection_failed', {
+            taskId: task.id,
+            error: error.message,
+          })
+        })
+        return
+      }
       if (event.type === 'task.notification.pending') {
         if (task.sessionId === sessionId) {
           claimPendingNotifications([task.id])

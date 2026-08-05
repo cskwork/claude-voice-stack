@@ -452,6 +452,34 @@ export const config = {
     1000,
     { min: 10 },
   ),
+  reminderSchedulerEnabled: String(
+    process.env.QWEN_AUDIO_AGENT_REMINDER_SCHEDULER || 'true'
+  ).toLowerCase() === 'true',
+  reminderMaxPerOwner: numberSetting(
+    process.env.QWEN_AUDIO_AGENT_REMINDER_MAX_PER_OWNER,
+    50,
+    { min: 1, max: 500 },
+  ),
+  scheduledTaskTimeoutMs: numberSetting(
+    process.env.QWEN_AUDIO_AGENT_SCHEDULED_TASK_TIMEOUT_MS,
+    1_800_000,
+    { min: 60_000 },
+  ),
+  scheduledTaskProgressCheckMs: numberSetting(
+    process.env.QWEN_AUDIO_AGENT_SCHEDULED_TASK_PROGRESS_CHECK_MS,
+    300_000,
+    { min: 30_000 },
+  ),
+  offlineNotificationDelayMs: numberSetting(
+    process.env.QWEN_AUDIO_AGENT_OFFLINE_NOTIFICATION_DELAY_MS,
+    5_000,
+    { min: 1_000, max: 120_000 },
+  ),
+  reminderStaggerMs: numberSetting(
+    process.env.QWEN_AUDIO_AGENT_REMINDER_STAGGER_MS,
+    30_000,
+    { min: 0, max: 300_000 },
+  ),
 }
 
 export function realtimeUrl(baseUrl, model) {

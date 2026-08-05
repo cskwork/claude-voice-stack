@@ -6,6 +6,7 @@ import {
   ipcMain,
   Menu,
   nativeImage,
+  Notification,
   screen,
   shell,
   Tray,
@@ -207,6 +208,14 @@ async function startLocalGateway(origin) {
       envFactory: configuredGatewayEnvironment,
       logger: logger.child({ subsystem: 'embedded_gateway' }),
     })
+    embeddedGateway.onGatewayMessage = message => {
+      if (message?.type !== 'qwen-audio-agent:offline-notification') return
+      const task = message.task || {}
+      new Notification({
+        title: '千问 Audio 提醒',
+        body: String(task.result || task.objective || ''),
+      }).show()
+    }
     embeddedGateway.onUnexpectedExit = () => {
       lastRuntimeError = '内置 Gateway 意外退出'
       if (gatewayCrashCount >= MAX_GATEWAY_CRASH_RESTARTS) return
