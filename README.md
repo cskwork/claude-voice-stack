@@ -266,6 +266,14 @@ qwenaudio tui --audio-mode full
 npm run desktop:build:local
 ```
 
+官方 Release 只发布 macOS 安装包。需要 Linux 版时，请在 Linux 机器上自行打包：
+
+```bash
+npm run desktop:build:linux
+```
+
+产物位于 `dist/desktop/`（AppImage 与 deb），无需代码签名证书。
+
 ## 后台常驻
 
 希望个人助理长期在线时，可以安装为用户后台服务：

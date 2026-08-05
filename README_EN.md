@@ -296,6 +296,16 @@ Build a local test package from source:
 npm run desktop:build:local
 ```
 
+Official releases ship macOS installers only. To build for Linux, run on a
+Linux machine:
+
+```bash
+npm run desktop:build:linux
+```
+
+Artifacts land in `dist/desktop/` (AppImage and deb). No signing certificate
+is required.
+
 ## Run the Gateway in the Background
 
 To keep your personal assistant available, install the Gateway as a user
