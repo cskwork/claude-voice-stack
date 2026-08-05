@@ -20,6 +20,8 @@
 
 ## News
 
+- **2026-08-05 · [v1.4.2](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.4.2)**
+  🔧 优化桌面端后台 Agent 的安装、登录与状态检测，完善长期记忆行为。
 - **2026-08-04 · [v1.4.1](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.4.1)**
   🧰 新增后台 Agent 一键安装；桌面悬浮球支持自动隐藏与快捷键唤回。
 - **2026-08-04 · [v1.4.0](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.4.0)**

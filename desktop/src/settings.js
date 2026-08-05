@@ -1,4 +1,7 @@
-import { backendOptionStates } from './backend-options.mjs'
+import {
+  backendOptionStates,
+  backendRuntimeReady,
+} from './backend-options.mjs'
 import {
   realtimeConnectionStatus,
   realtimeModelStatusLabel,
@@ -39,6 +42,8 @@ const updaterStatus = document.querySelector('#updater-status')
 const checkUpdates = document.querySelector('#check-updates')
 const openLogs = document.querySelector('#open-logs')
 const submit = form.querySelector('button[type="submit"]')
+const settingsTabs = [...document.querySelectorAll('[data-settings-tab]')]
+const settingsPanels = [...document.querySelectorAll('[data-settings-panel]')]
 
 let settings
 let runtime
@@ -51,6 +56,36 @@ let startupError = null
 let recordingWakeShortcut = false
 const defaultWakeShortcut = 'CommandOrControl+Shift+Space'
 const macPlatform = /Mac|iPhone|iPad/.test(navigator.platform)
+
+function selectSettingsTab(value, { focus = false } = {}) {
+  const selected = settingsTabs.some(tab => tab.dataset.settingsTab === value)
+    ? value
+    : 'voice'
+  for (const tab of settingsTabs) {
+    const active = tab.dataset.settingsTab === selected
+    tab.classList.toggle('active', active)
+    tab.setAttribute('aria-selected', String(active))
+    tab.tabIndex = active ? 0 : -1
+    if (active && focus) tab.focus()
+  }
+  for (const panel of settingsPanels) {
+    panel.hidden = panel.dataset.settingsPanel !== selected
+  }
+  localStorage.setItem('qwen-audio-agent.settings-tab', selected)
+}
+
+for (const tab of settingsTabs) {
+  tab.addEventListener('click', () => selectSettingsTab(tab.dataset.settingsTab))
+  tab.addEventListener('keydown', event => {
+    if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return
+    event.preventDefault()
+    const current = settingsTabs.indexOf(tab)
+    const offset = event.key === 'ArrowRight' ? 1 : -1
+    const next = (current + offset + settingsTabs.length) % settingsTabs.length
+    selectSettingsTab(settingsTabs[next].dataset.settingsTab, { focus: true })
+  })
+}
+selectSettingsTab(localStorage.getItem('qwen-audio-agent.settings-tab'))
 
 function renderWakeShortcutStatus(registered) {
   recordWakeShortcut.classList.toggle('invalid', registered === false)
@@ -242,19 +277,22 @@ function selectedBackend() {
 // 不可用也保留可选，避免列表丢值。
 function renderBackendOptions(currentValue) {
   const states = backendOptionStates(backendReport)
-  if (currentValue && !states.some(state => state.id === currentValue)) {
+  const requestedValue = currentValue === 'acp' ? 'none' : currentValue
+  if (requestedValue && !states.some(state => state.id === requestedValue)) {
     states.push({
-      id: currentValue,
-      label: backendLabel(currentValue),
+      id: requestedValue,
+      label: backendLabel(requestedValue),
       ready: false,
       selectable: true,
       installable: false,
       requiresConfirmation: false,
+      authenticationRequired: false,
+      authenticatable: false,
       reason: '当前不可用',
       title: '',
     })
   }
-  const selected = currentValue || 'none'
+  const selected = requestedValue || 'none'
   backendList.replaceChildren(...states.map(state => {
     const row = document.createElement('label')
     row.className = 'backend-row'
@@ -279,6 +317,10 @@ function renderBackendOptions(currentValue) {
     name.textContent = state.label
     row.append(name)
 
+    const runtimeReady = backendRuntimeReady(state, {
+      selectedBackend: settings?.agentProtocol,
+      runtimeBackend: runtime?.backend,
+    })
     if (installingBackend === state.id) {
       const progress = document.createElement('span')
       progress.className = 'backend-progress'
@@ -287,8 +329,16 @@ function renderBackendOptions(currentValue) {
       row.append(progress)
     } else if (state.id !== 'none') {
       const status = document.createElement('span')
-      status.className = `backend-status${state.ready ? ' ready' : ''}`
-      status.textContent = state.ready ? '可用' : state.reason
+      status.className = `backend-status${
+        runtimeReady
+          ? ' ready'
+          : state.authenticationRequired ? ' attention' : (
+            state.ready ? ' installed' : ''
+          )
+      }`
+      status.textContent = runtimeReady
+        ? '已就绪'
+        : state.statusLabel || state.reason
       row.append(status)
     }
 
@@ -302,6 +352,16 @@ function renderBackendOptions(currentValue) {
       button.title = state.requiresConfirmation
         ? '该后台需要通过官方脚本安装，执行前会再次确认'
         : '一键安装到本机'
+      row.append(button)
+    }
+    if (state.authenticatable && !runtimeReady) {
+      const button = document.createElement('button')
+      button.className = 'backend-authenticate'
+      button.type = 'button'
+      button.dataset.backend = state.id
+      button.disabled = Boolean(installingBackend)
+      button.textContent = '登录'
+      button.title = '在终端中打开该 Agent 的官方登录入口'
       row.append(button)
     }
     return row
@@ -343,9 +403,11 @@ async function installBackendRow(id) {
       return
     }
     showMessage(
-      result.alreadyInstalled
-        ? `${backendLabel(id)} 已安装并就绪。${result.loginHint || ''}`
-        : `${backendLabel(id)} 安装成功。${result.loginHint || ''}`,
+      result.authentication?.required
+        ? `${backendLabel(id)} 已安装，请完成登录。`
+        : result.alreadyInstalled
+          ? `${backendLabel(id)} 已安装。`
+          : `${backendLabel(id)} 安装成功。`,
       'success',
     )
   } catch (error) {
@@ -399,9 +461,23 @@ backendList.addEventListener('change', event => {
 // 安装按钮在 <label> 行内，必须阻止默认行为，避免触发行选中。
 backendList.addEventListener('click', event => {
   const button = event.target.closest('.backend-install')
-  if (!button || button.disabled) return
+  if (button && !button.disabled) {
+    event.preventDefault()
+    void installBackendRow(button.dataset.backend)
+    return
+  }
+  const authentication = event.target.closest('.backend-authenticate')
+  if (!authentication || authentication.disabled) return
   event.preventDefault()
-  void installBackendRow(button.dataset.backend)
+  window.qwenAudioAgentDesktop.authenticateBackend(authentication.dataset.backend)
+    .then(() => showMessage(
+      `已打开 ${backendLabel(authentication.dataset.backend)} 登录入口。`,
+      'notice',
+    ))
+    .catch(error => showMessage(
+      friendlyError(error, '无法打开登录入口'),
+      'error',
+    ))
 })
 
 function backendLabel(value) {
@@ -563,6 +639,9 @@ async function refreshRuntime() {
   try {
     runtime = await window.qwenAudioAgentDesktop.loadRuntimeStatus()
     renderRuntime()
+    if (backendReport && !installingBackend) {
+      renderBackendOptions(selectedBackend() || settings?.agentProtocol)
+    }
     if (
       startupError
       && runtime.gatewayConnected

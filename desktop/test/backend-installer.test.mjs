@@ -48,6 +48,25 @@ test('wires progress, inspection and script confirmation through', async () => {
   assert.deepEqual(progress, [{ phase: 'start' }])
 })
 
+test('reads the latest settings environment for support and install', async () => {
+  let marker = 'before'
+  const seen = []
+  const installer = createBackendInstaller({
+    env: () => ({ MARKER: marker }),
+    platform: 'darwin',
+    install: async (_id, options) => {
+      seen.push(options.env.MARKER)
+      return { ok: true }
+    },
+  })
+
+  await installer.install('opencode')
+  marker = 'after'
+  await installer.install('opencode')
+
+  assert.deepEqual(seen, ['before', 'after'])
+})
+
 test('rejects concurrent installs of the same backend', async () => {
   const resolvers = []
   const installer = createBackendInstaller({

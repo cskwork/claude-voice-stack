@@ -1,6 +1,6 @@
 // 设置页"后台 Agent"列表的行状态计算。
-// 输入是主进程经 withInstallSupport() 增强后的检测报告（每个后台附带
-// install 字段），保持纯函数，浏览器渲染层与 Node 测试共用同一份逻辑。
+// 输入是主进程附加生命周期后的检测报告，保持纯函数，浏览器渲染层与
+// Node 测试共用同一份逻辑。
 
 export const NONE_OPTION_ID = 'none'
 
@@ -32,12 +32,17 @@ export function backendOptionStates(report) {
     selectable: true,
     installable: false,
     requiresConfirmation: false,
+    authenticationRequired: false,
+    authenticatable: false,
     reason: '',
     title: '',
   }]
   for (const item of report?.backends || []) {
+    if (item.id === 'acp') continue
     const ready = item.ready === true
     const install = item.install || {}
+    const authentication = item.authentication || install.authentication || {}
+    const authenticationRequired = authentication.required === true
     states.push({
       id: item.id,
       label: item.label || item.id,
@@ -49,6 +54,22 @@ export function backendOptionStates(report) {
       // 后台由 installSupport 标记 supported:false，自然不显示按钮。
       installable: !ready && install.supported === true,
       requiresConfirmation: install.requiresConfirmation === true,
+      authenticationRequired,
+      authenticatable: (
+        ready
+        && authentication.supported === true
+        && authentication.actionAvailable !== false
+        && authentication.status !== 'authenticated'
+      ),
+      authenticationLabel: '登录',
+      lifecycleState: item.lifecycle?.state || (
+        authenticationRequired ? 'authentication-required' : (
+          ready ? 'installed' : 'not-installed'
+        )
+      ),
+      statusLabel: authenticationRequired
+        ? '待登录'
+        : ready ? '已安装' : shortReason(item.issues),
       reason: ready ? '' : shortReason(item.issues),
       title: ready
         ? ''
@@ -56,4 +77,16 @@ export function backendOptionStates(report) {
     })
   }
   return states
+}
+
+export function backendRuntimeReady(state, {
+  selectedBackend,
+  runtimeBackend,
+} = {}) {
+  return Boolean(
+    state?.ready === true
+    && state.authenticationRequired !== true
+    && state.id === selectedBackend
+    && runtimeBackend?.connected === true,
+  )
 }

@@ -14,9 +14,10 @@ export function createBackendInstaller({
   confirmScript = async () => false,
 } = {}) {
   const pending = new Set()
+  const currentEnvironment = () => typeof env === 'function' ? env() : env
   return {
     support(id) {
-      return installSupport(id, { env, platform })
+      return installSupport(id, { env: currentEnvironment(), platform })
     },
     async install(id, { onProgress = () => {}, inspect } = {}) {
       if (pending.has(id)) {
@@ -25,7 +26,7 @@ export function createBackendInstaller({
       pending.add(id)
       try {
         return await install(id, {
-          env,
+          env: currentEnvironment(),
           platform,
           onProgress,
           ...(inspect ? { inspect } : {}),

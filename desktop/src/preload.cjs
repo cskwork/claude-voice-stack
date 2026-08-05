@@ -41,6 +41,10 @@ contextBridge.exposeInMainWorld('qwenAudioAgentDesktop', {
     'qwen-audio-agent:backend-install',
     { backend },
   ),
+  authenticateBackend: backend => ipcRenderer.invoke(
+    'qwen-audio-agent:backend-authenticate',
+    { backend },
+  ),
   onBackendInstallProgress: callback => {
     if (typeof callback !== 'function') return () => {}
     const listener = (_event, progress) => callback(progress)

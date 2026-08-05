@@ -1,6 +1,7 @@
 import { parentPort, workerData } from 'node:worker_threads'
 
 import { inspectBackendSetupsAsync } from '../../shared/backend-setup.mjs'
+import { inspectBackendAuthentication } from '../../shared/backend-auth-status.mjs'
 import { refreshProcessPath } from './process-path.mjs'
 
 function compactComponent(component) {
@@ -20,6 +21,7 @@ function compactReport(report) {
       issues: item.issues,
       backend: compactComponent(item.backend),
       adapter: compactComponent(item.adapter),
+      authentication: item.authentication,
     })),
   }
 }
@@ -30,10 +32,29 @@ try {
     env,
     platform: workerData.platform,
   })
-  const report = await inspectBackendSetupsAsync({
+  const detected = await inspectBackendSetupsAsync({
     env,
     platform: workerData.platform,
   })
+  // Some backend CLIs are sizeable Node/Bun processes. Probe them one at a
+  // time so opening Settings never creates a short-lived memory spike.
+  const authentications = []
+  for (const item of detected.backends) {
+    authentications.push(item.ready
+      ? await inspectBackendAuthentication(item.id, {
+          command: item.backend.path,
+          env,
+          platform: workerData.platform,
+        })
+      : { status: 'unknown' })
+  }
+  const report = {
+    ...detected,
+    backends: detected.backends.map((item, index) => ({
+      ...item,
+      authentication: authentications[index],
+    })),
+  }
   parentPort.postMessage({
     ok: true,
     path: env.PATH || '',
