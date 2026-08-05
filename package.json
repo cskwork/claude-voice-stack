@@ -1,7 +1,7 @@
 {
   "name": "qwen-audio-agent",
   "desktopName": "qwen-audio-agent.desktop",
-  "version": "1.4.2",
+  "version": "1.5.0",
   "description": "A realtime voice frontend for mainstream AI agents.",
   "author": "qwen-audio-agent contributors",
   "license": "Apache-2.0",
@@ -120,7 +120,10 @@
     "electron-updater": "6.8.9",
     "express": "^4.22.2",
     "ws": "^8.21.1",
-    "zod": "^4.4.3"
+    "zod": "^4.4.3",
+    "sherpa-onnx": "1.13.4",
+    "tar-stream": "3.1.7",
+    "unbzip2-stream": "1.4.3"
   },
   "devDependencies": {
     "concurrently": "^9.2.0",

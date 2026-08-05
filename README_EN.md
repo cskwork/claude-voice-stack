@@ -25,8 +25,8 @@ tells you:
 
 ## News
 
-- **2026-08-05 · Unreleased**
-  ⏰ Adds scheduled reminders and progress reporting; desktop build support for Linux (AppImage + deb); the desktop app now uses a data directory isolated from the CLI, so both can run side by side without interfering; adds voice wake word (“你好千问”) — the microphone stays on during sleep and speaking the wake word activates the assistant.
+- **2026-08-05 · [v1.5.0](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.5.0)**
+  ⏰ Adds scheduled reminders and progress reporting, with automatic wake-up when a task completes or needs approval; 🗣️ adds the voice wake word (“你好千问”) — speak it while the assistant is asleep to activate it; 🐧 desktop build support for Linux (AppImage + deb); the desktop app now uses a data directory isolated from the CLI, so both can run side by side without interfering.
 - **2026-08-05 · [v1.4.2](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.4.2)**
   🔧 Refines desktop backend Agent installation, login, and status detection, with more reliable long-term memory behavior.
 - **2026-08-04 · [v1.4.1](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.4.1)**

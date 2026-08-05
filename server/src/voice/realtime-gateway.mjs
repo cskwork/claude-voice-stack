@@ -1491,11 +1491,18 @@ export function attachRealtimeGateway(server, {
       sleeping = true
       waking = false
       pendingAudio = []
+      announcementWindow.reset()
       wakeDetector?.reset()
       cancelScheduledRealtimeReconnect()
       const staleFrontend = frontend
       frontend = null
       staleFrontend?.close()
+      if (clientContext.states?.includes('sleeping')) {
+        send(ws, {
+          type: GatewayServerEvent.CLIENT_STATE,
+          state: 'sleeping',
+        })
+      }
       send(ws, {
         type: GatewayServerEvent.VOICE_CONNECTION,
         state: 'sleeping',
@@ -1510,9 +1517,8 @@ export function attachRealtimeGateway(server, {
 
     const prepareSleepMode = () => {
       if (
-        !config.sleepTimeoutMs
+        !config.wakeWordEnabled
         || textOnlySession
-        || !inputEnabled
         || wakeDetectorPromise
       ) return
       if (wakeDetector) {
