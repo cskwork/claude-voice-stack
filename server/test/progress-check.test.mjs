@@ -133,7 +133,7 @@ test('progress check handles no activity gracefully', async () => {
 test('delegated task progress check queries coordinator', async () => {
   const manager = new TaskManager()
   let queryCalled = false
-  manager.configureCoordinatorQuery((workId, question, options) => {
+  manager.configureCoordinatorQuery((_workId, _question, _options) => {
     queryCalled = true
     return Promise.resolve({ content: '第三层正在运行测试' })
   })
