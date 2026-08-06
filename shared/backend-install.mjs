@@ -7,7 +7,10 @@
 // 可通过各 packageEnv 环境变量覆盖。npm 上的 kimi-code / codebuddy /
 // hermes-agent 等同名包均为第三方或占位包，严禁写入规格。
 
-import { spawn } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
+import { accessSync, constants } from 'node:fs'
+import { resolve, win32 } from 'node:path'
+import { homedir } from 'node:os'
 import { inspectBackendAuthentication } from './backend-auth-status.mjs'
 import { backendDefinition } from './backend-catalog.mjs'
 import {
@@ -145,6 +148,34 @@ export function withBackendLifecycle(report, {
 // 兼容旧名称，避免外部导入方在版本升级时立即失效。
 export const withInstallSupport = withBackendLifecycle
 
+// 构建 npm 子进程的运行环境。从 npmCommand 提取所在目录，确保 node.exe
+// 也在 PATH 中（npm 的 postinstall 等钩子会启动 node 子进程）。
+function npmRunEnv(baseEnv, npmCommand) {
+  const env = { ...baseEnv, npm_config_yes: 'true' }
+  if (!npmCommand) return env
+
+  const npmDir = win32.dirname(npmCommand)
+  const currentPath = env.PATH || ''
+
+  // 剔除 PATH 中直接包含可执行文件名的异常条目（如 C:\tools\nodejs\npm.cmd），
+  // 用正确的目录替代。
+  const cleaned = currentPath.split(';').map(entry => {
+    const trimmed = entry.trim()
+    if (!trimmed) return ''
+    // 如果条目以 .cmd / .exe 结尾（文件路径），替换为 npm 所在目录
+    const lower = trimmed.toLowerCase()
+    if (lower.endsWith('.cmd') || lower.endsWith('.exe') || lower.endsWith('.bat')) {
+      return ''
+    }
+    return trimmed
+  }).filter(Boolean)
+
+  // 确保 npm 所在目录在最前面
+  const dirPath = [npmDir, ...cleaned.filter(d => d !== npmDir)].join(';')
+  env.PATH = dirPath
+  return env
+}
+
 function runStep(command, args, {
   env,
   spawnImpl,
@@ -152,10 +183,12 @@ function runStep(command, args, {
 }) {
   return new Promise(resolvePromise => {
     let child
+    const outputChunks = []
     try {
       child = spawnImpl(command, args, {
         env: { ...env },
         windowsHide: true,
+        shell: process.platform === 'win32',
       })
     } catch (error) {
       resolvePromise({ code: -1, error })
@@ -165,10 +198,17 @@ function runStep(command, args, {
     const finish = result => {
       if (settled) return
       settled = true
+      result.output = outputChunks.join('')
       resolvePromise(result)
     }
-    child.stdout?.on('data', chunk => onOutput('stdout', chunk))
-    child.stderr?.on('data', chunk => onOutput('stderr', chunk))
+    child.stdout?.on('data', chunk => {
+      outputChunks.push(`[stdout] ${String(chunk)}`)
+      onOutput('stdout', chunk)
+    })
+    child.stderr?.on('data', chunk => {
+      outputChunks.push(`[stderr] ${String(chunk)}`)
+      onOutput('stderr', chunk)
+    })
     child.once('error', error => finish({ code: -1, error }))
     child.once('close', code => finish({ code: code ?? -1 }))
   })
@@ -181,13 +221,98 @@ function reportItem(report, id) {
     || null
 }
 
-// 某安装步骤提供的组件在检测报告中是否已就绪。报告缺少组件级细节时
+// 某些组件在检测报告中已就绪。报告缺少组件级细节时
 // 保守起见不跳过（执行全部步骤）。
 function stepComponentReady(step, item) {
   if (!item || typeof item !== 'object') return false
   const component = step.component === 'adapter' ? item.adapter : item.backend
   if (!component || typeof component !== 'object') return false
   return component.ready === true
+}
+
+// 通过 PowerShell 的 Get-Command 定位 npm.cmd。
+// 传入 searchPath 作为 PowerShell 进程的 PATH，确保 powershell.exe 自身可被找到。
+function findNpmWithPowerShell(searchPath) {
+  try {
+    const psEnv = { ...process.env, PATH: searchPath || process.env.PATH }
+    const result = spawnSync('powershell.exe', [
+      '-Command',
+      'Get-Command npm -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source',
+    ], { env: psEnv, encoding: 'utf8', windowsHide: true, timeout: 8000 })
+    if (result.status === 0 && result.stdout) {
+      const path = result.stdout.trim().split(/\r?\n/)[0]
+      if (path) return path
+    }
+  } catch {
+    return ''
+  }
+}
+
+// 在 PATH 中直接搜索 npm.cmd，不依赖 findExecutable。
+// 处理 PATH 条目本身就是目标文件的情况（如 C:\tools\nodejs\npm.cmd）。
+function findNpmDirectly(searchPath) {
+  if (!searchPath) return ''
+  const targets = process.platform === 'win32' ? ['npm.cmd', 'npm'] : ['npm']
+  for (const entry of searchPath.split(';')) {
+    const trimmed = entry.trim()
+    if (!trimmed) continue
+
+    // 如果 PATH 条目本身以目标文件名结尾，直接使用它
+    for (const target of targets) {
+      if (trimmed.toLowerCase().endsWith(`\\${target}`)) {
+        try {
+          accessSync(trimmed, constants.F_OK)
+          return trimmed
+        } catch { /* skip */ }
+      }
+    }
+
+    // 标准路径拼接：目录 + npm.cmd
+    for (const target of targets) {
+      const candidate = win32.join(trimmed, target)
+      try {
+        accessSync(candidate, constants.F_OK)
+        return candidate
+      } catch { /* skip */ }
+    }
+  }
+  return ''
+}
+
+// 终极兜底：扫描硬编码常见目录 + PATH 中所有目录，检查 npm.cmd 是否存在。
+function findNpmByScanningDirectories(searchPath) {
+  const hardcoded = [
+    'C:\\Program Files\\nodejs\\npm.cmd',
+    'C:\\Program Files (x86)\\nodejs\\npm.cmd',
+    `${process.env.LOCALAPPDATA || ''}\\Programs\\nodejs\\npm.cmd`,
+    `${process.env.LOCALAPPDATA || ''}\\Volta\\npm.cmd`,
+    `${process.env.APPDATA || ''}\\npm\\npm.cmd`,
+    `${process.env.APPDATA || ''}\\nvm\\npm.cmd`,
+    `${process.env.USERPROFILE || process.env.HOME || ''}\\AppData\\Roaming\\npm\\npm.cmd`,
+    `${process.env.NVM_SYMLINK || ''}\\npm.cmd`,
+  ].filter(Boolean)
+
+  const candidates = [...hardcoded]
+  // 也搜索 PATH 中的每个目录
+  if (searchPath) {
+    for (const entry of searchPath.split(';')) {
+      const trimmed = entry.trim()
+      if (!trimmed) continue
+      // PATH 条目本身可能是目标文件
+      if (trimmed.toLowerCase().endsWith('\\npm.cmd')) {
+        candidates.push(trimmed)
+      }
+      // 标准：目录 + npm.cmd
+      candidates.push(win32.join(trimmed, 'npm.cmd'))
+    }
+  }
+  for (const candidate of [...new Set(candidates)]) {
+    try {
+      accessSync(candidate, constants.F_OK)
+      return candidate
+    } catch { /* skip */ }
+  }
+  return ''
 }
 
 // 执行某后台的一键安装：先检测一次，只补齐缺失的组件（例如 Codex 本体
@@ -216,19 +341,24 @@ export async function installBackend(id, {
   const definition = backendDefinition(id)
   const { steps } = specSteps(definition.id, platform)
 
-  const before = await inspect({ env, platform, backend: definition.id })
+  // 归一化 PATH 键名（Windows 上 process.env 可能使用 Path 而非 PATH）
+  const resolvedEnv = env.PATH
+    ? env
+    : { ...env, PATH: process.env.PATH || env.Path || '' }
+
+  const before = await inspect({ env: resolvedEnv, platform, backend: definition.id })
   const beforeItem = reportItem(before, definition.id)
   const pending = steps.filter(step => !stepComponentReady(step, beforeItem))
   if (!pending.length && beforeItem?.ready === true) {
     const observed = await observedAuthentication(beforeItem, definition.id, {
-      env,
+      env: resolvedEnv,
       platform,
       inspectAuthentication,
     })
     const authentication = resolvedAuthentication(
       definition.id,
       observed,
-      { env, platform },
+      { env: resolvedEnv, platform },
     )
     return {
       ok: true,
@@ -239,9 +369,19 @@ export async function installBackend(id, {
     }
   }
 
+  // 通过注入的 find 定位 npm（默认 findExecutable，测试可替换）。
+  // Windows 上 PATH 条目格式异常时 findExecutable 可能找不到，追加兜底。
   let npmCommand = ''
   if (pending.some(step => step.kind === 'npm')) {
     npmCommand = find(platform === 'win32' ? 'npm.cmd' : 'npm') || find('npm')
+
+    if (!npmCommand && platform === 'win32') {
+      const searchPath = resolvedEnv.PATH || ''
+      npmCommand = findNpmDirectly(searchPath)
+        || findNpmWithPowerShell(searchPath)
+        || findNpmByScanningDirectories(searchPath)
+    }
+
     if (!npmCommand) {
       return {
         ok: false,
@@ -285,7 +425,7 @@ export async function installBackend(id, {
     }
     const result = step.kind === 'npm'
       ? await runStep(npmCommand, ['install', '-g', stepPackage(step, env)], {
-        env,
+        env: npmRunEnv(resolvedEnv, npmCommand),
         spawnImpl,
         onOutput: (stream, chunk) => onProgress({
           step: index,
@@ -294,31 +434,61 @@ export async function installBackend(id, {
           chunk: String(chunk),
         }),
       })
-      : await runStep('/bin/sh', ['-c', step.command], {
-        env,
-        spawnImpl,
-        onOutput: (stream, chunk) => onProgress({
-          step: index,
-          phase: 'output',
-          stream,
-          chunk: String(chunk),
-        }),
-      })
+      : platform === 'win32'
+        ? await runStep('powershell.exe', ['-ExecutionPolicy', 'Bypass', '-Command', step.command], {
+          env: resolvedEnv,
+          spawnImpl,
+          onOutput: (stream, chunk) => onProgress({
+            step: index,
+            phase: 'output',
+            stream,
+            chunk: String(chunk),
+          }),
+        })
+        : await runStep('/bin/sh', ['-c', step.command], {
+          env: resolvedEnv,
+          spawnImpl,
+          onOutput: (stream, chunk) => onProgress({
+            step: index,
+            phase: 'output',
+            stream,
+            chunk: String(chunk),
+          }),
+        })
     if (result.code !== 0) {
+      const outputTail = (result.output || '').trimEnd()
       return {
         ok: false,
         error: {
           code: 'STEP_FAILED',
           message: `安装命令执行失败（退出码 ${result.code}）：${display}`,
           exitCode: result.code,
-          cause: result.error?.message || '',
+          cause: result.error?.message || outputTail || '',
         },
       }
+    }
+    if (step.kind === 'npm' && npmCommand) {
+      // npm install -g 成功后，把全局 bin 目录加入 resolvedEnv.PATH，
+      // 否则后续验证步骤找不到刚安装的二进制。
+      const prefixResult = spawnSync(npmCommand, ['config', 'get', 'prefix'], {
+        env: npmRunEnv(resolvedEnv, npmCommand),
+        encoding: 'utf8',
+      })
+      const rawPrefix = (prefixResult.stdout || '').trim()
+      const npmGlobalBin = rawPrefix
+        ? platform === 'win32'
+          ? resolve(rawPrefix, '')
+          : resolve(rawPrefix, 'bin')
+        : platform === 'win32'
+          ? resolve(homedir(), 'AppData', 'Roaming', 'npm')
+          : '/usr/local/bin'
+      const sep = platform === 'win32' ? ';' : ':'
+      resolvedEnv.PATH = [npmGlobalBin, resolvedEnv.PATH].filter(Boolean).join(sep)
     }
     onProgress({ step: index, phase: 'done', title: stepTitle(step, index) })
   }
 
-  const report = await inspect({ env, platform, backend: definition.id })
+  const report = await inspect({ env: resolvedEnv, platform, backend: definition.id })
   const item = reportItem(report, definition.id)
   if (!item || item.ready !== true) {
     return {
