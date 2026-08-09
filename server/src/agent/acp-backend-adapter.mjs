@@ -162,6 +162,7 @@ export class AcpBackendAdapter {
     this.profile = profile || acpBackendProfile({
       protocol,
       root,
+      ownership: this.ownership,
       directory,
       cliPath,
       baseUrl,

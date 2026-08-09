@@ -292,7 +292,10 @@ UI 服务。当前 `OPENCODE_BASE_URL` 表示这个 UI 服务地址，不是远�
 
 OpenClaw 使用一个小型 ACP bridge。未显式配置地址时，Gateway 启动一个具有隔离运行时
 和 Session 状态的 OpenClaw Gateway；显式配置 `OPENCLAW_BASE_URL` 时，则直接连接用户
-已有的 OpenClaw Gateway，并且不读取、复制或修改其认证和 Agent 状态。
+已有的 OpenClaw Gateway，并且不读取、复制或修改其认证和 Agent 状态。此时服务归属为
+`external`，ACP 连接仍是本地 `process`：本地官方 bridge 通过 WebSocket/WSS 连接远程
+OpenClaw Gateway。外部连接不使用面向本地启动的短时端口探测，而由 bridge 报告实际的
+网络、TLS 和认证结果。本地 bridge 退出只会中断 ACP 连接，不会触碰远程 Gateway。
 
 Codex 也遵循同一边界：qwen-audio-agent 通过 ACP stdio 启动 `codex-acp`，该适配器再
 通过自己的本地 stdio 协议启动 Codex App Server。Codex App Server 可以提供其他传输，

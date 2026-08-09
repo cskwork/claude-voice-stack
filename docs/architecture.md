@@ -359,7 +359,12 @@ OpenClaw uses a small ACP bridge. Without an explicit address, Gateway starts
 an OpenClaw Gateway with isolated runtime and Session state. When
 `OPENCLAW_BASE_URL` is explicit, it connects to the user's existing OpenClaw
 Gateway without reading, copying, or modifying its authentication or Agent
-state.
+state. Service ownership is then `external`, while the ACP connection remains
+a local `process`: the official local bridge connects to the remote OpenClaw
+Gateway over WebSocket/WSS. External connections bypass the short local-startup
+port probe so the bridge can report the real network, TLS, and authentication
+result. A local bridge exit interrupts ACP only and never changes the remote
+Gateway lifecycle.
 
 Codex follows the same boundary: qwen-audio-agent starts `codex-acp` over ACP
 stdio, and that adapter starts Codex App Server over its own local stdio

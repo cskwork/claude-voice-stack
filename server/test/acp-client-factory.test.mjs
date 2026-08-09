@@ -7,6 +7,7 @@ import {
 import { AcpProcessClient } from '../src/agent/acp-process-client.mjs'
 
 test('creates the local stdio ACP client from a process connection', () => {
+  const prepare = () => {}
   const client = createAcpClient({
     label: 'Example',
     connection: {
@@ -15,6 +16,7 @@ test('creates the local stdio ACP client from a process connection', () => {
       args: ['--acp'],
       cwd: '/workspace',
       env: { TEST: '1' },
+      prepare,
     },
   })
 
@@ -23,6 +25,7 @@ test('creates the local stdio ACP client from a process connection', () => {
   assert.deepEqual(client.args, ['--acp'])
   assert.equal(client.cwd, '/workspace')
   assert.deepEqual(client.env, { TEST: '1' })
+  assert.equal(client.prepare, prepare)
 })
 
 test('rejects unknown ACP connection kinds at the factory boundary', () => {

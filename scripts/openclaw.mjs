@@ -62,7 +62,16 @@ if (!existsSync(agentsDst) && existsSync(agentsSrc)) copyFileSync(agentsSrc, age
 
 let managed = false
 const MODEL = (process.env.QWEN_AUDIO_AGENT_BACKEND_MODEL || '').toLowerCase()
-if (!process.env.OPENCLAW_CONFIG_PATH && process.env.DASHSCOPE_API_KEY && MODEL && MODEL !== 'auto') {
+const EXTERNAL_SERVICE = (
+  process.env.QWEN_AUDIO_AGENT_BACKEND_OWNERSHIP === 'external'
+)
+if (
+  !EXTERNAL_SERVICE
+  && !process.env.OPENCLAW_CONFIG_PATH
+  && process.env.DASHSCOPE_API_KEY
+  && MODEL
+  && MODEL !== 'auto'
+) {
   managed = true
   const cfgDir = join(USER_DIR, 'backends', 'openclaw')
   mkdirSync(cfgDir, { recursive: true })

@@ -286,6 +286,7 @@ export const config = {
       ),
       model: backendModels.openClaw,
       directory: resolveOpenClawWorkspace(),
+      cliPath: String(process.env.OPENCLAW_ACP_BIN || '').trim(),
       coordinatorAgent: (
         sharedBackendAgent
         || legacyBackendAgent(

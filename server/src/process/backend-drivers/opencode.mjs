@@ -44,6 +44,7 @@ export const openCodeRuntimeDriver = {
       permissionMode,
       baseUrlEnvironment: this.baseUrlEnvironment,
       defaultBaseUrl: this.defaultBaseUrl,
+      protocols: ['http:', 'https:'],
     })
   },
 

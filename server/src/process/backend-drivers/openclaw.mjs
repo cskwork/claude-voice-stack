@@ -25,6 +25,7 @@ export const openClawRuntimeDriver = {
       permissionMode,
       baseUrlEnvironment: this.baseUrlEnvironment,
       defaultBaseUrl: this.defaultBaseUrl,
+      protocols: ['http:', 'https:', 'ws:', 'wss:'],
     })
   },
 

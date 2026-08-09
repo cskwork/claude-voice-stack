@@ -603,6 +603,72 @@ test('uses one ACP profile family while preserving backend differences', () => {
   assert.equal(claude.externalMcp, true)
 })
 
+test('lets the official OpenClaw bridge diagnose external Gateway failures', () => {
+  const external = acpBackendProfile({
+    protocol: 'openclaw',
+    root: '/repo',
+    ownership: 'external',
+    directory: '/work',
+    baseUrl: 'wss://agent.example.com',
+    tokenFile: '/state/gateway-token',
+    permissionMode: 'native',
+  })
+  assert.equal(external.readinessMessage, '')
+  assert.ok(external.acpConnection.args.includes('wss://agent.example.com'))
+
+  const owned = acpBackendProfile({
+    protocol: 'openclaw',
+    root: '/repo',
+    ownership: 'owned',
+    directory: '/work',
+    baseUrl: 'http://127.0.0.1:18789',
+    permissionMode: 'native',
+  })
+  assert.match(owned.readinessMessage, /正在启动/)
+})
+
+test('can launch a trusted OpenClaw ACP bridge executable directly', () => {
+  const profile = acpBackendProfile({
+    protocol: 'openclaw',
+    root: '/repo',
+    ownership: 'external',
+    directory: '/work',
+    cliPath: '/opt/openclaw',
+    baseUrl: 'wss://agent.example.com',
+    tokenFile: '/state/gateway-token',
+    permissionMode: 'native',
+  })
+  assert.equal(profile.acpConnection.command, '/opt/openclaw')
+  assert.deepEqual(profile.acpConnection.args, [
+    'acp',
+    '--url',
+    'wss://agent.example.com',
+    '--token-file',
+    '/state/gateway-token',
+    '--verbose',
+  ])
+})
+
+test('direct OpenClaw bridge prepares a private explicit-token file', () => {
+  const profile = acpBackendProfile({
+    protocol: 'openclaw',
+    root: '/repo',
+    ownership: 'external',
+    directory: '/work',
+    cliPath: '/opt/openclaw',
+    baseUrl: 'wss://agent.example.com',
+    token: 'remote-token',
+    tokenFile: '/state/not-materialized',
+    permissionMode: 'native',
+  })
+  assert.equal(
+    profile.acpConnection.env.OPENCLAW_GATEWAY_TOKEN,
+    'remote-token',
+  )
+  assert.equal(profile.acpConnection.args.includes('--token-file'), true)
+  assert.equal(typeof profile.acpConnection.prepare, 'function')
+})
+
 test('Kimi full permission mode configures coordinator and project Sessions', async () => {
   const calls = []
   const client = {

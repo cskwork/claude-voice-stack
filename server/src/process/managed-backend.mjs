@@ -5,6 +5,7 @@ import {
   backendRuntimeDriver,
   normalizeBackendRuntimeProtocol,
 } from './backend-drivers/registry.mjs'
+import { serviceEndpointPort } from './backend-drivers/shared.mjs'
 
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1', '[::1]'])
 
@@ -68,7 +69,7 @@ export function isLocalBackend(baseUrl) {
 
 export function backendAddressInUse(baseUrl, timeoutMs = 300) {
   const target = new URL(baseUrl)
-  const port = Number(target.port || (target.protocol === 'https:' ? 443 : 80))
+  const port = serviceEndpointPort(target)
   return new Promise(resolvePromise => {
     const socket = createConnection({ host: target.hostname, port })
     const finish = value => {

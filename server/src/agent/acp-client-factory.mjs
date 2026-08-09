@@ -12,6 +12,7 @@ export function createAcpClient({ connection, ...options }) {
       args: connection.args,
       cwd: connection.cwd,
       env: connection.env,
+      prepare: connection.prepare,
     })
   }
   throw new AgentError(

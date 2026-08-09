@@ -165,6 +165,31 @@ OPENCLAW_BASE_URL=http://127.0.0.1:18789
 OPENCLAW_GATEWAY_TOKEN=
 ```
 
+远程部署可以使用 `https://` 或 `wss://` 地址；跨机器连接建议使用 `wss://`，不要把
+Token 写进 URL：
+
+```dotenv
+AGENT_PROTOCOL=openclaw
+OPENCLAW_BASE_URL=wss://openclaw.example.com
+OPENCLAW_GATEWAY_TOKEN=replace-with-your-token
+```
+
+外部模式仍会在 qwen-audio-agent 本机启动轻量的官方 `openclaw acp` bridge，并通过
+stdio ACP 与它通信；该 bridge 再连接用户管理的远程 Gateway。qwen-audio-agent 不会
+启动、停止、改端口或修改远程 Gateway。远程模式不做 300ms 本地端口预判，而由官方
+bridge 返回实际的网络、TLS 和认证错误。如果本机安全软件终止 bridge，本轮会明确失败，
+但远程 Gateway 不受影响。
+
+如果本机安全策略只拦截 qwen-audio-agent 的 OpenClaw 启动包装层，可以显式指定一个
+受信任的 OpenClaw 可执行文件，Gateway 将直接用它启动轻量 bridge：
+
+```dotenv
+OPENCLAW_ACP_BIN=/absolute/path/to/openclaw
+```
+
+这不会改变远程 Gateway 的所有权；该进程仍只是本地 ACP bridge，并随
+qwen-audio-agent Gateway 关闭。
+
 未设置 `OPENCLAW_BASE_URL` 时，默认优先启动用户环境中的 `openclaw`。同时提供
 `DASHSCOPE_API_KEY` 和
 `QWEN_AUDIO_AGENT_BACKEND_MODEL` 时，会为 qwen-audio-agent 进程生成独立的

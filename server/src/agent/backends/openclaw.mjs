@@ -1,5 +1,6 @@
 import { dirname, resolve } from 'node:path'
 import { OpenClawAcpDelegationAdapter } from '../openclaw-adapter.mjs'
+import { writePrivateFile } from './private-file.mjs'
 import {
   baseEnvironment,
   clean,
@@ -38,26 +39,32 @@ export const openClawBackendDriver = {
 
   createProfile({
     root,
+    ownership,
     directory,
+    cliPath,
     baseUrl,
     token,
     tokenFile,
     coordinatorAgent,
   }) {
+    const directBridge = clean(cliPath)
+    const bridgeTokenFile = clean(tokenFile)
+    const bridgeArgs = [
+      'acp',
+      '--url',
+      websocketUrl(baseUrl),
+      ...(bridgeTokenFile
+        ? ['--token-file', bridgeTokenFile]
+        : []),
+      '--verbose',
+    ]
     return {
       label: this.label,
       acpConnection: processAcpConnection({
-        command: process.execPath,
-        args: [
-          resolve(root, 'scripts/openclaw.mjs'),
-          'acp',
-          '--url',
-          websocketUrl(baseUrl),
-          ...(clean(tokenFile)
-            ? ['--token-file', clean(tokenFile)]
-            : []),
-          '--verbose',
-        ],
+        command: directBridge || process.execPath,
+        args: directBridge
+          ? bridgeArgs
+          : [resolve(root, 'scripts/openclaw.mjs'), ...bridgeArgs],
         cwd: directory,
         env: {
           ...baseEnvironment(),
@@ -71,6 +78,9 @@ export const openClawBackendDriver = {
             ? { OPENCLAW_STATE_DIR: dirname(clean(tokenFile)) }
             : {}),
         },
+        prepare: directBridge && clean(token) && bridgeTokenFile
+          ? () => writePrivateFile(bridgeTokenFile, `${clean(token)}\n`)
+          : undefined,
       }),
       externalMcp: false,
       sessionMcp: false,
@@ -79,7 +89,13 @@ export const openClawBackendDriver = {
       sanitizeProcessOutput,
       formatRequestError,
       promptRetryDelay,
-      readinessMessage: 'OpenClaw Gateway 正在启动',
+      // An owned Gateway is started concurrently and may need a short warm-up.
+      // For an external Gateway, let the official bridge establish the real
+      // connection so TLS, authentication, routing, and remote-network errors
+      // are reported accurately instead of being hidden by a local TCP probe.
+      readinessMessage: ownership === 'external'
+        ? ''
+        : 'OpenClaw Gateway 正在启动',
       coordinatorMeta(ownerId) {
         if (!clean(coordinatorAgent)) return null
         const owner = encodeURIComponent(

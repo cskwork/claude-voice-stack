@@ -192,6 +192,34 @@ OPENCLAW_BASE_URL=http://127.0.0.1:18789
 OPENCLAW_GATEWAY_TOKEN=
 ```
 
+For a remote deployment, use an `https://` or `wss://` address. Prefer
+`wss://` across machines and never embed the token in the URL:
+
+```dotenv
+AGENT_PROTOCOL=openclaw
+OPENCLAW_BASE_URL=wss://openclaw.example.com
+OPENCLAW_GATEWAY_TOKEN=replace-with-your-token
+```
+
+External mode still starts the lightweight official `openclaw acp` bridge on
+the qwen-audio-agent host and speaks ACP over stdio to it. The bridge then
+connects to the user-managed remote Gateway. qwen-audio-agent never starts,
+stops, reconfigures, or moves that remote Gateway. The official bridge reports
+the real network, TLS, and authentication error instead of using the 300 ms
+local startup probe. If local security software terminates the bridge, the turn
+fails explicitly while the remote Gateway remains untouched.
+
+If local security policy blocks only qwen-audio-agent's OpenClaw launcher,
+point to a trusted OpenClaw executable and the Gateway will run the lightweight
+bridge directly:
+
+```dotenv
+OPENCLAW_ACP_BIN=/absolute/path/to/openclaw
+```
+
+This does not change ownership of the remote Gateway. The local process remains
+an ACP bridge and is stopped with the qwen-audio-agent Gateway.
+
 When `OPENCLAW_BASE_URL` is not set, it preferentially launches the `openclaw`
 in the user environment. When both
 `DASHSCOPE_API_KEY` and `QWEN_AUDIO_AGENT_BACKEND_MODEL` are provided, an independent Bailian

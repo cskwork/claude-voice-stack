@@ -186,6 +186,26 @@ test('uses an explicitly configured OpenClaw Gateway as an external service', as
   assert.equal(env.OPENCLAW_BASE_URL, 'http://127.0.0.1:18789')
 })
 
+test('accepts a secure remote OpenClaw WebSocket without taking ownership', () => {
+  assert.deepEqual(resolveManagedBackend({
+    AGENT_PROTOCOL: 'openclaw',
+    OPENCLAW_BASE_URL: 'wss://agent.example.com/gateway',
+    OPENCLAW_GATEWAY_TOKEN: 'remote-token',
+  }), {
+    protocol: 'openclaw',
+    ownership: 'external',
+    permissionMode: 'native',
+    baseUrl: 'wss://agent.example.com',
+  })
+})
+
+test('rejects credentials embedded in an external backend address', () => {
+  assert.throws(() => resolveManagedBackend({
+    AGENT_PROTOCOL: 'openclaw',
+    OPENCLAW_BASE_URL: 'wss://user:secret@agent.example.com',
+  }), /不能包含用户名或密码/)
+})
+
 test('runs without a managed process when no backend is selected', async () => {
   assert.equal(resolveManagedBackend({}), null)
   assert.equal(resolveManagedBackend({ AGENT_PROTOCOL: 'none' }), null)

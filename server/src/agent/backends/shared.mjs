@@ -1,5 +1,10 @@
 import { createConnection } from 'node:net'
 
+function serviceEndpointPort(target) {
+  if (target.port) return Number(target.port)
+  return ['https:', 'wss:'].includes(target.protocol) ? 443 : 80
+}
+
 export function clean(value) {
   return String(value || '').trim()
 }
@@ -9,6 +14,7 @@ export function processAcpConnection({
   args = [],
   cwd,
   env = process.env,
+  prepare,
 }) {
   return {
     kind: 'process',
@@ -16,6 +22,7 @@ export function processAcpConnection({
     args,
     cwd,
     env,
+    prepare,
   }
 }
 
@@ -26,9 +33,7 @@ export function endpointAvailable(value, timeoutMs = 300) {
   } catch {
     return Promise.resolve(false)
   }
-  const port = Number(
-    target.port || (target.protocol === 'https:' ? 443 : 80),
-  )
+  const port = serviceEndpointPort(target)
   return new Promise(resolvePromise => {
     const socket = createConnection({
       host: target.hostname,
@@ -56,6 +61,6 @@ export function baseEnvironment(configDirectory = '') {
 
 export function websocketUrl(httpUrl) {
   const url = new URL(httpUrl)
-  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
+  url.protocol = ['https:', 'wss:'].includes(url.protocol) ? 'wss:' : 'ws:'
   return url.toString().replace(/\/+$/, '')
 }
