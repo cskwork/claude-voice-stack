@@ -52,7 +52,31 @@ export function resolveBackend(options = {}, env = process.env) {
   if (!definition) throw new Error(
     `不支持的后台 Agent：${protocol}（可选 ${backendNames().join('、')}）`,
   )
-  const ownership = 'owned'
+  const explicitBaseUrl = Boolean(
+    options.backendUrlSpecified === true
+    || (
+      options.backendUrlSpecified === undefined
+      && options.backendUrl
+    )
+    || (
+      definition.baseUrlEnvironment
+      && String(env[definition.baseUrlEnvironment] || '').trim()
+    ),
+  )
+  // Some backends already expose a complete service. When the user points us
+  // at one explicitly, connect to it as an external black box instead of
+  // launching a second managed service on another port.
+  const requestedOwnership = String(
+    env.QWEN_AUDIO_AGENT_BACKEND_OWNERSHIP || '',
+  ).trim().toLowerCase()
+  if (requestedOwnership && !['owned', 'external'].includes(requestedOwnership)) {
+    throw new Error(`不支持的后台进程归属：${requestedOwnership}`)
+  }
+  const ownership = requestedOwnership || (
+    definition.externalWhenBaseUrlConfigured && explicitBaseUrl
+      ? 'external'
+      : 'owned'
+  )
   const permissionMode = String(
     options.backendPermissionMode
     || env.QWEN_AUDIO_AGENT_BACKEND_PERMISSION_MODE
@@ -235,6 +259,7 @@ function backendEnvironment(env, backend) {
       AGENT_PROTOCOL: '',
     }
     delete next.QWEN_AUDIO_AGENT_BACKEND_PERMISSION_MODE
+    delete next.QWEN_AUDIO_AGENT_BACKEND_OWNERSHIP
     delete next.QWEN_AUDIO_AGENT_BACKEND_AGENT
     return next
   }
@@ -242,6 +267,7 @@ function backendEnvironment(env, backend) {
   const next = {
     ...env,
     AGENT_PROTOCOL: backend.protocol,
+    QWEN_AUDIO_AGENT_BACKEND_OWNERSHIP: backend.ownership,
     QWEN_AUDIO_AGENT_BACKEND_PERMISSION_MODE: backend.permissionMode,
     ...(backend.agentId
       ? { QWEN_AUDIO_AGENT_BACKEND_AGENT: backend.agentId }

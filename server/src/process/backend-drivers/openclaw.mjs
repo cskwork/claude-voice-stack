@@ -9,6 +9,21 @@ export const openClawRuntimeDriver = {
   managedScript: 'openclaw-gateway.mjs',
   managedNpmScript: 'openclaw',
 
+  resolveOwnership({ env }) {
+    const requested = String(
+      env.QWEN_AUDIO_AGENT_BACKEND_OWNERSHIP || '',
+    ).trim().toLowerCase()
+    if (requested) {
+      if (!['owned', 'external'].includes(requested)) {
+        throw new Error(`不支持的 OpenClaw 后台进程归属：${requested}`)
+      }
+      return requested
+    }
+    return String(env.OPENCLAW_BASE_URL || '').trim()
+      ? 'external'
+      : 'owned'
+  },
+
   resolve({ env, ownership, permissionMode }) {
     if (permissionMode === 'full') {
       throw new Error(

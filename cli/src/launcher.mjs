@@ -40,9 +40,23 @@ function applyGatewayOptions(env, options) {
   env.AGENT_PROTOCOL = options.backend || ''
   const definition = backendDefinition(options.backend)
   if (options.backend) {
+    const external = Boolean(
+      definition?.externalWhenBaseUrlConfigured
+      && (
+        options.backendUrlSpecified
+        || (
+          definition.baseUrlEnvironment
+          && String(env[definition.baseUrlEnvironment] || '').trim()
+        )
+      )
+    )
+    env.QWEN_AUDIO_AGENT_BACKEND_OWNERSHIP = external
+      ? 'external'
+      : 'owned'
     env.QWEN_AUDIO_AGENT_BACKEND_PERMISSION_MODE =
       options.backendPermissionMode
   } else {
+    delete env.QWEN_AUDIO_AGENT_BACKEND_OWNERSHIP
     delete env.QWEN_AUDIO_AGENT_BACKEND_PERMISSION_MODE
   }
   if (options.backend && options.backendAgent) {

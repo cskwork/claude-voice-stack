@@ -191,6 +191,51 @@ test('starts only the Gateway and waits for its managed backend', async () => {
   assert.equal(runtime.ownsProcesses, true)
 })
 
+test('starts only qwen-audio-agent Gateway for an external OpenClaw Gateway', async () => {
+  const calls = []
+  let reads = 0
+  const externalOptions = {
+    url: 'http://127.0.0.1:3101',
+    backend: 'openclaw',
+    backendUrl: '',
+  }
+  const env = {
+    ...DEFAULT_FRONTEND_ENV,
+    AGENT_PROTOCOL: 'openclaw',
+    OPENCLAW_BASE_URL: 'http://127.0.0.1:18789',
+    OPENCLAW_GATEWAY_TOKEN: 'existing-token',
+  }
+  const runtime = await ensureRuntime(externalOptions, {
+    ...dependencies({ env }),
+    fetchImpl: async () => {
+      reads += 1
+      if (reads === 1) throw new Error('offline')
+      return {
+        json: async () => health({
+          kind: 'openclaw',
+          ownership: 'external',
+          baseUrl: 'http://127.0.0.1:18789',
+        }),
+      }
+    },
+    spawnImpl: (...args) => {
+      calls.push(args)
+      return childProcess()
+    },
+  })
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0][2].env.AGENT_PROTOCOL, 'openclaw')
+  assert.equal(
+    calls[0][2].env.QWEN_AUDIO_AGENT_BACKEND_OWNERSHIP,
+    'external',
+  )
+  assert.equal(
+    calls[0][2].env.OPENCLAW_BASE_URL,
+    'http://127.0.0.1:18789',
+  )
+  assert.equal(runtime.ownsProcesses, true)
+})
+
 test('reports the last backend error when startup times out', async () => {
   await assert.rejects(
     waitForGateway('http://127.0.0.1:3101', {
@@ -331,11 +376,29 @@ test('derives selected backend configuration', () => {
     backendUrl: 'http://localhost:18789/path',
   }, {}), {
     protocol: 'openclaw',
-    ownership: 'owned',
+    ownership: 'external',
     permissionMode: 'native',
     agentId: 'build',
     baseUrl: 'http://localhost:18789',
   })
+})
+
+test('owns OpenClaw only when no Gateway address is explicitly configured', () => {
+  assert.deepEqual(resolveBackend({
+    backend: 'openclaw',
+    backendUrl: 'http://127.0.0.1:18789',
+    backendUrlSpecified: false,
+  }, {}), {
+    protocol: 'openclaw',
+    ownership: 'owned',
+    permissionMode: 'native',
+    agentId: '',
+    baseUrl: 'http://127.0.0.1:18789',
+  })
+  assert.equal(resolveBackend({}, {
+    AGENT_PROTOCOL: 'openclaw',
+    OPENCLAW_BASE_URL: 'http://127.0.0.1:18789',
+  }).ownership, 'external')
 })
 
 test('derives Qoder without an HTTP backend', () => {

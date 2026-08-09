@@ -11,6 +11,7 @@ const definitions = new Map([
     label: 'OpenClaw',
     baseUrlEnvironment: 'OPENCLAW_BASE_URL',
     defaultBaseUrl: 'http://127.0.0.1:18789',
+    externalWhenBaseUrlConfigured: true,
     supportsFullPermission: false,
   }],
   ['qoder', {

@@ -155,7 +155,9 @@ export function resolveBackendModels(env = process.env) {
 const configuredAgentProtocol = normalizeBackendProtocol(
   process.env.AGENT_PROTOCOL,
 )
-const backendOwnership = 'owned'
+const backendOwnership = String(
+  process.env.QWEN_AUDIO_AGENT_BACKEND_OWNERSHIP || '',
+).trim().toLowerCase() === 'external' ? 'external' : 'owned'
 const backendModels = resolveBackendModels()
 const managedOpenClawBailian = (
   configuredAgentProtocol === 'openclaw'

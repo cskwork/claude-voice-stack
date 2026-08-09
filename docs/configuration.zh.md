@@ -155,7 +155,9 @@ QWEN_AUDIO_MEMORY_API_KEY=        # 默认复用 DASHSCOPE_API_KEY
 聊天；需要后台执行的请求会返回明确错误，不会创建任务或猜测执行结果。
 也可以使用 `qwenaudio --backend none` 显式启动仅前台模式。
 
-OpenClaw 默认地址为 `http://127.0.0.1:18789`：
+OpenClaw 默认地址为 `http://127.0.0.1:18789`。显式设置
+`OPENCLAW_BASE_URL` 时，qwen-audio-agent 会把该 Gateway 作为外部黑盒直接连接，
+不会另起 OpenClaw Gateway，也不会读取、复制或修改它的模型认证数据：
 
 ```dotenv
 AGENT_PROTOCOL=openclaw
@@ -163,13 +165,15 @@ OPENCLAW_BASE_URL=http://127.0.0.1:18789
 OPENCLAW_GATEWAY_TOKEN=
 ```
 
-默认优先启动用户环境中的 `openclaw`。同时提供 `DASHSCOPE_API_KEY` 和
+未设置 `OPENCLAW_BASE_URL` 时，默认优先启动用户环境中的 `openclaw`。同时提供
+`DASHSCOPE_API_KEY` 和
 `QWEN_AUDIO_AGENT_BACKEND_MODEL` 时，会为 qwen-audio-agent 进程生成独立的
 百炼配置和状态目录，不修改用户原生配置。未指定后台模型时则继承用户的原生
-配置、模型和认证，但不会在独立实例中启用钉钉等外部消息渠道。若原配置启用了
-Gateway Token，会自动读取并用于本地 ACP 连接；也可以通过
+配置、模型和认证，但不会在独立实例中启用钉钉等外部消息渠道。自管模式下若原配置
+启用了 Gateway Token，会自动读取并用于本地 ACP 连接；也可以通过
 `OPENCLAW_GATEWAY_TOKEN` 覆盖，或设置 `OPENCLAW_CONFIG_PATH` 明确指定另一份
-OpenClaw 配置。
+OpenClaw 配置。连接外部 Gateway 时，应同时设置 `OPENCLAW_GATEWAY_TOKEN`（或
+`OPENCLAW_GATEWAY_TOKEN_FILE`）。
 
 OpenCode：Gateway 通过 `opencode acp` 与它交互，并管理用于打开原生 Session
 界面的本地服务。没有兼容安装时会自动使用固定 npm 包，用户不需要另行安装或

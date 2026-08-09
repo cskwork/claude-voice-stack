@@ -168,6 +168,7 @@ export async function startManagedBackend({
   const backend = resolveManagedBackend(env)
   if (!backend) return new ManagedBackendRuntime(null, { platform })
   const driver = backendRuntimeDriver(backend.protocol)
+  env.QWEN_AUDIO_AGENT_BACKEND_OWNERSHIP = backend.ownership
   applyBackendPermissionMode(env, backend)
   if (!driver.separateManagedProcess) {
     return new ManagedBackendRuntime(null, { platform })
