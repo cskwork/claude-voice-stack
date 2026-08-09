@@ -80,6 +80,23 @@ function compatibleHealth(env) {
   }
 }
 
+function openClawHealth(env, overrides = {}) {
+  const realtime = resolveRealtimeFrontendConfiguration(env)
+  return {
+    realtimeProvider: realtime.provider,
+    realtimeConfigurationSignature: realtime.signature,
+    backend: {
+      enabled: true,
+      kind: 'openclaw',
+      permissionMode: 'native',
+      model: null,
+      ownership: 'external',
+      baseUrl: 'wss://openclaw.example.test',
+      ...overrides,
+    },
+  }
+}
+
 test('strict compatibility validation rejects mismatched runtime settings', () => {
   const env = {
     DASHSCOPE_API_KEY: 'desktop-key',
@@ -115,6 +132,43 @@ test('reports a runtime mismatch without preventing a frontend attachment', () =
     code: 'backend',
     reason: '已有 Gateway 的后台 Agent 与桌面设置不一致',
   })
+})
+
+test('distinguishes an owned OpenClaw backend from an external one', () => {
+  const env = {
+    DASHSCOPE_API_KEY: 'desktop-key',
+    AGENT_PROTOCOL: 'openclaw',
+    OPENCLAW_BASE_URL: 'wss://openclaw.example.test',
+  }
+  assert.equal(desktopGatewayCompatibility(openClawHealth(env), env).compatible, true)
+  assert.deepEqual(
+    desktopGatewayCompatibility(openClawHealth(env, {
+      ownership: 'owned',
+    }), env),
+    {
+      compatible: false,
+      code: 'ownership',
+      reason: '已有 Gateway 的后台进程归属与桌面设置不一致',
+    },
+  )
+})
+
+test('rejects reusing an external OpenClaw backend at a different URL', () => {
+  const env = {
+    DASHSCOPE_API_KEY: 'desktop-key',
+    AGENT_PROTOCOL: 'openclaw',
+    OPENCLAW_BASE_URL: 'wss://openclaw.example.test',
+  }
+  assert.deepEqual(
+    desktopGatewayCompatibility(openClawHealth(env, {
+      baseUrl: 'wss://another.example.test',
+    }), env),
+    {
+      compatible: false,
+      code: 'backend-url',
+      reason: '已有 Gateway 的外部后台地址与桌面设置不一致',
+    },
+  )
 })
 
 test('starts the embedded gateway on the preferred port and adopts the reported origin', async () => {

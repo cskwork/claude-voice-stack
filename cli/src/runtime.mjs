@@ -275,7 +275,7 @@ function backendEnvironment(env, backend) {
     '_PORT',
   )
   next[portEnvironment] = target.port
-    || (target.protocol === 'https:' ? '443' : '80')
+    || (['https:', 'wss:'].includes(target.protocol) ? '443' : '80')
   return next
 }
 

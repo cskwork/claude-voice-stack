@@ -202,7 +202,7 @@ test('starts only qwen-audio-agent Gateway for an external OpenClaw Gateway', as
   const env = {
     ...DEFAULT_FRONTEND_ENV,
     AGENT_PROTOCOL: 'openclaw',
-    OPENCLAW_BASE_URL: 'http://127.0.0.1:18789',
+    OPENCLAW_BASE_URL: 'wss://openclaw.example.test',
     OPENCLAW_GATEWAY_TOKEN: 'existing-token',
   }
   const runtime = await ensureRuntime(externalOptions, {
@@ -214,7 +214,7 @@ test('starts only qwen-audio-agent Gateway for an external OpenClaw Gateway', as
         json: async () => health({
           kind: 'openclaw',
           ownership: 'external',
-          baseUrl: 'http://127.0.0.1:18789',
+          baseUrl: 'wss://openclaw.example.test',
         }),
       }
     },
@@ -231,8 +231,9 @@ test('starts only qwen-audio-agent Gateway for an external OpenClaw Gateway', as
   )
   assert.equal(
     calls[0][2].env.OPENCLAW_BASE_URL,
-    'http://127.0.0.1:18789',
+    'wss://openclaw.example.test',
   )
+  assert.equal(calls[0][2].env.OPENCLAW_PORT, '443')
   assert.equal(runtime.ownsProcesses, true)
 })
 
