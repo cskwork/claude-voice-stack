@@ -18,12 +18,30 @@ function permissionMode(env) {
   return mode
 }
 
+function backendOwnership(driver, env) {
+  const requested = String(
+    env.QWEN_AUDIO_AGENT_BACKEND_OWNERSHIP || '',
+  ).trim().toLowerCase()
+  if (requested && !['owned', 'external'].includes(requested)) {
+    throw new Error(`不支持的后台进程归属：${requested}`)
+  }
+  if (requested === 'external' && !driver.supportsExternalService) {
+    throw new Error(`${driver.id} 不支持连接外部后台服务`)
+  }
+  if (requested) return requested
+  return driver.supportsExternalService
+    && driver.baseUrlEnvironment
+    && String(env[driver.baseUrlEnvironment] || '').trim()
+    ? 'external'
+    : 'owned'
+}
+
 export function resolveManagedBackend(env = process.env) {
   const protocol = normalizeBackendRuntimeProtocol(env.AGENT_PROTOCOL)
   if (!protocol) return null
   const driver = backendRuntimeDriver(protocol)
   const resolvedPermissionMode = permissionMode(env)
-  const ownership = driver.resolveOwnership?.({ env }) || 'owned'
+  const ownership = backendOwnership(driver, env)
   if (resolvedPermissionMode === 'full' && ownership !== 'owned') {
     throw new Error('最高权限模式只支持由 Gateway 启动的后台 Agent')
   }

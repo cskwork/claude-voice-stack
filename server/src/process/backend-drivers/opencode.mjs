@@ -33,7 +33,8 @@ export const openCodeRuntimeDriver = {
   id: 'opencode',
   separateManagedProcess: true,
   managedScript: 'opencode-server.mjs',
-  managedNpmScript: 'opencode',
+  baseUrlEnvironment: 'OPENCODE_BASE_URL',
+  defaultBaseUrl: 'http://127.0.0.1:4096',
 
   resolve({ env, ownership, permissionMode }) {
     return localManagedBackend({
@@ -41,8 +42,8 @@ export const openCodeRuntimeDriver = {
       env,
       ownership,
       permissionMode,
-      baseUrlEnvironment: 'OPENCODE_BASE_URL',
-      defaultBaseUrl: 'http://127.0.0.1:4096',
+      baseUrlEnvironment: this.baseUrlEnvironment,
+      defaultBaseUrl: this.defaultBaseUrl,
     })
   },
 
@@ -76,7 +77,7 @@ export const openCodeRuntimeDriver = {
 
   applyAddress(env, backend) {
     applyLocalAddress(env, backend, {
-      baseUrlEnvironment: 'OPENCODE_BASE_URL',
+      baseUrlEnvironment: this.baseUrlEnvironment,
       portEnvironment: 'OPENCODE_PORT',
     })
   },

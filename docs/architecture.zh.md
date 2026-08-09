@@ -273,13 +273,21 @@ Gateway 源码不得导入 UI 组件、呈现文本、样式、终端行为或�
 
 ## 10. 进程所有权
 
-Gateway 是唯一的核心产品服务。共享适配器拥有一个 ACP stdio 子进程，
-并随 Gateway 一起停止。OpenCode、Qoder 和 Kimi Code 直接作为 ACP Agent 运行；
-OpenCode 还可以额外暴露其原生本地 Session UI。
+Gateway 是唯一的核心产品服务。后台生命周期由共享的 `owned/external` 归属模型管理：
 
-OpenClaw 使用一个小型 ACP 桥。其适配器始终启动并拥有一个专用的 OpenClaw Gateway，
-具有隔离的运行时和 Session 状态。它可以复用用户的模型和能力配置，但绝不会连接到
-或与用户运行的 OpenClaw Gateway 共享 Session 存储，也不会激活用户的外部消息通道。
+- `owned`：Gateway 启动后端所需的本地进程，并在退出时停止它们。后台原生进程负责
+  加载自己的用户配置、模型、工具和 MCP；适配器只提供协议参数和必要的公共能力。
+- `external`：仅适用于声明了外部服务能力的后端。Gateway 不启动、改端口或停止该
+  后台，只通过后端公开的协议地址连接，把配置与状态完全留给外部服务管理。
+
+共享适配器通常拥有一个 ACP stdio 子进程，并随 Gateway 一起停止。OpenCode、Qoder
+和 Kimi Code 直接作为 ACP Agent 运行；OpenCode 还可以额外启动其原生本地 Session
+UI 服务。当前 `OPENCODE_BASE_URL` 表示这个 UI 服务地址，不是远程 ACP 执行端点，
+因此 OpenCode 仍属于 `owned`。
+
+OpenClaw 使用一个小型 ACP bridge。未显式配置地址时，Gateway 启动一个具有隔离运行时
+和 Session 状态的 OpenClaw Gateway；显式配置 `OPENCLAW_BASE_URL` 时，则直接连接用户
+已有的 OpenClaw Gateway，并且不读取、复制或修改其认证和 Agent 状态。
 
 Desktop、TUI 和 WebUI 是可替换的 Gateway 客户端。它们绝不能生成、重启或停止
 Gateway 或后端。因此，关闭 UI 不会影响排队中的工作或固定的后端 Agent Session。

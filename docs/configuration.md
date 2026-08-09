@@ -206,7 +206,9 @@ specify a different OpenClaw configuration. When connecting to an external Gatew
 
 OpenCode: The Gateway interacts with it via `opencode acp` and manages the local service used
 to open the native Session interface. When there is no compatible installation, it automatically
-uses a fixed npm package; users do not need to separately install or start the service:
+uses a fixed npm package; users do not need to separately install or start the service.
+`OPENCODE_BASE_URL` names that local Session UI service; it is not a remote ACP execution
+endpoint that qwen-audio-agent can attach to:
 
 ```dotenv
 AGENT_PROTOCOL=opencode

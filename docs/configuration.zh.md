@@ -177,7 +177,8 @@ OpenClaw 配置。连接外部 Gateway 时，应同时设置 `OPENCLAW_GATEWAY_T
 
 OpenCode：Gateway 通过 `opencode acp` 与它交互，并管理用于打开原生 Session
 界面的本地服务。没有兼容安装时会自动使用固定 npm 包，用户不需要另行安装或
-启动服务：
+启动服务。`OPENCODE_BASE_URL` 是该本地 Session UI 服务的地址，并不是可供
+qwen-audio-agent 连接的远程 ACP 执行地址：
 
 ```dotenv
 AGENT_PROTOCOL=opencode

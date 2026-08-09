@@ -4,6 +4,7 @@ import {
   backendDefinition,
   backendNames,
   normalizeBackendProtocol,
+  resolveBackendOwnership,
 } from '../../shared/backend-catalog.mjs'
 import {
   loadRuntimeEnvironment,
@@ -66,17 +67,10 @@ export function resolveBackend(options = {}, env = process.env) {
   // Some backends already expose a complete service. When the user points us
   // at one explicitly, connect to it as an external black box instead of
   // launching a second managed service on another port.
-  const requestedOwnership = String(
-    env.QWEN_AUDIO_AGENT_BACKEND_OWNERSHIP || '',
-  ).trim().toLowerCase()
-  if (requestedOwnership && !['owned', 'external'].includes(requestedOwnership)) {
-    throw new Error(`不支持的后台进程归属：${requestedOwnership}`)
-  }
-  const ownership = requestedOwnership || (
-    definition.externalWhenBaseUrlConfigured && explicitBaseUrl
-      ? 'external'
-      : 'owned'
-  )
+  const ownership = resolveBackendOwnership(protocol, {
+    baseUrlConfigured: explicitBaseUrl,
+    requestedOwnership: env.QWEN_AUDIO_AGENT_BACKEND_OWNERSHIP,
+  })
   const permissionMode = String(
     options.backendPermissionMode
     || env.QWEN_AUDIO_AGENT_BACKEND_PERMISSION_MODE

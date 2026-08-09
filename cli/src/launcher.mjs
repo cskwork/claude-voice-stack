@@ -2,7 +2,10 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import readline from 'node:readline'
 import { loadRuntimeEnvironment } from '../../shared/runtime-environment.mjs'
-import { backendDefinition } from '../../shared/backend-catalog.mjs'
+import {
+  backendDefinition,
+  resolveBackendOwnership,
+} from '../../shared/backend-catalog.mjs'
 import {
   formatBackendSetup,
   inspectBackendSetups,
@@ -40,19 +43,17 @@ function applyGatewayOptions(env, options) {
   env.AGENT_PROTOCOL = options.backend || ''
   const definition = backendDefinition(options.backend)
   if (options.backend) {
-    const external = Boolean(
-      definition?.externalWhenBaseUrlConfigured
-      && (
-        options.backendUrlSpecified
-        || (
-          definition.baseUrlEnvironment
-          && String(env[definition.baseUrlEnvironment] || '').trim()
-        )
+    const baseUrlConfigured = Boolean(
+      options.backendUrlSpecified
+      || (
+        definition?.baseUrlEnvironment
+        && String(env[definition.baseUrlEnvironment] || '').trim()
       )
     )
-    env.QWEN_AUDIO_AGENT_BACKEND_OWNERSHIP = external
-      ? 'external'
-      : 'owned'
+    env.QWEN_AUDIO_AGENT_BACKEND_OWNERSHIP = resolveBackendOwnership(
+      options.backend,
+      { baseUrlConfigured },
+    )
     env.QWEN_AUDIO_AGENT_BACKEND_PERMISSION_MODE =
       options.backendPermissionMode
   } else {

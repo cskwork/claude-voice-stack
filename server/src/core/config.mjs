@@ -5,6 +5,7 @@ import {
   backendDefinition,
   backendNames,
   normalizeBackendProtocol,
+  resolveBackendOwnership,
 } from '../../../shared/backend-catalog.mjs'
 import {
   resolveRealtimeFrontendConfiguration,
@@ -155,9 +156,24 @@ export function resolveBackendModels(env = process.env) {
 const configuredAgentProtocol = normalizeBackendProtocol(
   process.env.AGENT_PROTOCOL,
 )
-const backendOwnership = String(
-  process.env.QWEN_AUDIO_AGENT_BACKEND_OWNERSHIP || '',
-).trim().toLowerCase() === 'external' ? 'external' : 'owned'
+const configuredBackendDefinition = backendDefinition(configuredAgentProtocol)
+if (configuredAgentProtocol && !configuredBackendDefinition) {
+  throw new Error(
+    `不支持的后台 Agent：${configuredAgentProtocol}`
+    + `（可选 ${backendNames().join('、')}）`,
+  )
+}
+const backendOwnership = configuredAgentProtocol
+  ? resolveBackendOwnership(configuredAgentProtocol, {
+      baseUrlConfigured: Boolean(
+        configuredBackendDefinition.baseUrlEnvironment
+        && String(
+          process.env[configuredBackendDefinition.baseUrlEnvironment] || '',
+        ).trim()
+      ),
+      requestedOwnership: process.env.QWEN_AUDIO_AGENT_BACKEND_OWNERSHIP,
+    })
+  : 'owned'
 const backendModels = resolveBackendModels()
 const managedOpenClawBailian = (
   configuredAgentProtocol === 'openclaw'
@@ -177,12 +193,6 @@ if (
   )
 }
 const requestedAgentProtocol = configuredAgentProtocol
-if (requestedAgentProtocol && !backendDefinition(requestedAgentProtocol)) {
-  throw new Error(
-    `不支持的后台 Agent：${requestedAgentProtocol}`
-    + `（可选 ${backendNames().join('、')}）`,
-  )
-}
 const sharedBackendAgent = String(
   process.env.QWEN_AUDIO_AGENT_BACKEND_AGENT || '',
 ).trim()
