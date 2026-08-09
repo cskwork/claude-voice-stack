@@ -4,6 +4,7 @@ export { endpointAvailable } from './backends/shared.mjs'
 export function acpBackendProfile({
   protocol,
   root,
+  ownership,
   directory,
   cliPath,
   baseUrl,
@@ -20,6 +21,7 @@ export function acpBackendProfile({
 }) {
   return backendDriver(protocol).createProfile({
     root,
+    ownership,
     directory,
     cliPath,
     baseUrl,

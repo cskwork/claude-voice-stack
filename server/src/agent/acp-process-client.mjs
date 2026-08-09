@@ -59,6 +59,7 @@ export class AcpProcessClient {
     args = [],
     cwd,
     env = process.env,
+    prepare,
     timeoutMs = 300_000,
     spawnImpl = spawn,
     onPermission,
@@ -71,6 +72,7 @@ export class AcpProcessClient {
     this.args = args
     this.cwd = cwd
     this.env = env
+    this.prepare = prepare
     this.timeoutMs = timeoutMs
     this.spawn = spawnImpl
     this.onPermission = onPermission
@@ -120,6 +122,7 @@ export class AcpProcessClient {
 
   async startProcess() {
     this.stderr = ''
+    await this.prepare?.()
     const isWindows = process.platform === 'win32'
     // .exe 文件不需要 cmd.exe 包装；直接 spawn 避免路径含空格时
     // cmd.exe 将第一个空格前的内容误解析为命令名。

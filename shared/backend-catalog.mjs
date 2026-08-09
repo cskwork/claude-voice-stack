@@ -11,6 +11,7 @@ const definitions = new Map([
     label: 'OpenClaw',
     baseUrlEnvironment: 'OPENCLAW_BASE_URL',
     defaultBaseUrl: 'http://127.0.0.1:18789',
+    supportsExternalService: true,
     supportsFullPermission: false,
   }],
   ['qoder', {
@@ -56,6 +57,25 @@ export function backendDefinition(protocol) {
 
 export function backendNames() {
   return [...definitions.keys()]
+}
+
+export function resolveBackendOwnership(protocol, {
+  baseUrlConfigured = false,
+  requestedOwnership = '',
+} = {}) {
+  const definition = backendDefinition(protocol)
+  if (!definition) throw new Error(`不支持的后台 Agent：${protocol}`)
+  const requested = String(requestedOwnership || '').trim().toLowerCase()
+  if (requested && !['owned', 'external'].includes(requested)) {
+    throw new Error(`不支持的后台进程归属：${requested}`)
+  }
+  if (requested === 'external' && !definition.supportsExternalService) {
+    throw new Error(`${definition.label} 不支持连接外部后台服务`)
+  }
+  if (requested) return requested
+  return definition.supportsExternalService && baseUrlConfigured
+    ? 'external'
+    : 'owned'
 }
 
 export function normalizeBackendProtocol(value) {

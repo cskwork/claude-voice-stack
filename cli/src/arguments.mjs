@@ -84,6 +84,7 @@ export function parseArguments(argv, env = process.env) {
       env.QWEN_AUDIO_AGENT_BACKEND_AGENT || '',
     ).trim(),
     backendUrl: '',
+    backendUrlSpecified: false,
     installTarget: '',
     openBrowser: true,
     takeover: false,
@@ -117,6 +118,7 @@ export function parseArguments(argv, env = process.env) {
       options.gatewayConfigurationSpecified = true
     } else if (argument === '--backend-url') {
       options.backendUrl = nextValue(args, index++, '--backend-url')
+      options.backendUrlSpecified = true
       options.gatewayConfigurationSpecified = true
     } else if (argument === '--session') {
       options.sessionId = nextValue(args, index++, '--session')

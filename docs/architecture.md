@@ -330,15 +330,46 @@ own labels and interaction patterns.
 
 ## 10. Process ownership
 
-The Gateway is the only core product service. The shared adapter owns one ACP
-stdio child and stops it with the Gateway. OpenCode, Qoder, and Kimi Code run
-directly as ACP agents; OpenCode may additionally expose its native local
-Session UI.
-OpenClaw uses a small ACP bridge. Its adapter always starts and owns a dedicated
-OpenClaw Gateway with isolated runtime and Session state. It may reuse the
-user's model and capability configuration, but it never attaches to or shares
-Session storage with a user-running OpenClaw Gateway, and it does not activate
-the user's external message channels.
+The Gateway is the only core product service. Backend lifecycles use one shared
+`owned/external` ownership model:
+
+- `owned`: Gateway starts the required local backend processes and stops them
+  on exit. The native backend process loads its own user configuration, models,
+  tools, and MCP servers; the adapter supplies only protocol parameters and
+  required shared capabilities.
+- `external`: available only to backends declaring external-service support.
+  Gateway does not start, move, or stop that backend. It connects through the
+  backend's published protocol address and leaves configuration and state under
+  the external service's control.
+
+Backend service ownership and the ACP connection are independent axes. Each
+backend profile declares an `acpConnection`; the connection factory currently
+implements `process`, which launches one local ACP stdio child. A future remote
+ACP bridge can add another connection kind without changing coordinator,
+permission, Work, or Session lifecycle code. Declaring an external backend
+service does not by itself make the ACP connection remote.
+
+The shared adapter usually owns one ACP stdio child and stops it with Gateway.
+OpenCode, Qoder, and Kimi Code run directly as ACP agents; OpenCode may also
+start its native local Session UI service. `OPENCODE_BASE_URL` currently names
+that UI service, not a remote ACP execution endpoint, so OpenCode remains
+`owned`.
+
+OpenClaw uses a small ACP bridge. Without an explicit address, Gateway starts
+an OpenClaw Gateway with isolated runtime and Session state. When
+`OPENCLAW_BASE_URL` is explicit, it connects to the user's existing OpenClaw
+Gateway without reading, copying, or modifying its authentication or Agent
+state. Service ownership is then `external`, while the ACP connection remains
+a local `process`: the official local bridge connects to the remote OpenClaw
+Gateway over WebSocket/WSS. External connections bypass the short local-startup
+port probe so the bridge can report the real network, TLS, and authentication
+result. A local bridge exit interrupts ACP only and never changes the remote
+Gateway lifecycle.
+
+Codex follows the same boundary: qwen-audio-agent starts `codex-acp` over ACP
+stdio, and that adapter starts Codex App Server over its own local stdio
+protocol. Codex App Server may expose other transports, but they are not a
+remote ACP endpoint and must not leak into the shared ACP adapter.
 
 Desktop, TUI and WebUI are replaceable Gateway clients. They must never spawn,
 restart or stop the Gateway or a backend. Closing a UI therefore cannot affect

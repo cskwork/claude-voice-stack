@@ -1,6 +1,12 @@
 import { dirname, resolve } from 'node:path'
 import { OpenClawAcpDelegationAdapter } from '../openclaw-adapter.mjs'
-import { baseEnvironment, clean, websocketUrl } from './shared.mjs'
+import { writePrivateFile } from './private-file.mjs'
+import {
+  baseEnvironment,
+  clean,
+  processAcpConnection,
+  websocketUrl,
+} from './shared.mjs'
 
 function sanitizeProcessOutput(value) {
   return String(value || '')
@@ -33,38 +39,49 @@ export const openClawBackendDriver = {
 
   createProfile({
     root,
+    ownership,
     directory,
+    cliPath,
     baseUrl,
     token,
     tokenFile,
     coordinatorAgent,
   }) {
+    const directBridge = clean(cliPath)
+    const bridgeTokenFile = clean(tokenFile)
+    const bridgeArgs = [
+      'acp',
+      '--url',
+      websocketUrl(baseUrl),
+      ...(bridgeTokenFile
+        ? ['--token-file', bridgeTokenFile]
+        : []),
+      '--verbose',
+    ]
     return {
       label: this.label,
-      command: process.execPath,
-      args: [
-        resolve(root, 'scripts/openclaw.mjs'),
-        'acp',
-        '--url',
-        websocketUrl(baseUrl),
-        ...(clean(tokenFile)
-          ? ['--token-file', clean(tokenFile)]
-          : []),
-        '--verbose',
-      ],
-      cwd: directory,
-      env: {
-        ...baseEnvironment(),
-        ELECTRON_RUN_AS_NODE: '1',
-        ...(token ? { OPENCLAW_GATEWAY_TOKEN: token } : {}),
-        // Keep the ACP bridge's device identity separate from the user's
-        // normal OpenClaw CLI identity. A loopback bridge presenting the
-        // Gateway's shared token can then use OpenClaw's silent local pairing
-        // instead of inheriting a stale, narrowly scoped user device token.
-        ...(clean(tokenFile)
-          ? { OPENCLAW_STATE_DIR: dirname(clean(tokenFile)) }
-          : {}),
-      },
+      acpConnection: processAcpConnection({
+        command: directBridge || process.execPath,
+        args: directBridge
+          ? bridgeArgs
+          : [resolve(root, 'scripts/openclaw.mjs'), ...bridgeArgs],
+        cwd: directory,
+        env: {
+          ...baseEnvironment(),
+          ELECTRON_RUN_AS_NODE: '1',
+          ...(token ? { OPENCLAW_GATEWAY_TOKEN: token } : {}),
+          // Keep the ACP bridge's device identity separate from the user's
+          // normal OpenClaw CLI identity. A loopback bridge presenting the
+          // Gateway's shared token can then use OpenClaw's silent local pairing
+          // instead of inheriting a stale, narrowly scoped user device token.
+          ...(clean(tokenFile)
+            ? { OPENCLAW_STATE_DIR: dirname(clean(tokenFile)) }
+            : {}),
+        },
+        prepare: directBridge && clean(token) && bridgeTokenFile
+          ? () => writePrivateFile(bridgeTokenFile, `${clean(token)}\n`)
+          : undefined,
+      }),
       externalMcp: false,
       sessionMcp: false,
       nativeDelegation: true,
@@ -72,7 +89,13 @@ export const openClawBackendDriver = {
       sanitizeProcessOutput,
       formatRequestError,
       promptRetryDelay,
-      readinessMessage: 'OpenClaw Gateway 正在启动',
+      // An owned Gateway is started concurrently and may need a short warm-up.
+      // For an external Gateway, let the official bridge establish the real
+      // connection so TLS, authentication, routing, and remote-network errors
+      // are reported accurately instead of being hidden by a local TCP probe.
+      readinessMessage: ownership === 'external'
+        ? ''
+        : 'OpenClaw Gateway 正在启动',
       coordinatorMeta(ownerId) {
         if (!clean(coordinatorAgent)) return null
         const owner = encodeURIComponent(

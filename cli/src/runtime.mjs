@@ -4,6 +4,7 @@ import {
   backendDefinition,
   backendNames,
   normalizeBackendProtocol,
+  resolveBackendOwnership,
 } from '../../shared/backend-catalog.mjs'
 import {
   loadRuntimeEnvironment,
@@ -52,7 +53,24 @@ export function resolveBackend(options = {}, env = process.env) {
   if (!definition) throw new Error(
     `不支持的后台 Agent：${protocol}（可选 ${backendNames().join('、')}）`,
   )
-  const ownership = 'owned'
+  const explicitBaseUrl = Boolean(
+    options.backendUrlSpecified === true
+    || (
+      options.backendUrlSpecified === undefined
+      && options.backendUrl
+    )
+    || (
+      definition.baseUrlEnvironment
+      && String(env[definition.baseUrlEnvironment] || '').trim()
+    ),
+  )
+  // Some backends already expose a complete service. When the user points us
+  // at one explicitly, connect to it as an external black box instead of
+  // launching a second managed service on another port.
+  const ownership = resolveBackendOwnership(protocol, {
+    baseUrlConfigured: explicitBaseUrl,
+    requestedOwnership: env.QWEN_AUDIO_AGENT_BACKEND_OWNERSHIP,
+  })
   const permissionMode = String(
     options.backendPermissionMode
     || env.QWEN_AUDIO_AGENT_BACKEND_PERMISSION_MODE
@@ -235,6 +253,7 @@ function backendEnvironment(env, backend) {
       AGENT_PROTOCOL: '',
     }
     delete next.QWEN_AUDIO_AGENT_BACKEND_PERMISSION_MODE
+    delete next.QWEN_AUDIO_AGENT_BACKEND_OWNERSHIP
     delete next.QWEN_AUDIO_AGENT_BACKEND_AGENT
     return next
   }
@@ -242,6 +261,7 @@ function backendEnvironment(env, backend) {
   const next = {
     ...env,
     AGENT_PROTOCOL: backend.protocol,
+    QWEN_AUDIO_AGENT_BACKEND_OWNERSHIP: backend.ownership,
     QWEN_AUDIO_AGENT_BACKEND_PERMISSION_MODE: backend.permissionMode,
     ...(backend.agentId
       ? { QWEN_AUDIO_AGENT_BACKEND_AGENT: backend.agentId }
@@ -255,7 +275,7 @@ function backendEnvironment(env, backend) {
     '_PORT',
   )
   next[portEnvironment] = target.port
-    || (target.protocol === 'https:' ? '443' : '80')
+    || (['https:', 'wss:'].includes(target.protocol) ? '443' : '80')
   return next
 }
 

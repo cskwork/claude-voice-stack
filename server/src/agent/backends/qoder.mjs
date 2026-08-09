@@ -1,4 +1,4 @@
-import { baseEnvironment } from './shared.mjs'
+import { baseEnvironment, processAcpConnection } from './shared.mjs'
 
 export const qoderBackendDriver = {
   id: 'qoder',
@@ -11,15 +11,17 @@ export const qoderBackendDriver = {
   }) {
     return {
       label: this.label,
-      command: cliPath || 'qodercli',
-      args: [
-        '--acp',
-        ...(permissionMode === 'full'
-          ? ['--dangerously-skip-permissions']
-          : []),
-      ],
-      cwd: directory,
-      env: baseEnvironment(),
+      acpConnection: processAcpConnection({
+        command: cliPath || 'qodercli',
+        args: [
+          '--acp',
+          ...(permissionMode === 'full'
+            ? ['--dangerously-skip-permissions']
+            : []),
+        ],
+        cwd: directory,
+        env: baseEnvironment(),
+      }),
       externalMcp: true,
       nativeDelegation: false,
       backendUi: false,

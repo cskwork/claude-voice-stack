@@ -1,4 +1,4 @@
-import { baseEnvironment, clean } from './shared.mjs'
+import { baseEnvironment, clean, processAcpConnection } from './shared.mjs'
 
 export const kimiBackendDriver = {
   id: 'kimi',
@@ -11,10 +11,12 @@ export const kimiBackendDriver = {
   }) {
     return {
       label: this.label,
-      command: clean(cliPath) || 'kimi',
-      args: ['acp'],
-      cwd: directory,
-      env: baseEnvironment(),
+      acpConnection: processAcpConnection({
+        command: clean(cliPath) || 'kimi',
+        args: ['acp'],
+        cwd: directory,
+        env: baseEnvironment(),
+      }),
       sessionConfigOptions: permissionMode === 'full'
         ? [{ id: 'mode', value: 'auto' }]
         : [],
