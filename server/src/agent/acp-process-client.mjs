@@ -8,6 +8,10 @@ import { AgentError, requestSignal } from './backend-adapter.mjs'
 import { logger } from '../core/logger.mjs'
 
 const MAX_STDERR_CHARS = 12_000
+// Gateway has a 2s hard shutdown deadline. Leave enough time for adapter and
+// logger cleanup after escalating an unresponsive process tree.
+const PROCESS_TREE_GRACE_MS = 750
+const PROCESS_TREE_POLL_MS = 25
 
 function clean(value) {
   return String(value || '').trim()
@@ -62,6 +66,9 @@ export class AcpProcessClient {
     prepare,
     timeoutMs = 300_000,
     spawnImpl = spawn,
+    treeSpawnImpl = spawn,
+    platform = process.platform,
+    killImpl = process.kill,
     onPermission,
     onUpdate,
     sanitizeProcessOutput,
@@ -75,6 +82,9 @@ export class AcpProcessClient {
     this.prepare = prepare
     this.timeoutMs = timeoutMs
     this.spawn = spawnImpl
+    this.treeSpawn = treeSpawnImpl
+    this.platform = platform
+    this.kill = killImpl
     this.onPermission = onPermission
     this.onUpdate = onUpdate
     this.sanitizeProcessOutput = sanitizeProcessOutput
@@ -87,6 +97,7 @@ export class AcpProcessClient {
     this.stderr = ''
     this.activePrompts = new Map()
     this.sessions = new Map()
+    this.processTreeCleanups = new WeakMap()
   }
 
   get capabilities() {
@@ -123,7 +134,7 @@ export class AcpProcessClient {
   async startProcess() {
     this.stderr = ''
     await this.prepare?.()
-    const isWindows = process.platform === 'win32'
+    const isWindows = this.platform === 'win32'
     // .exe 文件不需要 cmd.exe 包装；直接 spawn 避免路径含空格时
     // cmd.exe 将第一个空格前的内容误解析为命令名。
     const commandExt = isWindows ? extname(String(this.command)).toLowerCase() : ''
@@ -133,6 +144,7 @@ export class AcpProcessClient {
         env: this.env,
         stdio: ['pipe', 'pipe', 'pipe'],
         shell: useShell,
+        detached: !isWindows,
       })
     const processLogger = logger.child({ subsystem: 'acp', backend: this.label })
     processLogger.info('acp.process_started', {
@@ -160,13 +172,19 @@ export class AcpProcessClient {
     const exited = new Promise((_, reject) => {
       child.once('error', error => {
         processLogger.error('acp.process_start_failed', { error })
-        reject(processError(
+        const failure = processError(
           this.label,
           `进程启动失败（${error.message}）`,
-        ))
+        )
+        failure.code = error?.code
+        failure.cause = error
+        reject(failure)
       })
       child.once('exit', (code, signal) => {
         processLogger.warn('acp.process_exited', { code, signal })
+        this.stopProcessTree(child).catch(error => {
+          processLogger.error('acp.process_tree_cleanup_failed', { error })
+        })
         reject(processError(
           this.label,
           `进程意外退出（${signal || code || 'unknown'}）`,
@@ -219,7 +237,7 @@ export class AcpProcessClient {
     } catch (error) {
       processLogger.error('acp.initialization_failed', { error })
       connection.close(error)
-      if (child.exitCode == null) child.kill('SIGTERM')
+      await this.stopProcessTree(child)
       this.connection = null
       this.context = null
       this.initializeResult = null
@@ -518,7 +536,79 @@ export class AcpProcessClient {
     this.context = null
     this.initializeResult = null
     connection?.close()
-    if (child && child.exitCode == null) child.kill('SIGTERM')
+    if (child) await this.stopProcessTree(child)
     this.child = null
+  }
+
+  processGroupAlive(pid) {
+    if (this.platform === 'win32' || !Number.isInteger(pid)) return false
+    try {
+      this.kill(-pid, 0)
+      return true
+    } catch (error) {
+      return error?.code === 'EPERM'
+    }
+  }
+
+  signalPosixProcessGroup(child, signal) {
+    if (!Number.isInteger(child?.pid)) return
+    try {
+      this.kill(-child.pid, signal)
+    } catch {
+      if (child.exitCode == null && child.signalCode == null) {
+        child.kill(signal)
+      }
+    }
+  }
+
+  runTaskkill(pid, force = false) {
+    return new Promise(resolvePromise => {
+      const args = ['/PID', String(pid), '/T', ...(force ? ['/F'] : [])]
+      let killer
+      try {
+        killer = this.treeSpawn('taskkill', args, {
+          windowsHide: true,
+          stdio: 'ignore',
+        })
+      } catch {
+        resolvePromise(false)
+        return
+      }
+      let settled = false
+      const finish = ok => {
+        if (settled) return
+        settled = true
+        resolvePromise(ok)
+      }
+      killer.once?.('error', () => finish(false))
+      killer.once?.('exit', code => finish(code === 0))
+      killer.unref?.()
+    })
+  }
+
+  async stopProcessTree(child, graceMs = PROCESS_TREE_GRACE_MS) {
+    if (!child || !Number.isInteger(child.pid)) return
+    const existing = this.processTreeCleanups.get(child)
+    if (existing) return existing
+    const cleanup = (async () => {
+      if (this.platform === 'win32') {
+        if (!await this.runTaskkill(child.pid)) {
+          await this.runTaskkill(child.pid, true)
+        }
+        return
+      }
+      this.signalPosixProcessGroup(child, 'SIGTERM')
+      const deadline = Date.now() + graceMs
+      while (this.processGroupAlive(child.pid) && Date.now() < deadline) {
+        await new Promise(resolvePromise => {
+          setTimeout(resolvePromise, Math.min(PROCESS_TREE_POLL_MS, graceMs))
+        })
+      }
+      if (this.processGroupAlive(child.pid)) {
+        this.signalPosixProcessGroup(child, 'SIGKILL')
+      }
+    })()
+    this.processTreeCleanups.set(child, cleanup)
+    return cleanup
   }
 }

@@ -87,6 +87,7 @@ test('opens the active OpenCode ACP coordinator Session directly', async () => {
 for (const protocol of [
   'openclaw',
   'qoder',
+  'qwen',
   'kimi',
   'hermes',
   'codebuddy',
@@ -103,6 +104,7 @@ for (const protocol of [
           baseUrl: 'http://openclaw.test:18789',
         },
         qoder: { directory: '/qoder' },
+        qwen: { directory: '/qwen' },
         kimi: { directory: '/kimi' },
         hermes: { directory: '/hermes' },
         codebuddy: { directory: '/codebuddy', model: 'qwen3.7-max' },

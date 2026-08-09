@@ -9,7 +9,7 @@ const projectRoot = resolve(sourceRoot, '../..')
 const sharedRoot = resolve(sourceRoot, '../../shared')
 const allowedDependencies = {
   app: new Set(['agent', 'app', 'conversation', 'core', 'task', 'voice']),
-  process: new Set(['process']),
+  process: new Set(['process', 'shared']),
   core: new Set(['core', 'shared']),
   agent: new Set(['agent', 'core']),
   conversation: new Set(['conversation', 'core']),
@@ -65,7 +65,7 @@ test('generic ACP and process cores do not bind to named backends', () => {
     resolve(projectRoot, 'cli/src/runtime.mjs'),
     resolve(projectRoot, 'cli/src/launcher.mjs'),
   ]
-  const namedBackend = /\b(?:openclaw|opencode|qoder|kimi|hermes|codebuddy|codex|claude)\b/i
+  const namedBackend = /\b(?:openclaw|opencode|qoder|qwen(?!-audio-agent)|kimi|hermes|codebuddy|codex|claude)\b/i
   const violations = genericCoreFiles
     .filter(file => namedBackend.test(readFileSync(file, 'utf8')))
     .map(file => relative(projectRoot, file))

@@ -76,6 +76,25 @@ test('requires a compatible Kimi Code version', () => {
   assert.match(legacy.issues[0], /最低版本 0\.31\.0/)
 })
 
+test('detects a compatible native Qwen Code installation', () => {
+  const ready = inspector({
+    backend: 'qwen',
+    commands: { qwen: '/bin/qwen' },
+    versions: { '/bin/qwen': '0.21.6' },
+  }).backends[0]
+  assert.equal(ready.ready, true)
+  assert.equal(ready.backend.version, '0.21.6')
+  assert.equal(ready.integration, 'native')
+
+  const legacy = inspector({
+    backend: 'qwen',
+    commands: { qwen: '/bin/qwen' },
+    versions: { '/bin/qwen': '0.21.5' },
+  }).backends[0]
+  assert.equal(legacy.ready, false)
+  assert.match(legacy.issues[0], /最低版本 0\.21\.6/)
+})
+
 test('checks independent backend versions concurrently', async () => {
   const pending = []
   const reportPromise = inspectBackendSetupsAsync({
@@ -83,6 +102,7 @@ test('checks independent backend versions concurrently', async () => {
     platform: 'linux',
     find: command => ({
       opencode: '/bin/opencode',
+      qwen: '/bin/qwen',
       kimi: '/bin/kimi',
     })[command] || '',
     readVersion: command => new Promise(resolve => {
@@ -92,12 +112,14 @@ test('checks independent backend versions concurrently', async () => {
   await new Promise(resolve => setImmediate(resolve))
   assert.deepEqual(
     pending.map(item => item.command).sort(),
-    ['/bin/kimi', '/bin/opencode'],
+    ['/bin/kimi', '/bin/opencode', '/bin/qwen'],
   )
   pending.find(item => item.command === '/bin/opencode').resolve('1.18.6')
+  pending.find(item => item.command === '/bin/qwen').resolve('0.21.6')
   pending.find(item => item.command === '/bin/kimi').resolve('0.31.0')
   const report = await reportPromise
   assert.equal(report.backends.find(item => item.id === 'opencode').ready, true)
+  assert.equal(report.backends.find(item => item.id === 'qwen').ready, true)
   assert.equal(report.backends.find(item => item.id === 'kimi').ready, true)
 })
 

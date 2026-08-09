@@ -2,18 +2,14 @@ import { codeBuddyBackendDriver } from './codebuddy.mjs'
 import { claudeBackendDriver } from './claude.mjs'
 import { codexBackendDriver } from './codex.mjs'
 import { genericAcpBackendDriver } from './generic-acp.mjs'
-import { hermesBackendDriver } from './hermes.mjs'
-import { kimiBackendDriver } from './kimi.mjs'
+import { localAcpBackendDrivers } from './local-acp.mjs'
 import { openClawBackendDriver } from './openclaw.mjs'
 import { openCodeBackendDriver } from './opencode.mjs'
-import { qoderBackendDriver } from './qoder.mjs'
 
 const drivers = new Map([
   openCodeBackendDriver,
   openClawBackendDriver,
-  qoderBackendDriver,
-  kimiBackendDriver,
-  hermesBackendDriver,
+  ...localAcpBackendDrivers,
   codeBuddyBackendDriver,
   codexBackendDriver,
   claudeBackendDriver,

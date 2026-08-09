@@ -231,6 +231,27 @@ QODER_CONFIG_DIR=
 
 Gateway 管理 Qoder ACP 子进程；Qoder 不接受 `--backend-url`。
 
+### Qwen Code
+
+Qwen Code 通过官方本地 stdio ACP 入口 `qwen --acp` 接入。Gateway 只负责启动
+这个 ACP 进程，认证、Provider、模型、MCP、Skill 和 Session 配置均复用 Qwen
+Code 自身配置。
+
+```dotenv
+AGENT_PROTOCOL=qwen
+QWEN_AUDIO_AGENT_BACKEND_PERMISSION_MODE=native
+```
+
+首次认证请直接运行 `qwen`，然后使用 `/auth`；已经移除的 `qwen auth` 不会被调用。
+可选覆盖：
+
+```dotenv
+QWEN_CODE_BIN=
+QWEN_CODE_WORKSPACE=
+```
+
+当前仅支持本地 ACP 进程，暂不把 Qwen Code 的实验性网络服务作为远程后台。
+
 ### Kimi Code
 
 Kimi Code（[MoonshotAI/kimi-code](https://github.com/MoonshotAI/kimi-code)）
@@ -403,7 +424,7 @@ Kimi Code、Hermes、CodeBuddy、Codex 和 Claude Code 均由 Gateway 直接管�
 - `native`（默认）：权限由后台 Agent 自己判断和询问，Gateway 只负责原样转发。
 - `full`：启动时明确授予最高权限，后台可直接执行命令、读写文件，不再逐次确认。
 
-`full` 当前支持 OpenCode、Qoder、Kimi Code、Hermes、CodeBuddy、Codex 和
+`full` 当前支持 OpenCode、Qoder、Qwen Code、Kimi Code、Hermes、CodeBuddy、Codex 和
 Claude Code。Gateway 会自动批准这些 ACP 后台发起的权限请求；此外 Kimi Code
 会通过 ACP Session 配置切换到不会再提问的 Auto 模式，Qoder 和 CodeBuddy CLI
 会使用 `--dangerously-skip-permissions`，OpenCode 会在受管进程的内联配置中为协调

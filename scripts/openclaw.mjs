@@ -54,10 +54,6 @@ process.env.QWEN_AUDIO_AGENT_OPENCLAW_STATE_DIR = STATE_DIR
 process.env.QWEN_AUDIO_AGENT_OPENCLAW_WORKSPACE = WORKSPACE
 mkdirSync(STATE_DIR, { recursive: true })
 mkdirSync(WORKSPACE, { recursive: true })
-const agentsSrc = join(ROOT, 'config', 'openclaw', 'workspace', 'AGENTS.md')
-const agentsDst = join(WORKSPACE, 'AGENTS.md')
-if (!existsSync(agentsDst) && existsSync(agentsSrc)) copyFileSync(agentsSrc, agentsDst)
-
 // ── managed (DashScope) OpenClaw ─────────────────────────────────────────────
 
 let managed = false

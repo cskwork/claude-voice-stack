@@ -20,15 +20,23 @@ import {
   ACP_SESSION_TOOL_NAMES,
   AcpSessionToolServer,
 } from './acp-session-tools.mjs'
-import { builtinMcpServers } from './builtin-mcp.mjs'
+import {
+  builtinMcpServers,
+  createBuiltinMcpLifecycle,
+} from './builtin-mcp.mjs'
 
 const MAX_SESSION_RESULTS = 100
 const MAX_DELEGATION_RESULT_CHARS = 12_000
+const HEALTH_SPAWN_FAILURE_BACKOFF_MS = 10_000
 
 export { acpBackendProfile } from './acp-backend-profile.mjs'
 
 function clean(value) {
   return String(value || '').trim()
+}
+
+function isMissingExecutable(error) {
+  return error?.code === 'ENOENT' || error?.cause?.code === 'ENOENT'
 }
 
 function explicitModel(value) {
@@ -181,6 +189,9 @@ export class AcpBackendAdapter {
     this.builtinMcp = this.profile.sessionMcp === false
       ? []
       : (Array.isArray(builtinMcp) ? builtinMcp : [])
+    this.builtinMcpLifecycle = !client && clientFactory === createAcpClient
+      ? createBuiltinMcpLifecycle(this.builtinMcp)
+      : { markUsed() {}, close: () => Promise.resolve() }
     this.pendingPermissions = new Map()
     this.resolvedPermissions = new Map()
     this.coordinatorSessions = new Map()
@@ -193,6 +204,7 @@ export class AcpBackendAdapter {
     this.activeCoordinatorTurns = new Set()
     this.delegatedWorkRuns = new Map()
     this.pendingCoordinatorFacts = new Map()
+    this.lastSpawnFailure = null
     this.nativeDelegationAdapter = nativeDelegationAdapter || null
     this.backendAvailable = client ? null : backendAvailable
     this.client = client || clientFactory({
@@ -236,6 +248,13 @@ export class AcpBackendAdapter {
   }
 
   async health() {
+    if (
+      this.lastSpawnFailure
+      && Date.now() - this.lastSpawnFailure.at
+        < HEALTH_SPAWN_FAILURE_BACKOFF_MS
+    ) {
+      return this.lastSpawnFailure.result
+    }
     try {
       if (
         this.profile.readinessMessage
@@ -253,6 +272,7 @@ export class AcpBackendAdapter {
         }
       }
       const initialized = await this.client.start()
+      this.lastSpawnFailure = null
       return {
         ok: true,
         protocol: this.protocol,
@@ -263,7 +283,7 @@ export class AcpBackendAdapter {
         capabilities: initialized.agentCapabilities || {},
       }
     } catch (error) {
-      return {
+      const result = {
         ok: false,
         protocol: this.protocol,
         ownership: this.ownership,
@@ -273,6 +293,10 @@ export class AcpBackendAdapter {
           clean(this.client.stderr) ? `：${clean(this.client.stderr)}` : ''
         }`,
       }
+      if (isMissingExecutable(error)) {
+        this.lastSpawnFailure = { at: Date.now(), result }
+      }
+      return result
     }
   }
 
@@ -288,6 +312,7 @@ export class AcpBackendAdapter {
   }
 
   async ensureCoordinatorSession(ownerId, mcpServers = []) {
+    if (this.builtinMcp.length) this.builtinMcpLifecycle.markUsed()
     const key = coordinatorKey(ownerId, this.protocol)
     if (this.coordinatorSessions.has(key)) {
       return this.coordinatorSessions.get(key)
@@ -1516,5 +1541,6 @@ export class AcpBackendAdapter {
       this.sessionToolServer.close(),
       this.client.close(),
     ])
+    await this.builtinMcpLifecycle.close()
   }
 }

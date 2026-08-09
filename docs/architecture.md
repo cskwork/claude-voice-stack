@@ -14,7 +14,7 @@ layers:
    requiring tools, current information, files, applications, code, or
    multi-step work.
 
-The backend may be OpenCode, OpenClaw, Qoder, Kimi Code, or another
+The backend may be OpenCode, OpenClaw, Qoder, Qwen Code, Kimi Code, or another
 ACP-compatible Agent.
 It may internally use tools, skills, agents, or other Sessions. Those are
 backend-private implementation details and do not create additional
@@ -283,7 +283,7 @@ after the asynchronous Session tool has already succeeded.
 ## 8. Backend-internal capabilities
 
 For ACP backends that accept client-supplied MCP servers, including OpenCode,
-Qoder, and Kimi Code, the Gateway injects the same five tools into the
+Qoder, Qwen Code, and Kimi Code, the Gateway injects the same five tools into the
 coordinator: Session list, start, send, status, and cancel. OpenClaw ACP does
 not accept client-supplied MCP servers, so the same coordination contract maps
 to OpenClaw's native Session tools. `session_start` and `session_send` return an
@@ -313,14 +313,14 @@ backend Agent envelope
 Shared ACP adapter
    ↓
 OpenCode ACP, OpenClaw ACP bridge, Qoder ACP,
-Kimi Code ACP, or another ACP Agent
+Qwen Code ACP, Kimi Code ACP, or another ACP Agent
 ```
 
 Backend-specific API details belong only in `server/src/agent`. Realtime tools
 must not import backend adapters. The UI consumes only public Work events and
 final timeline content. Package-level `shared` modules are foundational runtime
-utilities; server `core` may depend on them, but they must not depend on server
-layers.
+utilities; server `core` and `process` may depend on them, but they must not
+depend on server layers.
 
 Gateway may serve the immutable `web/dist` artifact as a deployment
 convenience, but this is static hosting only. Gateway source must not import UI
@@ -350,7 +350,7 @@ permission, Work, or Session lifecycle code. Declaring an external backend
 service does not by itself make the ACP connection remote.
 
 The shared adapter usually owns one ACP stdio child and stops it with Gateway.
-OpenCode, Qoder, and Kimi Code run directly as ACP agents; OpenCode may also
+OpenCode, Qoder, Qwen Code, and Kimi Code run directly as ACP agents; OpenCode may also
 start its native local Session UI service. `OPENCODE_BASE_URL` currently names
 that UI service, not a remote ACP execution endpoint, so OpenCode remains
 `owned`.
