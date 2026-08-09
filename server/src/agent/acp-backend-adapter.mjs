@@ -20,7 +20,10 @@ import {
   ACP_SESSION_TOOL_NAMES,
   AcpSessionToolServer,
 } from './acp-session-tools.mjs'
-import { builtinMcpServers } from './builtin-mcp.mjs'
+import {
+  builtinMcpServers,
+  createBuiltinMcpLifecycle,
+} from './builtin-mcp.mjs'
 
 const MAX_SESSION_RESULTS = 100
 const MAX_DELEGATION_RESULT_CHARS = 12_000
@@ -186,6 +189,9 @@ export class AcpBackendAdapter {
     this.builtinMcp = this.profile.sessionMcp === false
       ? []
       : (Array.isArray(builtinMcp) ? builtinMcp : [])
+    this.builtinMcpLifecycle = !client && clientFactory === createAcpClient
+      ? createBuiltinMcpLifecycle(this.builtinMcp)
+      : { markUsed() {}, close: () => Promise.resolve() }
     this.pendingPermissions = new Map()
     this.resolvedPermissions = new Map()
     this.coordinatorSessions = new Map()
@@ -306,6 +312,7 @@ export class AcpBackendAdapter {
   }
 
   async ensureCoordinatorSession(ownerId, mcpServers = []) {
+    if (this.builtinMcp.length) this.builtinMcpLifecycle.markUsed()
     const key = coordinatorKey(ownerId, this.protocol)
     if (this.coordinatorSessions.has(key)) {
       return this.coordinatorSessions.get(key)
@@ -1534,5 +1541,6 @@ export class AcpBackendAdapter {
       this.sessionToolServer.close(),
       this.client.close(),
     ])
+    await this.builtinMcpLifecycle.close()
   }
 }
