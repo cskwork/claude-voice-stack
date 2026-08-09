@@ -56,6 +56,7 @@ test('selects one shared ACP adapter for OpenCode', () => {
   })
   assert.equal(client.protocol, 'opencode')
   assert.equal(client.describe().transport, 'acp')
+  assert.equal(client.describe().acpConnection, 'process')
   assert.equal(client.describe().sessionModel, 'one-persistent-backend-agent')
 })
 
@@ -120,6 +121,7 @@ for (const protocol of [
     })
     assert.equal(client.protocol, protocol)
     assert.equal(client.describe().transport, 'acp')
+    assert.equal(client.describe().acpConnection, 'process')
     assert.equal(client.describe().capabilities.nativeSessionHistory, true)
   })
 }
@@ -148,4 +150,3 @@ test('handles null backends option gracefully', () => {
   })
   assert.equal(client.protocol, 'opencode')
 })
-

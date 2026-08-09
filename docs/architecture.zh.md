@@ -280,6 +280,11 @@ Gateway 是唯一的核心产品服务。后台生命周期由共享的 `owned/e
 - `external`：仅适用于声明了外部服务能力的后端。Gateway 不启动、改端口或停止该
   后台，只通过后端公开的协议地址连接，把配置与状态完全留给外部服务管理。
 
+后台服务归属与 ACP 连接方式是两个相互独立的维度。每个后台 profile 声明一个
+`acpConnection`；连接工厂当前实现 `process`，即启动一个本地 ACP stdio 子进程。
+未来的远程 ACP bridge 可以新增另一种连接类型，而无需修改协调、权限、Work 或
+Session 生命周期代码。声明外部后台服务，并不意味着 ACP 连接也自动变成远程连接。
+
 共享适配器通常拥有一个 ACP stdio 子进程，并随 Gateway 一起停止。OpenCode、Qoder
 和 Kimi Code 直接作为 ACP Agent 运行；OpenCode 还可以额外启动其原生本地 Session
 UI 服务。当前 `OPENCODE_BASE_URL` 表示这个 UI 服务地址，不是远程 ACP 执行端点，
@@ -288,6 +293,10 @@ UI 服务。当前 `OPENCODE_BASE_URL` 表示这个 UI 服务地址，不是远�
 OpenClaw 使用一个小型 ACP bridge。未显式配置地址时，Gateway 启动一个具有隔离运行时
 和 Session 状态的 OpenClaw Gateway；显式配置 `OPENCLAW_BASE_URL` 时，则直接连接用户
 已有的 OpenClaw Gateway，并且不读取、复制或修改其认证和 Agent 状态。
+
+Codex 也遵循同一边界：qwen-audio-agent 通过 ACP stdio 启动 `codex-acp`，该适配器再
+通过自己的本地 stdio 协议启动 Codex App Server。Codex App Server 可以提供其他传输，
+但它们不是远程 ACP 端点，不应泄漏进共享 ACP 适配层。
 
 Desktop、TUI 和 WebUI 是可替换的 Gateway 客户端。它们绝不能生成、重启或停止
 Gateway 或后端。因此，关闭 UI 不会影响排队中的工作或固定的后端 Agent Session。

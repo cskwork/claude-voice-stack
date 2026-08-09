@@ -1,4 +1,4 @@
-import { baseEnvironment } from './shared.mjs'
+import { baseEnvironment, processAcpConnection } from './shared.mjs'
 
 export const hermesBackendDriver = {
   id: 'hermes',
@@ -7,10 +7,12 @@ export const hermesBackendDriver = {
   createProfile({ directory, cliPath }) {
     return {
       label: this.label,
-      command: cliPath || 'hermes',
-      args: ['acp', '--accept-hooks'],
-      cwd: directory,
-      env: baseEnvironment(),
+      acpConnection: processAcpConnection({
+        command: cliPath || 'hermes',
+        args: ['acp', '--accept-hooks'],
+        cwd: directory,
+        env: baseEnvironment(),
+      }),
       externalMcp: true,
       nativeDelegation: false,
       backendUi: false,

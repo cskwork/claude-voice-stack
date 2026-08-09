@@ -1,6 +1,11 @@
 import { dirname, resolve } from 'node:path'
 import { OpenClawAcpDelegationAdapter } from '../openclaw-adapter.mjs'
-import { baseEnvironment, clean, websocketUrl } from './shared.mjs'
+import {
+  baseEnvironment,
+  clean,
+  processAcpConnection,
+  websocketUrl,
+} from './shared.mjs'
 
 function sanitizeProcessOutput(value) {
   return String(value || '')
@@ -41,30 +46,32 @@ export const openClawBackendDriver = {
   }) {
     return {
       label: this.label,
-      command: process.execPath,
-      args: [
-        resolve(root, 'scripts/openclaw.mjs'),
-        'acp',
-        '--url',
-        websocketUrl(baseUrl),
-        ...(clean(tokenFile)
-          ? ['--token-file', clean(tokenFile)]
-          : []),
-        '--verbose',
-      ],
-      cwd: directory,
-      env: {
-        ...baseEnvironment(),
-        ELECTRON_RUN_AS_NODE: '1',
-        ...(token ? { OPENCLAW_GATEWAY_TOKEN: token } : {}),
-        // Keep the ACP bridge's device identity separate from the user's
-        // normal OpenClaw CLI identity. A loopback bridge presenting the
-        // Gateway's shared token can then use OpenClaw's silent local pairing
-        // instead of inheriting a stale, narrowly scoped user device token.
-        ...(clean(tokenFile)
-          ? { OPENCLAW_STATE_DIR: dirname(clean(tokenFile)) }
-          : {}),
-      },
+      acpConnection: processAcpConnection({
+        command: process.execPath,
+        args: [
+          resolve(root, 'scripts/openclaw.mjs'),
+          'acp',
+          '--url',
+          websocketUrl(baseUrl),
+          ...(clean(tokenFile)
+            ? ['--token-file', clean(tokenFile)]
+            : []),
+          '--verbose',
+        ],
+        cwd: directory,
+        env: {
+          ...baseEnvironment(),
+          ELECTRON_RUN_AS_NODE: '1',
+          ...(token ? { OPENCLAW_GATEWAY_TOKEN: token } : {}),
+          // Keep the ACP bridge's device identity separate from the user's
+          // normal OpenClaw CLI identity. A loopback bridge presenting the
+          // Gateway's shared token can then use OpenClaw's silent local pairing
+          // instead of inheriting a stale, narrowly scoped user device token.
+          ...(clean(tokenFile)
+            ? { OPENCLAW_STATE_DIR: dirname(clean(tokenFile)) }
+            : {}),
+        },
+      }),
       externalMcp: false,
       sessionMcp: false,
       nativeDelegation: true,

@@ -4,6 +4,21 @@ export function clean(value) {
   return String(value || '').trim()
 }
 
+export function processAcpConnection({
+  command,
+  args = [],
+  cwd,
+  env = process.env,
+}) {
+  return {
+    kind: 'process',
+    command,
+    args,
+    cwd,
+    env,
+  }
+}
+
 export function endpointAvailable(value, timeoutMs = 300) {
   let target
   try {

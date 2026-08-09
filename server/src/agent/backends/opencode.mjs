@@ -1,5 +1,5 @@
 import { resolve } from 'node:path'
-import { baseEnvironment } from './shared.mjs'
+import { baseEnvironment, processAcpConnection } from './shared.mjs'
 
 function clean(value) {
   return String(value || '').trim()
@@ -32,10 +32,12 @@ export const openCodeBackendDriver = {
   createProfile({ root, directory }) {
     return {
       label: this.label,
-      command: process.execPath,
-      args: [resolve(root, 'scripts/opencode.mjs'), 'acp'],
-      cwd: directory,
-      env: { ...baseEnvironment(), ELECTRON_RUN_AS_NODE: '1' },
+      acpConnection: processAcpConnection({
+        command: process.execPath,
+        args: [resolve(root, 'scripts/opencode.mjs'), 'acp'],
+        cwd: directory,
+        env: { ...baseEnvironment(), ELECTRON_RUN_AS_NODE: '1' },
+      }),
       externalMcp: true,
       nativeDelegation: false,
       backendUi: true,

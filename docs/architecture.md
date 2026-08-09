@@ -342,6 +342,13 @@ The Gateway is the only core product service. Backend lifecycles use one shared
   backend's published protocol address and leaves configuration and state under
   the external service's control.
 
+Backend service ownership and the ACP connection are independent axes. Each
+backend profile declares an `acpConnection`; the connection factory currently
+implements `process`, which launches one local ACP stdio child. A future remote
+ACP bridge can add another connection kind without changing coordinator,
+permission, Work, or Session lifecycle code. Declaring an external backend
+service does not by itself make the ACP connection remote.
+
 The shared adapter usually owns one ACP stdio child and stops it with Gateway.
 OpenCode, Qoder, and Kimi Code run directly as ACP agents; OpenCode may also
 start its native local Session UI service. `OPENCODE_BASE_URL` currently names
@@ -353,6 +360,11 @@ an OpenClaw Gateway with isolated runtime and Session state. When
 `OPENCLAW_BASE_URL` is explicit, it connects to the user's existing OpenClaw
 Gateway without reading, copying, or modifying its authentication or Agent
 state.
+
+Codex follows the same boundary: qwen-audio-agent starts `codex-acp` over ACP
+stdio, and that adapter starts Codex App Server over its own local stdio
+protocol. Codex App Server may expose other transports, but they are not a
+remote ACP endpoint and must not leak into the shared ACP adapter.
 
 Desktop, TUI and WebUI are replaceable Gateway clients. They must never spawn,
 restart or stop the Gateway or a backend. Closing a UI therefore cannot affect

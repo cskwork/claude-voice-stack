@@ -14,7 +14,7 @@ import {
   projectSessionKey,
   sessionSummary,
 } from './acp-backend-session-utils.mjs'
-import { AcpProcessClient } from './acp-process-client.mjs'
+import { createAcpClient } from './acp-client-factory.mjs'
 import { AcpSessionRegistry } from './acp-session-registry.mjs'
 import {
   ACP_SESSION_TOOL_NAMES,
@@ -141,7 +141,7 @@ export class AcpBackendAdapter {
     profile,
     sessionStatePath = null,
     client,
-    clientFactory = options => new AcpProcessClient(options),
+    clientFactory = createAcpClient,
     backendAvailable = endpointAvailable,
     sessionToolServer,
     nativeDelegationAdapter,
@@ -196,10 +196,7 @@ export class AcpBackendAdapter {
     this.backendAvailable = client ? null : backendAvailable
     this.client = client || clientFactory({
       label: this.profile.label,
-      command: this.profile.command,
-      args: this.profile.args,
-      cwd: this.profile.cwd,
-      env: this.profile.env,
+      connection: this.profile.acpConnection,
       timeoutMs,
       onPermission: (params, context) => (
         this.handlePermission(params, context)
@@ -224,6 +221,7 @@ export class AcpBackendAdapter {
       ownership: this.ownership,
       permissionMode: this.permissionMode,
       transport: 'acp',
+      acpConnection: this.profile.acpConnection?.kind || null,
       backendAgent: this.coordinatorAgent || null,
       sessionModel: 'one-persistent-backend-agent',
       capabilities: {
@@ -249,6 +247,7 @@ export class AcpBackendAdapter {
           protocol: this.protocol,
           ownership: this.ownership,
           transport: 'acp',
+          acpConnection: this.profile.acpConnection?.kind || null,
           error: this.profile.readinessMessage,
         }
       }
@@ -258,6 +257,7 @@ export class AcpBackendAdapter {
         protocol: this.protocol,
         ownership: this.ownership,
         transport: 'acp',
+        acpConnection: this.profile.acpConnection?.kind || null,
         agentInfo: initialized.agentInfo || null,
         capabilities: initialized.agentCapabilities || {},
       }
@@ -267,6 +267,7 @@ export class AcpBackendAdapter {
         protocol: this.protocol,
         ownership: this.ownership,
         transport: 'acp',
+        acpConnection: this.profile.acpConnection?.kind || null,
         error: `${error.message}${
           clean(this.client.stderr) ? `：${clean(this.client.stderr)}` : ''
         }`,
