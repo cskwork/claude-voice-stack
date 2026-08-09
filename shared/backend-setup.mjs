@@ -16,61 +16,6 @@ import {
   backendNames,
 } from './backend-catalog.mjs'
 
-const SPECS = {
-  opencode: {
-    command: 'opencode',
-    executableEnvironment: 'OPENCODE_BIN',
-    integration: 'native',
-    minimumVersion: '1.18.0',
-  },
-  openclaw: {
-    command: 'openclaw',
-    executableEnvironment: 'OPENCLAW_BIN',
-    integration: 'bridge',
-  },
-  qoder: {
-    command: 'qodercli',
-    executableEnvironment: ['QODERCLI_PATH', 'QODER_CLI_PATH'],
-    integration: 'native',
-  },
-  kimi: {
-    command: 'kimi',
-    executableEnvironment: 'KIMI_CODE_BIN',
-    integration: 'native',
-    minimumVersion: '0.31.0',
-  },
-  hermes: {
-    command: 'hermes',
-    executableEnvironment: 'HERMES_BIN',
-    integration: 'native',
-  },
-  codebuddy: {
-    command: 'codebuddy',
-    executableEnvironment: 'CODEBUDDY_BIN',
-    integration: 'native',
-  },
-  codex: {
-    command: 'codex',
-    executableEnvironment: 'CODEX_PATH',
-    integration: 'adapter',
-    adapterCommand: 'codex-acp',
-    adapterEnvironment: 'CODEX_ACP_BIN',
-    adapterRuntimeEnvironment: 'CODEX_ACP_RUNTIME',
-  },
-  claude: {
-    command: 'claude',
-    executableEnvironment: 'CLAUDE_CODE_EXECUTABLE',
-    integration: 'adapter',
-    adapterCommand: 'claude-code-acp',
-    adapterEnvironment: 'CLAUDE_CODE_ACP_BIN',
-    adapterRuntimeEnvironment: 'CLAUDE_CODE_ACP_RUNTIME',
-  },
-  acp: {
-    commandEnvironment: 'ACP_COMMAND',
-    integration: 'generic',
-  },
-}
-
 function clean(value) {
   return String(value || '').trim()
 }
@@ -362,7 +307,8 @@ function inspectBackend(id, {
   selected,
 }) {
   const definition = backendDefinition(id)
-  const spec = SPECS[id]
+  const spec = definition?.setup
+  if (!spec) throw new Error(`后台 ${id} 缺少 setup 配置`)
   const configured = spec.commandEnvironment
     ? environmentValue(env, spec.commandEnvironment)
     : environmentValue(env, spec.executableEnvironment)
@@ -446,14 +392,14 @@ function inspectBackend(id, {
     }
   }
 
-  if (backend.ready && id === 'kimi') {
+  if (backend.ready && id !== 'opencode' && spec.minimumVersion) {
     const version = readVersion(backend.path)
     backend.version = version
     if (!versionAtLeast(version, spec.minimumVersion)) {
       backend.ready = false
       backend.issue = version
-        ? `Kimi Code ${version} 低于最低版本 ${spec.minimumVersion}`
-        : '无法确认 Kimi Code 版本'
+        ? `${definition.label} ${version} 低于最低版本 ${spec.minimumVersion}`
+        : `无法确认 ${definition.label} 版本`
     }
   }
 
@@ -517,7 +463,10 @@ export async function inspectBackendSetupsAsync({
   const commands = [...new Set(preliminary.backends
     .filter(item => (
       (item.id === 'opencode' && item.backend.source === 'installed')
-      || item.id === 'kimi'
+      || (
+        item.id !== 'opencode'
+        && Boolean(backendDefinition(item.id)?.setup?.minimumVersion)
+      )
     ))
     .map(item => item.backend.path)
     .filter(Boolean))]

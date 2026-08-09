@@ -160,10 +160,13 @@ export class AcpProcessClient {
     const exited = new Promise((_, reject) => {
       child.once('error', error => {
         processLogger.error('acp.process_start_failed', { error })
-        reject(processError(
+        const failure = processError(
           this.label,
           `进程启动失败（${error.message}）`,
-        ))
+        )
+        failure.code = error?.code
+        failure.cause = error
+        reject(failure)
       })
       child.once('exit', (code, signal) => {
         processLogger.warn('acp.process_exited', { code, signal })

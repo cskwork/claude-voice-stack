@@ -243,6 +243,31 @@ test('waits for the managed OpenClaw Gateway before starting its ACP bridge', as
   assert.equal(starts, 1)
 })
 
+test('backs off repeated health spawns when a local ACP executable is missing', async () => {
+  let starts = 0
+  const missing = new Error('spawn qwen ENOENT')
+  missing.code = 'ENOENT'
+  const client = {
+    stderr: '',
+    async start() {
+      starts += 1
+      throw missing
+    },
+    async close() {},
+  }
+  const adapter = new AcpBackendAdapter({ protocol: 'qwen', client })
+
+  const first = await adapter.health()
+  const second = await adapter.health()
+  assert.equal(first.ok, false)
+  assert.strictEqual(second, first)
+  assert.equal(starts, 1)
+
+  adapter.lastSpawnFailure.at -= 10_001
+  await adapter.health()
+  assert.equal(starts, 2)
+})
+
 test('retries an empty ACP coordinator response in a fresh Session', async () => {
   const prompts = []
   let nextSession = 0
@@ -466,6 +491,16 @@ test('uses one ACP profile family while preserving backend differences', () => {
     })).args,
     ['--acp', '--dangerously-skip-permissions'],
   )
+  const qwen = acpBackendProfile({
+    protocol: 'qwen',
+    root,
+    directory: '/work',
+    cliPath: '/opt/qwen',
+    permissionMode: 'full',
+  })
+  assert.equal(connection(qwen).command, '/opt/qwen')
+  assert.deepEqual(connection(qwen).args, ['--acp'])
+  assert.deepEqual(qwen.sessionConfigOptions, [])
   const openClaw = acpBackendProfile({
     protocol: 'openclaw',
     root,

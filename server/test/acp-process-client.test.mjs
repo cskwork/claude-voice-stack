@@ -54,6 +54,21 @@ test('shares an in-flight ACP initialization across concurrent callers', async (
   assert.equal(await second, initialized)
 })
 
+test('preserves ENOENT when a local ACP executable cannot be spawned', {
+  skip: process.platform === 'win32',
+}, async () => {
+  const client = new AcpProcessClient({
+    label: 'Missing Agent',
+    command: '__qwen_audio_agent_missing_acp__',
+  })
+
+  await assert.rejects(client.start(), error => {
+    assert.equal(error.code, 'ENOENT')
+    assert.equal(error.cause?.code, 'ENOENT')
+    return true
+  })
+})
+
 test('applies backend-specific ACP error and output formatting hooks', async () => {
   const profile = openClawBackendDriver.createProfile({
     root: '/repo',

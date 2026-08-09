@@ -11,6 +11,7 @@
 | OpenCode | 原生 ACP | 支持一键安装和百炼配置 | ★★★★★ |
 | OpenClaw | 内置 ACP 桥接 | 支持一键安装和百炼配置 | ★★★★★ |
 | Qoder | 原生 ACP | 支持一键安装，需用户配置 | ★★★★★ |
+| Qwen Code | 原生 ACP | 支持一键安装，需用户配置 | ★★★★☆ |
 | Kimi Code | 原生 ACP | 支持一键安装，需用户配置 | ★★★★★ |
 | Hermes | 原生 ACP | 支持一键安装，需用户配置 | ★★★★☆ |
 | CodeBuddy | 原生 ACP | 支持一键安装，需用户配置 | ★★★★☆ |
@@ -78,7 +79,7 @@ ACP_ARGS=["--acp"]
 - `native`（默认）：权限由后台 Agent 自己判断和询问，Gateway 只负责原样转发。
 - `full`：启动时明确授予最高权限，后台可直接执行命令、读写文件，不再逐次确认。
 
-`full` 当前支持 OpenCode、Qoder、Kimi Code、Hermes、CodeBuddy、Codex 和
+`full` 当前支持 OpenCode、Qoder、Qwen Code、Kimi Code、Hermes、CodeBuddy、Codex 和
 Claude Code，Gateway 会自动批准这些后台发起的权限请求。OpenClaw 的执行授权受
 exec approvals、elevated 等配置约束，无法由统一开关表达，选择 `full` 时
 Gateway 会明确拒绝启动。最高权限会放大误操作风险，只应在可信项目中启用。

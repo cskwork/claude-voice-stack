@@ -266,6 +266,28 @@ QODER_CONFIG_DIR=
 
 The Gateway manages the Qoder ACP subprocess; Qoder does not accept `--backend-url`.
 
+### Qwen Code
+
+Qwen Code connects through its native stdio ACP entry point, `qwen --acp`.
+The Gateway starts only this local ACP process and preserves Qwen Code's own
+authentication, provider, model, MCP, Skill, and Session configuration.
+
+```dotenv
+AGENT_PROTOCOL=qwen
+QWEN_AUDIO_AGENT_BACKEND_PERMISSION_MODE=native
+```
+
+Run `qwen` interactively and use `/auth` for first-time authentication. The
+removed `qwen auth` command is not used. Optional overrides:
+
+```dotenv
+QWEN_CODE_BIN=
+QWEN_CODE_WORKSPACE=
+```
+
+The current integration intentionally supports the local ACP process only;
+Qwen Code's experimental network service is not treated as a remote backend.
+
 ### Kimi Code
 
 Kimi Code ([MoonshotAI/kimi-code](https://github.com/MoonshotAI/kimi-code))
@@ -451,7 +473,7 @@ managed by the Gateway, and do not accept `--backend-url`.
 - `full`: Explicitly grants the highest permission at startup; the backend can directly execute
   commands, read and write files, without per-request confirmation.
 
-`full` currently supports OpenCode, Qoder, Kimi Code, Hermes, CodeBuddy, Codex, and
+`full` currently supports OpenCode, Qoder, Qwen Code, Kimi Code, Hermes, CodeBuddy, Codex, and
 Claude Code. The Gateway automatically approves permission requests initiated by these ACP
 backends; in addition, Kimi Code switches to an Auto mode that does not ask again via ACP
 Session configuration, Qoder and CodeBuddy CLI use `--dangerously-skip-permissions`, OpenCode

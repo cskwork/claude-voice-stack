@@ -9,7 +9,7 @@
 1. **实时前端** — 全双工语音、简单直接回答，以及基本的本地时间/记忆工具。
 2. **后端 Agent** — 一个持久 Agent Session，负责处理所有需要工具、当前信息、文件、应用程序、代码或多步工作的请求。
 
-后端可以是 OpenCode、OpenClaw、Qoder、Kimi Code 或其他 ACP 兼容 Agent。
+后端可以是 OpenCode、OpenClaw、Qoder、Qwen Code、Kimi Code 或其他 ACP 兼容 Agent。
 它内部可以使用工具、技能、Agent 或其他 Session。这些都是后端私有实现细节，
 不会创建额外的 qwen-audio-agent 层。所有后端通过一个 ACP 客户端和一个
 共享协调适配器连接；后端特定的启动和能力行为位于已注册的驱动程序中。
@@ -233,7 +233,7 @@ Work 调度通道。因此，其他语音请求可以在目标 Session 运行期
 
 ## 8. 后端内部能力
 
-对于接受客户端提供的 MCP 服务器的 ACP 后端（包括 OpenCode、Qoder 和
+对于接受客户端提供的 MCP 服务器的 ACP 后端（包括 OpenCode、Qoder、Qwen Code 和
 Kimi Code），Gateway 向协调器注入相同的五个工具：Session list、start、
 send、status 和 cancel。OpenClaw ACP 不接受客户端提供的 MCP 服务器，
 因此相同的协调契约映射到 OpenClaw 的原生 Session 工具。`session_start`
@@ -260,12 +260,12 @@ backend agent envelope
 Shared ACP adapter
    ↓
 OpenCode ACP, OpenClaw ACP bridge, Qoder ACP,
-Kimi Code ACP, or another ACP Agent
+Qwen Code ACP, Kimi Code ACP, or another ACP Agent
 ```
 
 后端特定的 API 细节仅属于 `server/src/agent`。实时工具不得导入后端适配器。
 UI 仅消费公共 Work 事件和最终时间线内容。包级别的 `shared` 模块是基础运行时
-工具；server `core` 可以依赖它们，但它们不得依赖 server 层。
+工具；server `core` 和 `process` 可以依赖它们，但它们不得依赖 server 层。
 
 Gateway 可以将不可变的 `web/dist` 产物作为部署便利来提供，但这仅是静态托管。
 Gateway 源码不得导入 UI 组件、呈现文本、样式、终端行为或桌面行为。
@@ -285,8 +285,8 @@ Gateway 是唯一的核心产品服务。后台生命周期由共享的 `owned/e
 未来的远程 ACP bridge 可以新增另一种连接类型，而无需修改协调、权限、Work 或
 Session 生命周期代码。声明外部后台服务，并不意味着 ACP 连接也自动变成远程连接。
 
-共享适配器通常拥有一个 ACP stdio 子进程，并随 Gateway 一起停止。OpenCode、Qoder
-和 Kimi Code 直接作为 ACP Agent 运行；OpenCode 还可以额外启动其原生本地 Session
+共享适配器通常拥有一个 ACP stdio 子进程，并随 Gateway 一起停止。OpenCode、Qoder、
+Qwen Code 和 Kimi Code 直接作为 ACP Agent 运行；OpenCode 还可以额外启动其原生本地 Session
 UI 服务。当前 `OPENCODE_BASE_URL` 表示这个 UI 服务地址，不是远程 ACP 执行端点，
 因此 OpenCode 仍属于 `owned`。
 

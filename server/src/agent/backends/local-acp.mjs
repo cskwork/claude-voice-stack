@@ -1,0 +1,66 @@
+import { baseEnvironment, clean, processAcpConnection } from './shared.mjs'
+
+function localAcpBackend({
+  id,
+  label,
+  command,
+  args,
+  sessionConfigOptions,
+}) {
+  return {
+    id,
+    label,
+    createProfile(options) {
+      return {
+        label,
+        acpConnection: processAcpConnection({
+          command: clean(options.cliPath) || command,
+          args: args(options),
+          cwd: options.directory,
+          env: baseEnvironment(),
+        }),
+        sessionConfigOptions: sessionConfigOptions?.(options) || [],
+        externalMcp: true,
+        nativeDelegation: false,
+        backendUi: false,
+      }
+    },
+  }
+}
+
+export const localAcpBackendDrivers = [
+  localAcpBackend({
+    id: 'qoder',
+    label: 'Qoder',
+    command: 'qodercli',
+    args: ({ permissionMode }) => [
+      '--acp',
+      ...(permissionMode === 'full'
+        ? ['--dangerously-skip-permissions']
+        : []),
+    ],
+  }),
+  localAcpBackend({
+    id: 'qwen',
+    label: 'Qwen Code',
+    command: 'qwen',
+    args: () => ['--acp'],
+  }),
+  localAcpBackend({
+    id: 'kimi',
+    label: 'Kimi Code',
+    command: 'kimi',
+    args: () => ['acp'],
+    sessionConfigOptions: ({ permissionMode }) => (
+      permissionMode === 'full'
+        ? [{ id: 'mode', value: 'auto' }]
+        : []
+    ),
+  }),
+  localAcpBackend({
+    id: 'hermes',
+    label: 'Hermes',
+    command: 'hermes',
+    args: () => ['acp', '--accept-hooks'],
+  }),
+]

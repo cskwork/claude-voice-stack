@@ -1,7 +1,5 @@
 import { randomBytes } from 'node:crypto'
 import {
-  constants,
-  copyFileSync,
   chmodSync,
   linkSync,
   lstatSync,
@@ -13,6 +11,7 @@ import {
 import { homedir } from 'node:os'
 import { dirname, resolve } from 'node:path'
 import { parseEnv } from 'node:util'
+import { backendDefinitions } from './backend-catalog.mjs'
 import { resolveRealtimeFrontendConfiguration } from './realtime-provider-catalog.mjs'
 
 const SECRET_KEY = 'QWEN_AUDIO_AGENT_AUTH_SECRET'
@@ -24,7 +23,7 @@ const USER_CONFIG_TEMPLATE = [
   '# SPEECH_TO_SPEECH_REALTIME_URL=ws://127.0.0.1:8765/v1/realtime',
   '',
   '# 可选：选择后台 Agent；留空时仅使用前台实时语音聊天',
-  '# 可选 openclaw、opencode、qoder、kimi、hermes、codebuddy、codex、claude、acp 或 none',
+  '# 可选 openclaw、opencode、qoder、qwen、kimi、hermes、codebuddy、codex、claude、acp 或 none',
   'AGENT_PROTOCOL=',
   '# 权限模式：native（后台自行询问）或 full（最高权限；仅支持安全映射的后端）',
   '# QWEN_AUDIO_AGENT_BACKEND_PERMISSION_MODE=native',
@@ -161,16 +160,19 @@ function ensureUserProfile(configDirectory) {
   return profilePath
 }
 
-function ensureManagedWorkspace(directory, templatePath) {
-  mkdirSync(directory, { recursive: true, mode: 0o700 })
-  const instructionsPath = resolve(directory, 'AGENTS.md')
-  try {
-    copyFileSync(templatePath, instructionsPath, constants.COPYFILE_EXCL)
-    chmodSync(instructionsPath, 0o600)
-  } catch (error) {
-    if (error.code !== 'EEXIST') throw error
-  }
-  return directory
+function resolveBackendWorkspaces(env, root, configDirectory) {
+  return Object.fromEntries(backendDefinitions()
+    .filter(definition => definition.workspaceEnvironment)
+    .map(definition => {
+      const configured = env[definition.workspaceEnvironment]
+      return [definition.id, {
+        directory: configured
+          ? resolve(root, configured)
+          : resolve(configDirectory, `workspaces/${definition.id}`),
+        environment: definition.workspaceEnvironment,
+        managed: !configured,
+      }]
+    }))
 }
 
 function codeBuddyModelName(env) {
@@ -326,117 +328,42 @@ export function loadRuntimeEnvironment({
   const frontendMemoryPath = resolve(configDirectory, 'frontend-memory.json')
   const frontendNotesPath = resolve(configDirectory, 'frontend-notes.json')
   const taskStatePath = resolve(configDirectory, 'tasks.json')
-  const defaultOpenCodeWorkspace = !env.OPENCODE_WORKSPACE
-  const openCodeWorkspace = env.OPENCODE_WORKSPACE
-    ? resolve(root, env.OPENCODE_WORKSPACE)
-    : resolve(configDirectory, 'workspaces/opencode')
-  const defaultOpenClawWorkspace = !env.QWEN_AUDIO_AGENT_OPENCLAW_WORKSPACE
-  const openClawWorkspace = env.QWEN_AUDIO_AGENT_OPENCLAW_WORKSPACE
-    ? resolve(root, env.QWEN_AUDIO_AGENT_OPENCLAW_WORKSPACE)
-    : resolve(configDirectory, 'workspaces/openclaw')
+  const backendWorkspaces = resolveBackendWorkspaces(
+    env,
+    root,
+    configDirectory,
+  )
+  const workspace = id => backendWorkspaces[id]?.directory || ''
+  const openCodeWorkspace = workspace('opencode')
+  const openClawWorkspace = workspace('openclaw')
+  const qoderWorkspace = workspace('qoder')
+  const qwenCodeWorkspace = workspace('qwen')
+  const kimiWorkspace = workspace('kimi')
+  const hermesWorkspace = workspace('hermes')
+  const codeBuddyWorkspace = workspace('codebuddy')
+  const codexWorkspace = workspace('codex')
+  const claudeWorkspace = workspace('claude')
+  const acpWorkspace = workspace('acp')
   const openClawStateDirectory = env.QWEN_AUDIO_AGENT_OPENCLAW_STATE_DIR
     ? resolve(root, env.QWEN_AUDIO_AGENT_OPENCLAW_STATE_DIR)
     : resolve(configDirectory, 'backends/openclaw/state')
-  const defaultQoderWorkspace = !env.QODER_WORKSPACE
-  const qoderWorkspace = env.QODER_WORKSPACE
-    ? resolve(root, env.QODER_WORKSPACE)
-    : resolve(configDirectory, 'workspaces/qoder')
-  const defaultKimiWorkspace = !env.KIMI_WORKSPACE
-  const kimiWorkspace = env.KIMI_WORKSPACE
-    ? resolve(root, env.KIMI_WORKSPACE)
-    : resolve(configDirectory, 'workspaces/kimi')
-  const defaultHermesWorkspace = !env.HERMES_WORKSPACE
-  const hermesWorkspace = env.HERMES_WORKSPACE
-    ? resolve(root, env.HERMES_WORKSPACE)
-    : resolve(configDirectory, 'workspaces/hermes')
-  const defaultCodeBuddyWorkspace = !env.CODEBUDDY_WORKSPACE
-  const codeBuddyWorkspace = env.CODEBUDDY_WORKSPACE
-    ? resolve(root, env.CODEBUDDY_WORKSPACE)
-    : resolve(configDirectory, 'workspaces/codebuddy')
-  const defaultCodexWorkspace = !env.CODEX_WORKSPACE
-  const codexWorkspace = env.CODEX_WORKSPACE
-    ? resolve(root, env.CODEX_WORKSPACE)
-    : resolve(configDirectory, 'workspaces/codex')
-  const defaultClaudeWorkspace = !env.CLAUDE_WORKSPACE
-  const claudeWorkspace = env.CLAUDE_WORKSPACE
-    ? resolve(root, env.CLAUDE_WORKSPACE)
-    : resolve(configDirectory, 'workspaces/claude')
-  const defaultAcpWorkspace = !env.ACP_WORKSPACE
-  const acpWorkspace = env.ACP_WORKSPACE
-    ? resolve(root, env.ACP_WORKSPACE)
-    : resolve(configDirectory, 'workspaces/acp')
   let migratedFiles = []
   if (prepareBackendRuntime && !readOnly) {
-    if (defaultOpenCodeWorkspace) {
-      ensureManagedWorkspace(
-        openCodeWorkspace,
-        resolve(root, 'config/opencode/workspace/AGENTS.md'),
-      )
+    for (const entry of Object.values(backendWorkspaces)) {
+      if (entry.managed) {
+        mkdirSync(entry.directory, { recursive: true, mode: 0o700 })
+      }
+      env[entry.environment] = entry.directory
     }
-    if (defaultOpenClawWorkspace) {
-      ensureManagedWorkspace(
-        openClawWorkspace,
-        resolve(root, 'config/openclaw/workspace/AGENTS.md'),
-      )
-    }
-    if (defaultQoderWorkspace) {
-      ensureManagedWorkspace(
-        qoderWorkspace,
-        resolve(root, 'config/qoder/workspace/AGENTS.md'),
-      )
-    }
-    if (defaultKimiWorkspace) {
-      ensureManagedWorkspace(
-        kimiWorkspace,
-        resolve(root, 'config/kimi/workspace/AGENTS.md'),
-      )
-    }
-    if (defaultHermesWorkspace) {
-      ensureManagedWorkspace(
-        hermesWorkspace,
-        resolve(root, 'config/hermes/workspace/AGENTS.md'),
-      )
-    }
-    if (defaultCodeBuddyWorkspace) {
-      ensureManagedWorkspace(
-        codeBuddyWorkspace,
-        resolve(root, 'config/codebuddy/workspace/AGENTS.md'),
-      )
+    if (backendWorkspaces.codebuddy?.managed) {
       ensureCodeBuddyTemplate(
         resolve(root, 'config/codebuddy/workspace/.codebuddy/models.json'),
         resolve(codeBuddyWorkspace, '.codebuddy/models.json'),
         env,
       )
     }
-    if (defaultCodexWorkspace) {
-      ensureManagedWorkspace(
-        codexWorkspace,
-        resolve(root, 'config/codex/workspace/AGENTS.md'),
-      )
-    }
-    if (defaultClaudeWorkspace) {
-      ensureManagedWorkspace(
-        claudeWorkspace,
-        resolve(root, 'config/claude/workspace/AGENTS.md'),
-      )
-    }
-    if (defaultAcpWorkspace) {
-      ensureManagedWorkspace(
-        acpWorkspace,
-        resolve(root, 'config/acp/workspace/AGENTS.md'),
-      )
-    }
     mkdirSync(openClawStateDirectory, { recursive: true, mode: 0o700 })
-    env.OPENCODE_WORKSPACE = openCodeWorkspace
-    env.QWEN_AUDIO_AGENT_OPENCLAW_WORKSPACE = openClawWorkspace
     env.QWEN_AUDIO_AGENT_OPENCLAW_STATE_DIR = openClawStateDirectory
-    env.QODER_WORKSPACE = qoderWorkspace
-    env.KIMI_WORKSPACE = kimiWorkspace
-    env.HERMES_WORKSPACE = hermesWorkspace
-    env.CODEBUDDY_WORKSPACE = codeBuddyWorkspace
-    env.CODEX_WORKSPACE = codexWorkspace
-    env.CLAUDE_WORKSPACE = claudeWorkspace
-    env.ACP_WORKSPACE = acpWorkspace
     migratedFiles = [
       [resolve(root, 'runtime/frontend-memory.json'), frontendMemoryPath],
       [resolve(root, 'runtime/tasks.json'), taskStatePath],
@@ -457,6 +384,7 @@ export function loadRuntimeEnvironment({
     openCodeWorkspace,
     openClawWorkspace,
     qoderWorkspace,
+    qwenCodeWorkspace,
     kimiWorkspace,
     hermesWorkspace,
     codeBuddyWorkspace,
