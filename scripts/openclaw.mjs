@@ -78,19 +78,39 @@ if (!process.env.OPENCLAW_CONFIG_PATH && process.env.DASHSCOPE_API_KEY && MODEL 
 
 if (FIRST_ARG === 'gateway') {
   if (!managed && !process.env.OPENCLAW_CONFIG_PATH) {
+    // An explicit OPENCLAW_STATE_DIR names the user's own OpenClaw state and
+    // wins over the ~/.openclaw default when locating their configuration.
     const home = process.env.HOME || process.env.USERPROFILE
-    if (home && existsSync(join(home, '.openclaw', 'openclaw.json'))) {
-      process.env.OPENCLAW_CONFIG_PATH = join(home, '.openclaw', 'openclaw.json')
+    const candidates = [
+      process.env.OPENCLAW_STATE_DIR,
+      home ? join(home, '.openclaw') : '',
+    ].filter(Boolean)
+    for (const stateDir of candidates) {
+      const candidate = join(stateDir, 'openclaw.json')
+      if (existsSync(candidate)) {
+        process.env.OPENCLAW_CONFIG_PATH = candidate
+        break
+      }
     }
   }
   const port = process.env.OPENCLAW_PORT || '18789'
   const runtimeDir = join(STATE_DIR, `gateway-${port}`)
   mkdirSync(runtimeDir, { recursive: true })
+  // The qwenaudio-owned gateway always runs from an isolated state directory
+  // so it never fights the user's own OpenClaw instance over sessions or
+  // sqlite locks. Say so instead of silently ignoring an explicit setting.
+  if (process.env.OPENCLAW_STATE_DIR && process.env.OPENCLAW_STATE_DIR !== runtimeDir) {
+    console.error(
+      `[openclaw] OPENCLAW_STATE_DIR=${process.env.OPENCLAW_STATE_DIR} 仅用于定位你的配置与凭据；`
+      + `网关实例运行在隔离目录 ${runtimeDir}，并会从你的 state 播种可移植的静态认证。`,
+    )
+  }
   process.env.OPENCLAW_STATE_DIR = runtimeDir
   if (!managed && process.env.OPENCLAW_CONFIG_PATH) {
     const userCfg = process.env.OPENCLAW_CONFIG_PATH
     const userState = dirname(userCfg)
     const runtimeCfg = join(runtimeDir, 'openclaw.json')
+    // prepare 同时完成配置隔离与可移植静态认证的播种（见 openclaw-auth.mjs）。
     runHelper('prepare', userCfg, runtimeCfg)
     process.env.OPENCLAW_CONFIG_PATH = runtimeCfg
     for (const cap of ['extensions', 'skills', 'plugin-skills', 'service-env']) {
