@@ -62,6 +62,9 @@ const DEFAULT_CAPABILITIES = Object.freeze({
   // Echoes response metadata so client-created responses can be correlated
   // without confusing them with automatic server-side responses.
   responseMetadataCorrelation: false,
+  // Applies instructions supplied on one response.create without requiring a
+  // persistent conversation item.
+  perResponseInstructions: true,
 })
 
 export class RealtimeFrontend {

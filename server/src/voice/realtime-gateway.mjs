@@ -35,10 +35,9 @@ import { ReconnectBackoff } from './reconnect-backoff.mjs'
 import { SleepController } from './sleep-controller.mjs'
 import { createSherpaWakeWordDetector } from './wake-word/sherpa-detector.mjs'
 import {
-  ACTION_PROMISE_CORRECTION,
-  isCurrentActionPromiseTurn,
-  shouldCorrectActionPromise,
-} from './action-promise.mjs'
+  evaluateResponseGuards,
+  isResponseGuardTurnCurrent,
+} from './response-guards/index.mjs'
 import {
   isResponseActivityEvent,
   realtimeResponseId,
@@ -1194,9 +1193,10 @@ export function attachRealtimeGateway(server, {
         const responseFailed = ['failed', 'cancelled', 'incomplete'].includes(
           responseStatus,
         )
-        // Evaluated before the context is retired below, which drops the
-        // transcript this check relies on.
-        const promisedUnsubmittedAction = shouldCorrectActionPromise({
+        // Guards run before the context is retired below, which drops the
+        // transcript they inspect. They can only ask the model to reconsider;
+        // they never execute tools or mutate task state directly.
+        const responseGuardDecision = evaluateResponseGuards({
           origin: responseContext?.origin || 'model',
           hasFunctionCall: Boolean(responseContext?.hasFunctionCall),
           failed: responseFailed,
@@ -1263,17 +1263,19 @@ export function attachRealtimeGateway(server, {
           suppressed: Boolean(responseContext?.suppressed),
           failed: responseFailed,
         })
-        // Work was announced but never submitted. Ask the frontend to submit it
-        // or stay silent, so the user is not left waiting for something that
-        // never started.
-        if (promisedUnsubmittedAction && outputEnabled && frontend?.ready) {
+        if (
+          responseGuardDecision
+          && outputEnabled
+          && frontend?.ready
+          && frontend.capabilities.perResponseInstructions
+        ) {
           const correctionFrontend = frontend
           const correctionGeneration = responseContext?.turnGeneration
           correctionFrontend.ensureResponse({
             turnId: responseTurnId,
             turnGeneration: correctionGeneration,
           }, {
-            shouldCreate: () => isCurrentActionPromiseTurn({
+            shouldCreate: () => isResponseGuardTurnCurrent({
               sameFrontend: frontend === correctionFrontend,
               outputEnabled,
               userSpeaking,
@@ -1284,7 +1286,7 @@ export function attachRealtimeGateway(server, {
             }),
             response: {
               modalities: textOnlySession ? ['text'] : undefined,
-              instructions: ACTION_PROMISE_CORRECTION,
+              instructions: responseGuardDecision.instructions,
             },
           }).catch(error => send(ws, { type: 'error', message: error.message }))
         }

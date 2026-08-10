@@ -39,6 +39,7 @@ const CAPABILITY_FLAGS = [
   'acknowledgesSessionUpdate',
   'singleResponseSlot',
   'responseMetadataCorrelation',
+  'perResponseInstructions',
 ]
 
 export function validateRealtimeProvider(provider) {

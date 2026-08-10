@@ -1117,6 +1117,7 @@ test('a compliant provider keeps every default capability', () => {
     acknowledgesSessionUpdate: true,
     singleResponseSlot: false,
     responseMetadataCorrelation: false,
+    perResponseInstructions: true,
   })
 })
 
