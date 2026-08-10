@@ -21,6 +21,7 @@ test('allows the Gateway to run without a backend Agent', () => {
   assert.equal(options.backend, 'openclaw')
   assert.equal(options.backendPermissionMode, 'native')
   assert.equal(options.backendUrl, 'http://127.0.0.1:18789')
+  assert.equal(options.backendUrlSpecified, false)
 })
 
 test('parses independent TUI and WebUI client commands', () => {
@@ -77,6 +78,7 @@ test('parses Gateway backend settings', () => {
   assert.equal(options.backend, 'openclaw')
   assert.equal(options.backendAgent, 'build')
   assert.equal(options.backendUrl, 'http://localhost:18888')
+  assert.equal(options.backendUrlSpecified, true)
 })
 
 test('accepts Qoder as a Gateway-owned backend without a URL', () => {

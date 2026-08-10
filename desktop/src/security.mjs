@@ -1,3 +1,8 @@
+import {
+  isBuiltinOrbSkin,
+  normalizeOrbSkinId,
+} from '../../shared/orb-skin-catalog.mjs'
+
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]'])
 
 export function validateAppUrl(value) {
@@ -35,12 +40,22 @@ export function isSafeExternalUrl(value) {
   }
 }
 
-export function desktopOrbUrl(value, { orbStyle, autoHideSeconds } = {}) {
+export function desktopOrbUrl(value, {
+  orbSkin,
+  autoHideSeconds,
+  wakeWordEnabled = false,
+} = {}) {
   const url = new URL(value)
   url.searchParams.set('desktop', 'orb')
-  if (orbStyle) url.searchParams.set('orbStyle', orbStyle)
+  const skinId = normalizeOrbSkinId(orbSkin)
+  if (skinId) {
+    url.searchParams.set('orbSkin', skinId)
+    // 内置 id 同时写旧参数，作为与旧 web/dist 的兼容缓冲。
+    if (isBuiltinOrbSkin(skinId)) url.searchParams.set('orbStyle', skinId)
+  }
   if (Number.isFinite(autoHideSeconds)) {
     url.searchParams.set('autoHideSeconds', String(autoHideSeconds))
   }
+  if (wakeWordEnabled) url.searchParams.set('wakeWordEnabled', 'true')
   return url.href
 }

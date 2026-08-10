@@ -6,11 +6,11 @@ import {
   GET_CURRENT_TIME_TOOL_NAME,
   ENTER_SLEEP_TOOL_NAME,
   NOTES_TOOL_NAME,
-  USER_MEMORY_TOOL_NAME,
+  MEMORY_TOOL_NAME,
   RESPOND_AGENT_PERMISSION_TOOL_NAME,
 } from '../realtime-provider.mjs'
 import { currentTimeSnapshot } from '../../conversation/frontend-agent-context.mjs'
-import { isToolScope } from '../../core/memory-scopes.mjs'
+import { canonicalScope, isToolScope } from '../../core/memory-scopes.mjs'
 
 const SENSITIVE_MEMORY = /(?:pass(?:word)?|secret|api[_ -]?key|access[_ -]?token|credential|验证码|密码|密钥|令牌|\bsk-[a-z0-9_-]+)/i
 
@@ -37,7 +37,7 @@ export class ToolCallHandler {
     getTurnId,
     getTurnGeneration,
     coordinator,
-    coordinatorAvailable = async () => true,
+    backendAvailability = null,
     memoryStore,
     notesStore,
     getClientContext = () => ({}),
@@ -45,6 +45,7 @@ export class ToolCallHandler {
     onMemoryChanged = () => {},
     respondPermission,
     permissionPolicy,
+    onPermissionDeliveryFailed = () => {},
     requestClientState = () => {},
   }) {
     this.taskManager = taskManager
@@ -55,7 +56,7 @@ export class ToolCallHandler {
     this.getTurnId = getTurnId
     this.getTurnGeneration = getTurnGeneration
     this.coordinator = coordinator
-    this.coordinatorAvailable = coordinatorAvailable
+    this.backendAvailability = backendAvailability
     this.memoryStore = memoryStore
     this.notesStore = notesStore
     this.getClientContext = getClientContext
@@ -63,6 +64,7 @@ export class ToolCallHandler {
     this.onMemoryChanged = onMemoryChanged
     this.respondPermission = respondPermission
     this.permissionPolicy = permissionPolicy
+    this.onPermissionDeliveryFailed = onPermissionDeliveryFailed
     this.requestClientState = requestClientState
     this.gatewayApprovedPermissions = new Set()
     this.processedCalls = new Set()
@@ -143,31 +145,36 @@ export class ToolCallHandler {
       })
   }
 
-  createWork({ turnId, originalRequest, objective, submissionKey }) {
+  createWork({ turnId, objective, verbatimRequest, submissionKey }) {
     let workId = ''
     const task = this.taskManager.create({
-      objective: originalRequest,
+      objective,
       ownerId: this.ownerId,
       sessionId: this.sessionId,
       turnId,
       submissionKey,
       laneKey: `coordinator:${this.ownerId}`,
       laneLimit: 1,
-      runner: async (_ignored, { onEvent, signal }) => this.coordinator.run({
-        originalRequest,
-        objective,
-        conversationContext: this.getConversationContext(),
-        userMemories: this.memoryStore?.list(this.ownerId, { limit: 64 }) || [],
-        timeZone: this.getClientContext()?.timeZone,
-        workingDirectory: this.getClientContext()?.workingDirectory,
-      }, {
-        ownerId: this.ownerId,
-        sessionId: this.sessionId,
-        turnId,
-        coordinationRunId: workId,
-        signal,
-        onEvent: event => this.forwardCoordinatorEvent(event, onEvent),
-      }),
+      runner: async (_ignored, { onEvent, signal }) => {
+        // The verbatim request was pinned at acceptance and is almost
+        // certainly settled by now; awaiting it never blocks the receipt.
+        const resolved = (await verbatimRequest) || {}
+        return this.coordinator.run({
+          originalRequest: resolved.originalRequest || objective,
+          objective,
+          conversationContext: this.getConversationContext(),
+          userMemories: this.memoryStore?.list(this.ownerId, { limit: 64 }) || [],
+          timeZone: this.getClientContext()?.timeZone,
+          workingDirectory: this.getClientContext()?.workingDirectory,
+        }, {
+          ownerId: this.ownerId,
+          sessionId: this.sessionId,
+          turnId,
+          coordinationRunId: workId,
+          signal,
+          onEvent: event => this.forwardCoordinatorEvent(event, onEvent),
+        })
+      },
       canceler: async ({ previousStatus, abort }) => {
         if (previousStatus === 'delegated') {
           const result = await this.coordinator.cancelDelegatedWork(
@@ -285,8 +292,8 @@ export class ToolCallHandler {
       await this.getCurrentTime(callId, turnId)
       return
     }
-    if (toolName === USER_MEMORY_TOOL_NAME) {
-      await this.userMemory(callId, turnId, args)
+    if (toolName === MEMORY_TOOL_NAME) {
+      await this.memory(callId, turnId, args)
       return
     }
     if (toolName === NOTES_TOOL_NAME) {
@@ -356,20 +363,67 @@ export class ToolCallHandler {
       return
     }
 
-    const resolved = await this.transcripts.resolveDelegation(
-      turnId,
-      args.objective,
-    )
-    if (this.isStale(turnId, generation)) {
-      await this.closeStaleCall(callId, turnId)
+    // Receipt-based acceptance: this receipt only acknowledges intake, so it
+    // must not wait on ASR timing or a live backend round trip. Availability
+    // comes from the cached snapshot; a backend that looks healthy here but
+    // fails at dispatch surfaces through the failed-task announcement path.
+    const availability = this.backendAvailability?.snapshot()
+      || { configured: true, ok: true, known: false }
+    if (availability.configured === false) {
+      await this.sendOutput(
+        callId,
+        failure(
+          'backend_unavailable',
+          '当前未配置后台 Agent，无法执行需要后台处理的任务。你仍然可以继续普通聊天。',
+          { retryable: false },
+        ),
+        turnId,
+        null,
+        {
+          response: {
+            instructions: [
+              '直接向用户说明当前未配置后台 Agent，无法执行这项后台任务。',
+              '不要再次调用后台工具，也不要声称任务已经创建或正在执行。',
+              '可以继续完成不需要后台 Agent 的聊天和回答。',
+            ].join('\n'),
+          },
+        },
+      )
       return
     }
-    const originalRequest = String(
-      resolved.originalRequest || resolved.objective || '',
-    ).trim()
-    const objective = String(
-      resolved.objective || resolved.originalRequest || '',
-    ).trim()
+    if (availability.known && availability.ok === false) {
+      await this.sendOutput(
+        callId,
+        failure(
+          'backend_unavailable',
+          '后台 Agent 当前未连接。你仍然可以继续普通聊天，后台恢复后再执行这项工作。',
+          { retryable: true },
+        ),
+        turnId,
+        null,
+        {
+          response: {
+            instructions: [
+              '直接向用户说明后台 Agent 当前未连接，暂时无法执行这项后台任务。',
+              '不要再次调用后台工具，也不要声称任务已经创建或正在执行。',
+              '可以继续完成不需要后台 Agent 的聊天和回答。',
+            ].join('\n'),
+          },
+        },
+      )
+      return
+    }
+
+    let objective = String(args.objective || '').replace(/\s+/g, ' ').trim()
+    if (!objective) {
+      // Rare model slip: only this fallback path waits for the transcript.
+      const resolved = await this.transcripts.resolveDelegation(turnId, '')
+      if (this.isStale(turnId, generation)) {
+        await this.closeStaleCall(callId, turnId)
+        return
+      }
+      objective = String(resolved.originalRequest || '').trim()
+    }
     if (!objective) {
       await this.sendOutput(
         callId,
@@ -379,49 +433,6 @@ export class ToolCallHandler {
           { retryable: true },
         ),
         turnId,
-      )
-      return
-    }
-
-    let coordinatorReady = false
-    let coordinatorConfigured = true
-    try {
-      const availability = await this.coordinatorAvailable()
-      if (availability && typeof availability === 'object') {
-        coordinatorConfigured = availability.enabled !== false
-        coordinatorReady = (
-          coordinatorConfigured && availability.ok === true
-        )
-      } else {
-        coordinatorReady = availability === true
-      }
-    } catch {
-      coordinatorReady = false
-    }
-    if (!coordinatorReady) {
-      const userMessage = coordinatorConfigured
-        ? '后台 Agent 当前未连接。你仍然可以继续普通聊天，后台恢复后再执行这项工作。'
-        : '当前未配置后台 Agent，无法执行需要后台处理的任务。你仍然可以继续普通聊天。'
-      await this.sendOutput(
-        callId,
-        failure(
-          'backend_unavailable',
-          userMessage,
-          { retryable: coordinatorConfigured },
-        ),
-        turnId,
-        null,
-        {
-          response: {
-            instructions: [
-              coordinatorConfigured
-                ? '直接向用户说明后台 Agent 当前未连接，暂时无法执行这项后台任务。'
-                : '直接向用户说明当前未配置后台 Agent，无法执行这项后台任务。',
-              '不要再次调用后台工具，也不要声称任务已经创建或正在执行。',
-              '可以继续完成不需要后台 Agent 的聊天和回答。',
-            ].join('\n'),
-          },
-        },
       )
       return
     }
@@ -459,10 +470,19 @@ export class ToolCallHandler {
         this.sessionId,
         turnId || callId,
       ].join(':')
+      // Pin the verbatim user request without blocking the receipt: the
+      // transcript waiter registers now, so the ASR result is captured even
+      // if the per-connection ring buffer evicts that turn before the FIFO
+      // lane dispatches this work. resolveDelegation never rejects and a
+      // closed session resolves to the model-provided objective.
+      const verbatimRequest = this.transcripts.resolveDelegation(
+        turnId,
+        objective,
+      )
       task = this.createWork({
         turnId,
-        originalRequest,
         objective,
+        verbatimRequest,
         submissionKey,
       })
     } catch {
@@ -586,48 +606,54 @@ export class ToolCallHandler {
       this.sessionId,
       decision,
     )
-    try {
-      const permission = await this.respondPermission(
+    // Receipt-based: the local policy takes effect immediately and the ACP
+    // round trip must not delay the spoken confirmation. On delivery failure
+    // the policy rolls back and the authorization is still pending on the
+    // backend, so the gateway can re-announce it through the existing
+    // pending-permission retry path.
+    Promise.resolve()
+      .then(() => this.respondPermission(
         authorizationId,
         decision,
         { ownerId: this.ownerId },
-      )
-      await this.sendOutput(callId, {
-        status: permission.status,
-        authorization_id: permission.id,
-      }, turnId, permission.workId, {
-        response: {
-          instructions: decision === 'always'
-            ? [
-                '权限已经成功生效。',
-                '只用一句简短自然口语确认“已允许，后台继续执行”。',
-                '不要重述操作，不要再次询问或调用工具。',
-              ].join(' ')
-            : [
-                '权限已经成功拒绝。',
-                '只用一句简短自然口语确认“已拒绝，后台不会执行这项操作”。',
-                '不要重述操作，不要再次询问或调用工具。',
-              ].join(' '),
-        },
+      ))
+      .catch(error => {
+        if (previousPermissionMode) {
+          this.permissionPolicy?.setMode(
+            this.ownerId,
+            this.sessionId,
+            previousPermissionMode,
+          )
+        }
+        try {
+          this.onPermissionDeliveryFailed({
+            authorizationId,
+            decision,
+            taskId: pendingTask.id,
+            error: String(error?.message || error),
+          })
+        } catch {
+          // Delivery diagnostics must not break the voice session.
+        }
       })
-    } catch (error) {
-      if (previousPermissionMode) {
-        this.permissionPolicy?.setMode(
-          this.ownerId,
-          this.sessionId,
-          previousPermissionMode,
-        )
-      }
-      await this.sendOutput(
-        callId,
-        failure(
-          'permission_response_failed',
-          error?.message || '没有成功提交权限决定。',
-          { retryable: false },
-        ),
-        turnId,
-      )
-    }
+    await this.sendOutput(callId, {
+      status: 'submitted',
+      authorization_id: authorizationId,
+    }, turnId, pendingTask.id, {
+      response: {
+        instructions: decision === 'always'
+          ? [
+              '权限决定已提交，并在本会话立即生效。',
+              '只用一句简短自然口语确认“已允许，后台继续执行”。',
+              '不要重述操作，不要再次询问或调用工具。',
+            ].join(' ')
+          : [
+              '权限决定已提交。',
+              '只用一句简短自然口语确认“已拒绝，后台不会执行这项操作”。',
+              '不要重述操作，不要再次询问或调用工具。',
+            ].join(' '),
+      },
+    })
   }
 
   async cancelAgentTask(callId, turnId, args) {
@@ -817,9 +843,12 @@ export class ToolCallHandler {
     }, turnId)
   }
 
-  async userMemory(callId, turnId, args) {
+  async memory(callId, turnId, args) {
     const action = String(args.action || '').trim().toLowerCase()
-    const scope = String(args.scope || '').trim().toLowerCase()
+    // Omitted scope (or the legacy 'all' spelling) means every scope for the
+    // read-side actions; remember/replace still require a concrete scope.
+    const requestedScope = String(args.scope || '').trim().toLowerCase()
+    const scope = requestedScope === 'all' ? '' : canonicalScope(requestedScope)
     const content = String(args.content || '').trim()
     const query = String(args.query || '').trim()
     const memoryIds = Array.isArray(args.memory_ids)
@@ -831,17 +860,20 @@ export class ToolCallHandler {
       output = failure('memory_unavailable', '前台记忆功能当前不可用。')
     } else if (!['recall', 'remember', 'replace', 'forget'].includes(action)) {
       output = failure('invalid_memory_action', '没有识别出要执行的记忆操作。')
-    } else if (!isToolScope(scope)) {
+    } else if (scope && !isToolScope(scope)) {
       output = failure('invalid_memory_scope', '没有识别出记忆范围。')
     } else if (action === 'recall') {
-      const memories = this.memoryStore.list(this.ownerId, { scope, query })
+      const memories = this.memoryStore.list(this.ownerId, {
+        scope: scope || null,
+        query,
+      })
       output = {
         status: memories.length ? 'ok' : 'not_found',
         count: memories.length,
         memories,
       }
     } else if (action === 'remember' || action === 'replace') {
-      if (scope === 'all' || !content) {
+      if (!scope || !content) {
         output = failure('missing_memory', '需要明确记忆类型和要记住的内容。')
       } else if (action === 'replace' && !memoryIds.length) {
         output = failure(
@@ -889,7 +921,7 @@ export class ToolCallHandler {
       } else {
         try {
           const removed = this.memoryStore.forget(this.ownerId, {
-            scope,
+            scope: scope || null,
             query,
             all,
           })

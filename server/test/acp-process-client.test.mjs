@@ -1,7 +1,31 @@
 import assert from 'node:assert/strict'
+import { EventEmitter } from 'node:events'
+import { PassThrough } from 'node:stream'
 import test from 'node:test'
 import { AcpProcessClient } from '../src/agent/acp-process-client.mjs'
 import { openClawBackendDriver } from '../src/agent/backends/openclaw.mjs'
+
+test('keeps session object identity stable across re-registration', () => {
+  const client = new AcpProcessClient({
+    label: 'Test Agent',
+    command: 'unused',
+  })
+  const first = client.rememberSession('sess-1', { role: 'coordinator' })
+  // adapter 在同一引用上维护运行时路由字段（如权限事件回调）。
+  const onEvent = () => {}
+  first.onEvent = onEvent
+  first.coordinationRunId = 'work_current'
+
+  // resume 重新注册后必须仍是同一对象，否则权限请求会拿到
+  // 旧闭包快照，被路由到已完成的旧任务上。
+  const second = client.rememberSession('sess-1', { cwd: '/next' })
+  assert.equal(second, first)
+  assert.equal(client.sessions.get('sess-1'), first)
+  assert.equal(second.onEvent, onEvent)
+  assert.equal(second.coordinationRunId, 'work_current')
+  assert.equal(second.cwd, '/next')
+  assert.equal(second.role, 'coordinator')
+})
 
 test('shares an in-flight ACP initialization across concurrent callers', async () => {
   const client = new AcpProcessClient({
@@ -30,6 +54,113 @@ test('shares an in-flight ACP initialization across concurrent callers', async (
 
   assert.equal(await first, initialized)
   assert.equal(await second, initialized)
+})
+
+test('preserves ENOENT when a local ACP executable cannot be spawned', {
+  skip: process.platform === 'win32',
+}, async () => {
+  const client = new AcpProcessClient({
+    label: 'Missing Agent',
+    command: '__qwen_audio_agent_missing_acp__',
+  })
+
+  await assert.rejects(client.start(), error => {
+    assert.equal(error.code, 'ENOENT')
+    assert.equal(error.cause?.code, 'ENOENT')
+    return true
+  })
+})
+
+test('starts a POSIX ACP backend in a dedicated process group', async () => {
+  let options
+  const child = new EventEmitter()
+  Object.assign(child, {
+    pid: 4242,
+    exitCode: null,
+    signalCode: null,
+    stdin: new PassThrough(),
+    stdout: new PassThrough(),
+    stderr: new PassThrough(),
+    kill() {},
+  })
+  const client = new AcpProcessClient({
+    label: 'Test Agent',
+    command: 'test-agent',
+    platform: 'darwin',
+    killImpl() {
+      const error = new Error('missing process group')
+      error.code = 'ESRCH'
+      throw error
+    },
+    spawnImpl(_command, _args, spawnOptions) {
+      options = spawnOptions
+      process.nextTick(() => {
+        const error = new Error('test spawn failure')
+        error.code = 'ENOENT'
+        child.emit('error', error)
+      })
+      return child
+    },
+  })
+
+  await assert.rejects(client.start(), /进程启动失败/)
+  assert.equal(options.detached, true)
+  assert.deepEqual(options.stdio, ['pipe', 'pipe', 'pipe'])
+})
+
+test('escalates from SIGTERM to SIGKILL for a surviving POSIX process group', async () => {
+  const signals = []
+  let alive = true
+  const child = {
+    pid: 4242,
+    exitCode: 0,
+    signalCode: null,
+    kill() {
+      assert.fail('dedicated process groups should not fall back to child.kill')
+    },
+  }
+  const client = new AcpProcessClient({
+    label: 'Test Agent',
+    command: 'unused',
+    platform: 'darwin',
+    killImpl(pid, signal) {
+      assert.equal(pid, -4242)
+      if (signal === 0) {
+        if (alive) return
+        const error = new Error('gone')
+        error.code = 'ESRCH'
+        throw error
+      }
+      signals.push(signal)
+      if (signal === 'SIGKILL') alive = false
+    },
+  })
+
+  await client.stopProcessTree(child, 1)
+  assert.deepEqual(signals, ['SIGTERM', 'SIGKILL'])
+})
+
+test('uses taskkill tree cleanup on Windows and forces only after failure', async () => {
+  const calls = []
+  const client = new AcpProcessClient({
+    label: 'Test Agent',
+    command: 'unused',
+    platform: 'win32',
+    treeSpawnImpl(command, args, options) {
+      calls.push([command, args, options])
+      const killer = new EventEmitter()
+      killer.unref = () => {}
+      process.nextTick(() => killer.emit('exit', calls.length === 1 ? 1 : 0))
+      return killer
+    },
+  })
+
+  await client.stopProcessTree({ pid: 4242 })
+  assert.deepEqual(calls.map(call => call.slice(0, 2)), [
+    ['taskkill', ['/PID', '4242', '/T']],
+    ['taskkill', ['/PID', '4242', '/T', '/F']],
+  ])
+  assert.equal(calls.every(call => call[2].windowsHide), true)
 })
 
 test('applies backend-specific ACP error and output formatting hooks', async () => {

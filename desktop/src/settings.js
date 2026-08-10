@@ -11,11 +11,14 @@ import { updaterButtonState, updaterStatusText } from './update-status.mjs'
 
 const form = document.querySelector('#settings-form')
 const gatewayUrl = document.querySelector('#gateway-url')
-const orbStyle = document.querySelector('#orb-style')
+const orbSkinSelect = document.querySelector('#orb-style')
+const importSkinButton = document.querySelector('#import-skin')
+const removeSkinButton = document.querySelector('#remove-skin')
 const autoHideSeconds = document.querySelector('#auto-hide-seconds')
 const wakeShortcut = document.querySelector('#wake-shortcut')
 const recordWakeShortcut = document.querySelector('#record-wake-shortcut')
 const resetWakeShortcut = document.querySelector('#reset-wake-shortcut')
+const wakeWordEnabled = document.querySelector('#wake-word-enabled')
 const dashscopeApiKey = document.querySelector('#dashscope-api-key')
 const realtimeProviderInputs = [
   ...document.querySelectorAll('input[name="realtime-provider"]'),
@@ -33,6 +36,9 @@ const backendList = document.querySelector('#backend-list')
 const refreshBackends = document.querySelector('#refresh-backends')
 const realtimeModel = document.querySelector('#realtime-model')
 const backendModel = document.querySelector('#backend-model')
+const nodePathInput = document.querySelector('#node-path')
+const applyNodePath = document.querySelector('#apply-node-path')
+const nodePathRow = document.querySelector('.node-path-row')
 const getApiKey = document.querySelector('#get-api-key')
 const message = document.querySelector('#message')
 const currentRealtime = document.querySelector('#current-realtime')
@@ -46,6 +52,7 @@ const settingsTabs = [...document.querySelectorAll('[data-settings-tab]')]
 const settingsPanels = [...document.querySelectorAll('[data-settings-panel]')]
 
 let settings
+let skins = []
 let runtime
 let backendReport = null
 let appliedFingerprint = ''
@@ -265,6 +272,7 @@ function truncate(text, max = 80) {
 }
 
 let installingBackend = ''
+let pendingNodePathBackend = ''
 let installProgressText = ''
 
 function selectedBackend() {
@@ -368,12 +376,27 @@ function renderBackendOptions(currentValue) {
   }))
 }
 
-// npm 缺失时的引导：错误文案 + Node.js 下载链接（经主进程 openExternal）。
-function showNodejsInstallGuidance(text) {
+// npm 缺失时的引导：错误文案 + 指定路径入口 + Node.js 下载链接。
+function showNodejsInstallGuidance(text, backendId) {
   showMessage(
     text || '未找到 npm，请先安装 Node.js（自带 npm）后重试。',
     'error',
   )
+  // 记住是哪个后台 Agent 需要安装，路径确认后自动重试
+  pendingNodePathBackend = backendId || ''
+  // 指定路径入口
+  if (nodePathRow && nodePathRow.hidden) {
+    const specifyBtn = document.createElement('button')
+    specifyBtn.type = 'button'
+    specifyBtn.className = 'message-link'
+    specifyBtn.textContent = '指定 Node.js 路径'
+    specifyBtn.addEventListener('click', () => {
+      nodePathRow.hidden = false
+      nodePathInput.focus()
+    })
+    message.append(' ', specifyBtn)
+  }
+  // 下载链接
   const link = document.createElement('button')
   link.type = 'button'
   link.className = 'message-link'
@@ -396,7 +419,7 @@ async function installBackendRow(id) {
     if (!result?.ok) {
       // 用户在确认框取消属于正常操作，不提示；其余失败行内 + 消息条。
       if (result?.error?.code === 'NPM_MISSING') {
-        showNodejsInstallGuidance(result.error.message)
+        showNodejsInstallGuidance(result.error.message, id)
       } else if (result?.error?.code !== 'DECLINED') {
         showMessage(result?.error?.message || '安装失败', 'error')
       }
@@ -485,6 +508,7 @@ function backendLabel(value) {
   if (value === 'opencode') return 'OpenCode'
   if (value === 'openclaw') return 'OpenClaw'
   if (value === 'qoder') return 'Qoder'
+  if (value === 'qwen') return 'Qwen Code'
   if (value === 'kimi') return 'Kimi Code'
   if (value === 'hermes') return 'Hermes'
   if (value === 'codebuddy') return 'CodeBuddy'
@@ -523,9 +547,10 @@ const BAILIAN_API_KEY_URL = 'https://bailian.console.aliyun.com/?tab=model#/api-
 function formSettings() {
   return {
     gatewayUrl: gatewayUrl.value,
-    orbStyle: orbStyle.value,
+    orbSkin: orbSkinSelect.value,
     autoHideSeconds: Number(autoHideSeconds.value),
     wakeShortcut: wakeShortcut.value,
+    wakeWordEnabled: wakeWordEnabled.checked,
     dashscopeApiKey: dashscopeApiKey.value,
     realtimeProvider: selectedRealtimeProvider(),
     agentProtocol: selectedBackend(),
@@ -533,15 +558,17 @@ function formSettings() {
     speechToSpeechRealtimeUrl: speechToSpeechRealtimeUrl.value,
     speechToSpeechAuthToken: speechToSpeechAuthToken.value,
     backendModel: backendModel.value,
+    nodePath: nodePathInput.value.trim(),
   }
 }
 
 function fingerprint(value) {
   return JSON.stringify({
     gatewayUrl: value.gatewayUrl,
-    orbStyle: value.orbStyle,
+    orbSkin: value.orbSkin,
     autoHideSeconds: value.autoHideSeconds,
     wakeShortcut: value.wakeShortcut,
+    wakeWordEnabled: value.wakeWordEnabled,
     dashscopeApiKey: value.dashscopeApiKey,
     realtimeProvider: value.realtimeProvider,
     agentProtocol: value.agentProtocol,
@@ -549,6 +576,7 @@ function fingerprint(value) {
     speechToSpeechRealtimeUrl: value.speechToSpeechRealtimeUrl,
     speechToSpeechAuthToken: value.speechToSpeechAuthToken,
     backendModel: value.backendModel,
+    nodePath: value.nodePath,
   })
 }
 
@@ -685,9 +713,46 @@ refreshBackends.addEventListener('click', () => {
   void detectBackendOptions(true)
 })
 
+function updateRemoveSkinState() {
+  // 只有选中已导入的 sprite 皮肤时才可删除；内置外观不可。
+  removeSkinButton.disabled = !skins.some(skin => (
+    skin.type === 'sprite' && skin.id === orbSkinSelect.value
+  ))
+}
+
+function renderSkinOptions(selected) {
+  orbSkinSelect.textContent = ''
+  const groups = [
+    { label: '内置', type: 'theme' },
+    { label: '已导入皮肤', type: 'sprite' },
+  ]
+  for (const group of groups) {
+    const items = skins.filter(skin => skin.type === group.type)
+    if (!items.length) continue
+    const optgroup = document.createElement('optgroup')
+    optgroup.label = group.label
+    for (const skin of items) {
+      const option = document.createElement('option')
+      option.value = skin.id
+      option.textContent = skin.displayName || skin.id
+      optgroup.append(option)
+    }
+    orbSkinSelect.append(optgroup)
+  }
+  // 皮肤包被手动删除后配置仍可能指向它：保留选项让用户看到现状。
+  if (selected && !skins.some(skin => skin.id === selected)) {
+    const missing = document.createElement('option')
+    missing.value = selected
+    missing.textContent = `${selected}（缺失）`
+    orbSkinSelect.append(missing)
+  }
+  orbSkinSelect.value = selected || 'fluid'
+  updateRemoveSkinState()
+}
+
 function render() {
   gatewayUrl.value = settings.gatewayUrl
-  orbStyle.value = settings.orbStyle
+  renderSkinOptions(settings.orbSkin)
   const hideValue = String(settings.autoHideSeconds ?? 120)
   autoHideSeconds.querySelector('[data-custom]')?.remove()
   if (![...autoHideSeconds.options].some(option => option.value === hideValue)) {
@@ -699,6 +764,7 @@ function render() {
   }
   autoHideSeconds.value = hideValue
   wakeShortcut.value = settings.wakeShortcut
+  wakeWordEnabled.checked = settings.wakeWordEnabled || false
   recordingWakeShortcut = false
   renderWakeShortcut()
   dashscopeApiKey.value = settings.dashscopeApiKey || ''
@@ -709,6 +775,7 @@ function render() {
   speechToSpeechAuthToken.value = settings.speechToSpeechAuthToken || ''
   renderRealtimeProvider(settings.realtimeProvider)
   backendModel.value = settings.backendModel || ''
+  nodePathInput.value = settings.nodePath || ''
   renderRuntime()
   appliedFingerprint = fingerprint(formSettings())
   updateApplyState()
@@ -716,14 +783,16 @@ function render() {
 
 for (const control of [
   gatewayUrl,
-  orbStyle,
+  orbSkinSelect,
   autoHideSeconds,
   dashscopeApiKey,
   speechToSpeechRealtimeUrl,
   speechToSpeechAuthToken,
   realtimeModel,
   backendModel,
+  nodePathInput,
   ...realtimeProviderInputs,
+  wakeWordEnabled,
 ]) {
   control.addEventListener('input', () => {
     showMessage('')
@@ -740,6 +809,78 @@ for (const control of [
 
 getApiKey.addEventListener('click', () => {
   window.qwenAudioAgentDesktop.openExternal(BAILIAN_API_KEY_URL)
+})
+
+orbSkinSelect.addEventListener('change', updateRemoveSkinState)
+
+importSkinButton.addEventListener('click', async () => {
+  importSkinButton.disabled = true
+  try {
+    const imported = await window.qwenAudioAgentDesktop.importSkin()
+    if (!imported) return
+    skins = [
+      ...skins.filter(skin => skin.id !== imported.id),
+      { id: imported.id, type: 'sprite', displayName: imported.displayName },
+    ]
+    renderSkinOptions(imported.id)
+    showMessage(`已导入皮肤 ${imported.displayName}，点击应用后生效。`, 'notice')
+    updateApplyState()
+  } catch (error) {
+    showMessage(friendlyError(error, '导入皮肤失败'), 'error')
+  } finally {
+    importSkinButton.disabled = false
+    updateRemoveSkinState()
+  }
+})
+
+removeSkinButton.addEventListener('click', async () => {
+  const id = orbSkinSelect.value
+  const skin = skins.find(item => item.type === 'sprite' && item.id === id)
+  if (!skin) return
+  removeSkinButton.disabled = true
+  try {
+    await window.qwenAudioAgentDesktop.removeSkin(id)
+    skins = skins.filter(item => item.id !== id)
+    // 删掉的可能正是当前皮肤：回到内置外观，由用户点应用持久化。
+    renderSkinOptions('fluid')
+    showMessage(`已删除皮肤 ${skin.displayName}，点击应用后生效。`, 'notice')
+    updateApplyState()
+  } catch (error) {
+    showMessage(friendlyError(error, '删除皮肤失败'), 'error')
+  } finally {
+    updateRemoveSkinState()
+  }
+})
+
+// "确认"按钮：保存自定义 Node.js 路径后立即重检并重试安装
+applyNodePath.addEventListener('click', async () => {
+  const path = nodePathInput.value.trim()
+  if (!path) {
+    showMessage('请填写 Node.js 安装目录', 'error')
+    return
+  }
+  applyNodePath.disabled = true
+  showMessage('正在保存路径…')
+  const retryId = pendingNodePathBackend
+  pendingNodePathBackend = ''
+  try {
+    await window.qwenAudioAgentDesktop.setNodePath(path)
+    nodePathRow.hidden = true
+    showMessage('路径已保存，正在重新检测…')
+    await detectBackendOptions(true)
+    // 自动重试之前失败的安装
+    if (retryId) {
+      showMessage(`正在重新安装 ${backendLabel(retryId)}…`)
+      await installBackendRow(retryId)
+    }
+  } catch (err) {
+    showMessage(
+      err?.message || '保存失败，请重试',
+      'error',
+    )
+  } finally {
+    applyNodePath.disabled = false
+  }
 })
 
 form.addEventListener('submit', async event => {
@@ -779,6 +920,7 @@ form.addEventListener('submit', async event => {
 
 window.qwenAudioAgentDesktop.loadSettings().then(value => {
   settings = value.settings
+  skins = value.skins || []
   runtime = value.runtime
   renderWakeShortcutStatus(value.wakeShortcutRegistered)
   render()

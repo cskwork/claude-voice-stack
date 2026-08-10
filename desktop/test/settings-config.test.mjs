@@ -9,6 +9,7 @@ import {
 
 const REALTIME_DEFAULTS = {
   wakeShortcut: 'CommandOrControl+Shift+Space',
+  wakeWordEnabled: false,
   realtimeProvider: 'dashscope',
   realtimeModel: 'qwen-audio-3.0-realtime-plus',
   speechToSpeechRealtimeUrl: '',
@@ -19,11 +20,13 @@ test('reads desktop-owned settings with friendly defaults', () => {
   assert.deepEqual(parseSettings(''), {
     gatewayUrl: 'http://127.0.0.1:3101',
     orbStyle: 'fluid',
-    autoHideSeconds: 120,
+    orbSkin: 'fluid',
+    autoHideSeconds: 60,
     dashscopeApiKey: '',
     ...REALTIME_DEFAULTS,
     agentProtocol: 'none',
     backendModel: '',
+    nodePath: '',
   })
 })
 
@@ -35,11 +38,13 @@ test('shows effective client settings when user config is empty', () => {
   }), {
     gatewayUrl: 'http://127.0.0.1:3200',
     orbStyle: 'goo',
-    autoHideSeconds: 120,
+    orbSkin: 'goo',
+    autoHideSeconds: 60,
     dashscopeApiKey: 'sk-from-env',
     ...REALTIME_DEFAULTS,
     agentProtocol: 'none',
     backendModel: '',
+    nodePath: '',
   })
 })
 
@@ -68,12 +73,14 @@ test('updates client settings without changing Gateway-owned configuration', () 
   assert.deepEqual(parseSettings(content), {
     gatewayUrl: 'http://127.0.0.1:3200',
     orbStyle: 'goo',
+    orbSkin: 'goo',
     autoHideSeconds: 120,
     dashscopeApiKey: 'secret',
     ...REALTIME_DEFAULTS,
     agentProtocol: 'qoder',
     realtimeModel: 'realtime-model',
     backendModel: '',
+    nodePath: '',
   })
 })
 
@@ -121,11 +128,13 @@ test('an explicitly empty key and backend override stale process values', () => 
   }), {
     gatewayUrl: 'http://127.0.0.1:3101',
     orbStyle: 'fluid',
-    autoHideSeconds: 120,
+    orbSkin: 'fluid',
+    autoHideSeconds: 60,
     dashscopeApiKey: '',
     ...REALTIME_DEFAULTS,
     agentProtocol: 'none',
     backendModel: '',
+    nodePath: '',
   })
 })
 
@@ -151,10 +160,39 @@ test('reads, updates, and disables desktop auto hide', () => {
   ).autoHideSeconds, 0)
   assert.equal(parseSettings(
     'QWEN_AUDIO_DESKTOP_AUTO_HIDE_SECONDS=5\n',
-  ).autoHideSeconds, 120)
+  ).autoHideSeconds, 60)
   assert.equal(parseSettings(
     'QWEN_AUDIO_DESKTOP_AUTO_SLEEP_SECONDS=300\n',
   ).autoHideSeconds, 300)
+})
+
+test('reads, updates, and falls back the orb skin selection', () => {
+  // 新配置：QWEN_AUDIO_ORB_SKIN 直接生效，写回不碰旧 orbStyle 行。
+  const content = updateSettingsContent(
+    'QWEN_AUDIO_ORB_STYLE=goo\n',
+    { orbSkin: 'firefly--lingxiaotian' },
+  )
+  assert.match(content, /QWEN_AUDIO_ORB_SKIN=firefly--lingxiaotian/)
+  assert.match(content, /QWEN_AUDIO_ORB_STYLE=goo/)
+  assert.equal(parseSettings(content).orbSkin, 'firefly--lingxiaotian')
+
+  // 旧配置只有 orbStyle 时收敛为 orbSkin。
+  assert.equal(parseSettings('QWEN_AUDIO_ORB_STYLE=goo\n').orbSkin, 'goo')
+
+  // 非法 id 回退 fluid；空值回退 orbStyle。
+  assert.equal(
+    parseSettings('QWEN_AUDIO_ORB_SKIN=../escape\n').orbSkin,
+    'fluid',
+  )
+  assert.equal(parseSettings([
+    'QWEN_AUDIO_ORB_SKIN=',
+    'QWEN_AUDIO_ORB_STYLE=goo',
+    '',
+  ].join('\n')).orbSkin, 'goo')
+  assert.match(
+    updateSettingsContent('', { orbSkin: 'bad id!' }),
+    /QWEN_AUDIO_ORB_SKIN=fluid\n$/,
+  )
 })
 
 test('reads and updates a supported desktop wake shortcut', () => {
@@ -340,9 +378,12 @@ test('desktop settings expose the embedded voice service without editing backend
   assert.match(html, /id="wake-shortcut"/)
   assert.match(html, /id="record-wake-shortcut"/)
   assert.match(html, /id="reset-wake-shortcut"/)
-  assert.match(html, />自动隐藏</)
+  assert.match(html, /id="wake-word-enabled"/)
+  assert.match(html, />自动休眠</)
   assert.match(html, />显示快捷键</)
-  assert.doesNotMatch(html, />自动休眠</)
+  assert.match(html, />语音唤醒</)
+  assert.doesNotMatch(html, />空闲休眠</)
+  assert.doesNotMatch(html, />自动隐藏</)
   assert.doesNotMatch(html, />全局快捷键</)
   // 后台 Agent 列表按本机可用性检测结果动态渲染，HTML 里只保留空容器
   assert.match(html, /<div\s+id="backend-list"/)

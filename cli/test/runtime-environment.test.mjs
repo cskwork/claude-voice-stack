@@ -23,21 +23,6 @@ function fixture() {
   const homeDirectory = resolve(base, 'home')
   mkdirSync(root, { recursive: true })
   mkdirSync(homeDirectory, { recursive: true })
-  for (const backend of [
-    'opencode',
-    'openclaw',
-    'qoder',
-    'kimi',
-    'hermes',
-    'codebuddy',
-    'codex',
-    'claude',
-    'acp',
-  ]) {
-    const workspace = resolve(root, `config/${backend}/workspace`)
-    mkdirSync(workspace, { recursive: true })
-    writeFileSync(resolve(workspace, 'AGENTS.md'), `# ${backend}\n`)
-  }
   const codeBuddyConfig = resolve(
     root,
     'config/codebuddy/workspace/.codebuddy',
@@ -213,6 +198,10 @@ test('keeps managed backend data outside the installation directory', () => {
     resolve(result.configDirectory, 'workspaces/qoder'),
   )
   assert.equal(
+    result.qwenCodeWorkspace,
+    resolve(result.configDirectory, 'workspaces/qwen'),
+  )
+  assert.equal(
     result.kimiWorkspace,
     resolve(result.configDirectory, 'workspaces/kimi'),
   )
@@ -251,6 +240,7 @@ test('keeps managed backend data outside the installation directory', () => {
   )
   assert.equal(env.OPENCLAW_STATE_DIR, undefined)
   assert.equal(env.QODER_WORKSPACE, result.qoderWorkspace)
+  assert.equal(env.QWEN_CODE_WORKSPACE, result.qwenCodeWorkspace)
   assert.equal(env.KIMI_WORKSPACE, result.kimiWorkspace)
   assert.equal(env.HERMES_WORKSPACE, result.hermesWorkspace)
   assert.equal(env.CODEBUDDY_WORKSPACE, result.codeBuddyWorkspace)
@@ -264,9 +254,9 @@ test('keeps managed backend data outside the installation directory', () => {
     )),
     false,
   )
-  assert.match(
-    readFileSync(resolve(result.openCodeWorkspace, 'AGENTS.md'), 'utf8'),
-    /opencode/,
+  assert.equal(
+    existsSync(resolve(result.openCodeWorkspace, 'AGENTS.md')),
+    false,
   )
 })
 

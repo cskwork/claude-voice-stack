@@ -4,6 +4,10 @@ import {
   normalizeBackendProtocol,
 } from '../../shared/backend-catalog.mjs'
 import {
+  normalizeOrbSkinId,
+  resolveOrbSkinId,
+} from '../../shared/orb-skin-catalog.mjs'
+import {
   DEFAULT_DASHSCOPE_REALTIME_MODEL,
   DEFAULT_REALTIME_PROVIDER,
   DEFAULT_SPEECH_TO_SPEECH_REALTIME_URL,
@@ -13,8 +17,10 @@ import {
 const DEFAULTS = {
   gatewayUrl: 'http://127.0.0.1:3101',
   orbStyle: 'fluid',
-  autoHideSeconds: 120,
+  orbSkin: 'fluid',
+  autoHideSeconds: 60,
   wakeShortcut: 'CommandOrControl+Shift+Space',
+  wakeWordEnabled: false,
   dashscopeApiKey: '',
   realtimeProvider: DEFAULT_REALTIME_PROVIDER,
   agentProtocol: 'none',
@@ -22,13 +28,16 @@ const DEFAULTS = {
   speechToSpeechRealtimeUrl: '',
   speechToSpeechAuthToken: '',
   backendModel: '',
+  nodePath: '',
 }
 
 const SETTING_KEYS = {
   gatewayUrl: 'QWEN_AUDIO_AGENT_URL',
   orbStyle: 'QWEN_AUDIO_ORB_STYLE',
+  orbSkin: 'QWEN_AUDIO_ORB_SKIN',
   autoHideSeconds: 'QWEN_AUDIO_DESKTOP_AUTO_HIDE_SECONDS',
   wakeShortcut: 'QWEN_AUDIO_DESKTOP_WAKE_SHORTCUT',
+  wakeWordEnabled: 'QWEN_AUDIO_WAKE_WORD_ENABLED',
   dashscopeApiKey: 'DASHSCOPE_API_KEY',
   realtimeProvider: 'QWEN_AUDIO_REALTIME_PROVIDER',
   agentProtocol: 'AGENT_PROTOCOL',
@@ -36,6 +45,7 @@ const SETTING_KEYS = {
   speechToSpeechRealtimeUrl: 'SPEECH_TO_SPEECH_REALTIME_URL',
   speechToSpeechAuthToken: 'SPEECH_TO_SPEECH_AUTH_TOKEN',
   backendModel: 'QWEN_AUDIO_AGENT_BACKEND_MODEL',
+  nodePath: 'QWEN_AUDIO_AGENT_NODE_PATH',
 }
 
 function configured(values, key, fallback) {
@@ -139,6 +149,11 @@ export function parseSettings(content = '', fallback = {}) {
     'QWEN_AUDIO_ORB_STYLE',
     fallback.QWEN_AUDIO_ORB_STYLE || '',
   )
+  const configuredOrbSkin = configured(
+    values,
+    'QWEN_AUDIO_ORB_SKIN',
+    fallback.QWEN_AUDIO_ORB_SKIN || '',
+  )
   const configuredS2sUrl = configured(
     values,
     'SPEECH_TO_SPEECH_REALTIME_URL',
@@ -170,6 +185,11 @@ export function parseSettings(content = '', fallback = {}) {
     orbStyle: ['fluid', 'goo'].includes(
       String(configuredOrbStyle).toLowerCase(),
     ) ? String(configuredOrbStyle).toLowerCase() : DEFAULTS.orbStyle,
+    // 旧配置只有 QWEN_AUDIO_ORB_STYLE 时自动收敛为 orbSkin。
+    orbSkin: resolveOrbSkinId({
+      orbSkin: configuredOrbSkin,
+      orbStyle: configuredOrbStyle,
+    }),
     autoHideSeconds: cleanAutoHideSeconds(configured(
       values,
       'QWEN_AUDIO_DESKTOP_AUTO_HIDE_SECONDS',
@@ -186,6 +206,13 @@ export function parseSettings(content = '', fallback = {}) {
       'QWEN_AUDIO_DESKTOP_WAKE_SHORTCUT',
       fallback.QWEN_AUDIO_DESKTOP_WAKE_SHORTCUT ?? DEFAULTS.wakeShortcut,
     )),
+    wakeWordEnabled: String(
+      configured(
+        values,
+        'QWEN_AUDIO_WAKE_WORD_ENABLED',
+        fallback.QWEN_AUDIO_WAKE_WORD_ENABLED || '',
+      ),
+    ).toLowerCase() === 'true',
     dashscopeApiKey: String(configuredApiKey || '').trim(),
     realtimeProvider,
     agentProtocol: cleanAgentProtocol(configured(
@@ -210,6 +237,11 @@ export function parseSettings(content = '', fallback = {}) {
       'QWEN_AUDIO_AGENT_BACKEND_MODEL',
       fallback.QWEN_AUDIO_AGENT_BACKEND_MODEL || DEFAULTS.backendModel,
     ) || '').trim(),
+    nodePath: String(configured(
+      values,
+      'QWEN_AUDIO_AGENT_NODE_PATH',
+      fallback.QWEN_AUDIO_AGENT_NODE_PATH || DEFAULTS.nodePath,
+    ) || '').trim(),
   }
 }
 
@@ -232,12 +264,14 @@ export function normalizeSettings(settings = {}) {
     )
       ? String(settings.orbStyle || DEFAULTS.orbStyle).toLowerCase()
       : DEFAULTS.orbStyle,
+    orbSkin: normalizeOrbSkinId(settings.orbSkin) || DEFAULTS.orbSkin,
     autoHideSeconds: cleanAutoHideSeconds(
       settings.autoHideSeconds ?? DEFAULTS.autoHideSeconds,
     ),
     wakeShortcut: cleanWakeShortcut(
       settings.wakeShortcut ?? DEFAULTS.wakeShortcut,
     ),
+    wakeWordEnabled: Boolean(settings.wakeWordEnabled),
     dashscopeApiKey: String(
       settings.dashscopeApiKey ?? DEFAULTS.dashscopeApiKey,
     ).trim(),
@@ -262,6 +296,9 @@ export function normalizeSettings(settings = {}) {
     ).trim(),
     backendModel: String(
       settings.backendModel ?? DEFAULTS.backendModel,
+    ).trim(),
+    nodePath: String(
+      settings.nodePath ?? DEFAULTS.nodePath,
     ).trim(),
   }
 }
@@ -293,14 +330,21 @@ export function updateSettingsContent(content = '', settings = {}) {
         encoded(normalized[field]),
       ]),
   )
+  // Legacy keys that were merged into auto-hide. Drop them so the saved
+  // config no longer carries a divergent sleep timeout.
+  const legacy = new Set([
+    'QWEN_AUDIO_SLEEP_TIMEOUT_SECONDS',
+    'QWEN_AUDIO_DESKTOP_AUTO_SLEEP_SECONDS',
+  ])
   const seen = new Set()
   const lines = content.split(/\r?\n/).map(line => {
     const match = line.match(/^([A-Z][A-Z0-9_]*)\s*=/)
     const key = match?.[1]
+    if (key && legacy.has(key)) return null
     if (!key || !(key in values) || seen.has(key)) return line
     seen.add(key)
     return `${key}=${values[key]}`
-  })
+  }).filter(line => line !== null)
   for (const key of Object.keys(values)) {
     if (!seen.has(key)) lines.push(`${key}=${values[key]}`)
   }

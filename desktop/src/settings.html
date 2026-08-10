@@ -208,6 +208,27 @@
                   placeholder="留空使用默认模型"
                 />
               </div>
+
+              <div class="setting-row node-path-row" hidden>
+                <label for="node-path">Node.js 路径</label>
+                <div class="field-with-action">
+                  <input
+                    id="node-path"
+                    type="text"
+                    autocomplete="off"
+                    spellcheck="false"
+                    placeholder="例如 C:\tools\nodejs"
+                  />
+                  <button
+                    id="apply-node-path"
+                    class="link-button"
+                    type="button"
+                  >确认</button>
+                </div>
+                <p class="setting-hint">
+                  如果自动检测不到 npm，请在这里填写 Node.js 安装目录（包含 node.exe 的文件夹路径）。
+                </p>
+              </div>
             </div>
           </section>
 
@@ -227,20 +248,34 @@
 
               <div class="setting-row">
                 <label for="orb-style">外观</label>
-                <select id="orb-style">
-                  <option value="fluid">流光声波球</option>
-                  <option value="goo">液态渐变球</option>
+                <div class="setting-inline">
+                  <select id="orb-style"></select>
+                  <div class="manage-buttons" role="group" aria-label="管理皮肤">
+                    <button type="button" id="import-skin" title="导入皮肤…" aria-label="导入皮肤">＋</button>
+                    <button type="button" id="remove-skin" title="删除所选皮肤" aria-label="删除所选皮肤" disabled>－</button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="setting-row">
+                <label for="auto-hide-seconds">自动休眠</label>
+                <select id="auto-hide-seconds">
+                  <option value="0">永不</option>
+                  <option value="60">1 分钟</option>
+                  <option value="300">5 分钟</option>
+                  <option value="600">10 分钟</option>
                 </select>
               </div>
 
               <div class="setting-row">
-                <label for="auto-hide-seconds">自动隐藏</label>
-                <select id="auto-hide-seconds">
-                  <option value="60">无交互 1 分钟</option>
-                  <option value="120">无交互 2 分钟</option>
-                  <option value="300">无交互 5 分钟</option>
-                  <option value="0">永不</option>
-                </select>
+                <label for="wake-word-enabled">语音唤醒</label>
+                <div class="toggle-field">
+                  <label class="toggle-switch">
+                    <input id="wake-word-enabled" type="checkbox" />
+                    <span class="toggle-track"></span>
+                  </label>
+                  <span class="toggle-hint">休眠后说出"你好千问"即可唤醒</span>
+                </div>
               </div>
 
               <div class="setting-row">

@@ -3,6 +3,11 @@ productName: Qwen Audio Agent
 electronVersion: 43.2.0
 asar: true
 npmRebuild: false
+asarUnpack:
+  - node_modules/sherpa-onnx/**/*.wasm
+  # open-computer-use is spawned by external backend Agent processes (plain
+  # node + native runtimes), which cannot read files inside the asar archive.
+  - node_modules/@qwen-code/open-computer-use/**/*
 extraMetadata:
   main: desktop/src/main.mjs
 
@@ -63,6 +68,17 @@ linux:
     - AppImage
     - deb
   artifactName: qwen-audio-agent-${version}-linux-${arch}.${ext}
+
+win:
+  icon: desktop/build/icon.png
+  target:
+    - nsis
+  artifactName: qwen-audio-agent-${version}-win-${arch}.${ext}
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  perMachine: false
 
 dmg:
   title: Qwen Audio Agent

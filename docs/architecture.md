@@ -14,7 +14,7 @@ layers:
    requiring tools, current information, files, applications, code, or
    multi-step work.
 
-The backend may be OpenCode, OpenClaw, Qoder, Kimi Code, or another
+The backend may be OpenCode, OpenClaw, Qoder, Qwen Code, Kimi Code, or another
 ACP-compatible Agent.
 It may internally use tools, skills, agents, or other Sessions. Those are
 backend-private implementation details and do not create additional
@@ -53,27 +53,29 @@ item is sent into the Backend Agent Session at a time.
 
 ## 3. Realtime boundary
 
-Realtime has exactly seven tools:
+Realtime keeps a deliberately small tool set — few tools, low latency, no
+multi-step orchestration. The base tools are:
 
 ```text
 spawn_thinking
+schedule_reminder
 cancel_agent_task
 get_agent_task_status
 get_current_time
-user_memory
+memory
 notes
 respond_agent_permission
 ```
 
-`user_memory` keeps one small protocol for frontend-owned memory:
+`memory` keeps one small protocol for frontend-owned memory:
 
-- `recall` reads profile or long-term text records and returns stable IDs;
+- `recall` reads profile or fact records and returns stable IDs;
 - `remember` adds a new durable fact;
 - `replace` atomically replaces recalled IDs when the user corrects a fact;
 - `forget` removes explicitly requested records.
 
 Records live in three scopes: `profile` (name, timezone, locale, stable
-interaction preferences), `long_term` (durable personal facts), and `rules`
+interaction preferences), `facts` (durable personal facts), and `rules`
 (user-authored standing instructions: speaking style, forms of address, default
 ways of doing things). `rules` are user-authorized directives, not memory data:
 they are always injected into the Realtime context as `User Directives`, take
@@ -82,18 +84,24 @@ utterance. They never authorize leaking internal structure, skipping
 permission checks, or changing the assistant's identity; entries that demand
 those are void. Rules are bounded to 16 short entries so they can be injected
 in full on every turn, and they are attached to the backend Agent envelope as
-user-authored preference material. `profile` and `long_term` remain
+user-authored preference material. `profile` and `facts` remain
 read-on-demand data.
+
+Besides explicit tool writes, a session-end extractor distils durable personal
+facts from the transcript into `facts` entries tagged `source: 'inferred'`.
+The automatic path can never write `rules` or `profile`, filters sensitive
+content, records every operation in a local audit file, and disables itself
+silently when no text-model API key is configured.
 
 `notes` manages user-named lists (shopping lists, todos, reading lists) as
 frontend-owned volatile collections: single-call add, show, match-remove,
 clear, and drop with no backend involvement. Lists are item data, not memory;
-stable facts remain in `user_memory`, and list items are never written into
+stable facts remain in `memory`, and list items are never written into
 memory or rules. Item and list resolution matches exact text first, then a
 unique case-insensitive substring, and otherwise reports ambiguity with the
 candidate names back to the model for clarification. `clear` and `drop`
 additionally require an explicit current-turn user utterance before executing,
-like `user_memory` forget.
+like `memory` forget.
 
 Only the marked managed section of `USER.md` is editable. User-maintained profile
 text outside that section is returned as read-only data and cannot be replaced.
@@ -275,7 +283,7 @@ after the asynchronous Session tool has already succeeded.
 ## 8. Backend-internal capabilities
 
 For ACP backends that accept client-supplied MCP servers, including OpenCode,
-Qoder, and Kimi Code, the Gateway injects the same five tools into the
+Qoder, Qwen Code, and Kimi Code, the Gateway injects the same five tools into the
 coordinator: Session list, start, send, status, and cancel. OpenClaw ACP does
 not accept client-supplied MCP servers, so the same coordination contract maps
 to OpenClaw's native Session tools. `session_start` and `session_send` return an
@@ -305,14 +313,14 @@ backend Agent envelope
 Shared ACP adapter
    ↓
 OpenCode ACP, OpenClaw ACP bridge, Qoder ACP,
-Kimi Code ACP, or another ACP Agent
+Qwen Code ACP, Kimi Code ACP, or another ACP Agent
 ```
 
 Backend-specific API details belong only in `server/src/agent`. Realtime tools
 must not import backend adapters. The UI consumes only public Work events and
 final timeline content. Package-level `shared` modules are foundational runtime
-utilities; server `core` may depend on them, but they must not depend on server
-layers.
+utilities; server `core` and `process` may depend on them, but they must not
+depend on server layers.
 
 Gateway may serve the immutable `web/dist` artifact as a deployment
 convenience, but this is static hosting only. Gateway source must not import UI
@@ -322,15 +330,46 @@ own labels and interaction patterns.
 
 ## 10. Process ownership
 
-The Gateway is the only core product service. The shared adapter owns one ACP
-stdio child and stops it with the Gateway. OpenCode, Qoder, and Kimi Code run
-directly as ACP agents; OpenCode may additionally expose its native local
-Session UI.
-OpenClaw uses a small ACP bridge. Its adapter always starts and owns a dedicated
-OpenClaw Gateway with isolated runtime and Session state. It may reuse the
-user's model and capability configuration, but it never attaches to or shares
-Session storage with a user-running OpenClaw Gateway, and it does not activate
-the user's external message channels.
+The Gateway is the only core product service. Backend lifecycles use one shared
+`owned/external` ownership model:
+
+- `owned`: Gateway starts the required local backend processes and stops them
+  on exit. The native backend process loads its own user configuration, models,
+  tools, and MCP servers; the adapter supplies only protocol parameters and
+  required shared capabilities.
+- `external`: available only to backends declaring external-service support.
+  Gateway does not start, move, or stop that backend. It connects through the
+  backend's published protocol address and leaves configuration and state under
+  the external service's control.
+
+Backend service ownership and the ACP connection are independent axes. Each
+backend profile declares an `acpConnection`; the connection factory currently
+implements `process`, which launches one local ACP stdio child. A future remote
+ACP bridge can add another connection kind without changing coordinator,
+permission, Work, or Session lifecycle code. Declaring an external backend
+service does not by itself make the ACP connection remote.
+
+The shared adapter usually owns one ACP stdio child and stops it with Gateway.
+OpenCode, Qoder, Qwen Code, and Kimi Code run directly as ACP agents; OpenCode may also
+start its native local Session UI service. `OPENCODE_BASE_URL` currently names
+that UI service, not a remote ACP execution endpoint, so OpenCode remains
+`owned`.
+
+OpenClaw uses a small ACP bridge. Without an explicit address, Gateway starts
+an OpenClaw Gateway with isolated runtime and Session state. When
+`OPENCLAW_BASE_URL` is explicit, it connects to the user's existing OpenClaw
+Gateway without reading, copying, or modifying its authentication or Agent
+state. Service ownership is then `external`, while the ACP connection remains
+a local `process`: the official local bridge connects to the remote OpenClaw
+Gateway over WebSocket/WSS. External connections bypass the short local-startup
+port probe so the bridge can report the real network, TLS, and authentication
+result. A local bridge exit interrupts ACP only and never changes the remote
+Gateway lifecycle.
+
+Codex follows the same boundary: qwen-audio-agent starts `codex-acp` over ACP
+stdio, and that adapter starts Codex App Server over its own local stdio
+protocol. Codex App Server may expose other transports, but they are not a
+remote ACP endpoint and must not leak into the shared ACP adapter.
 
 Desktop, TUI and WebUI are replaceable Gateway clients. They must never spawn,
 restart or stop the Gateway or a backend. Closing a UI therefore cannot affect

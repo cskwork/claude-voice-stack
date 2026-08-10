@@ -36,6 +36,7 @@ export class AgentClient {
     const profile = driver.createProfile({
       protocol,
       root: config.root,
+      ownership,
       permissionMode,
       ...options,
     })

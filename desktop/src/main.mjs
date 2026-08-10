@@ -17,7 +17,7 @@ import {
   readFileSync,
   writeFileSync,
 } from 'node:fs'
-import { dirname, resolve } from 'node:path'
+import { dirname, join, resolve, win32 } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { parseEnv } from 'node:util'
 import {
@@ -62,11 +62,25 @@ import {
   updateSettingsContent,
 } from './settings-config.mjs'
 import {
+  importSkin,
+  listSkins,
+  removeSkin,
+  skinsDirectory,
+} from './skin-store.mjs'
+import {
+  BUILTIN_ORB_SKINS,
+  isBuiltinOrbSkin,
+} from '../../shared/orb-skin-catalog.mjs'
+import {
   startDesktopRendererServer,
 } from './renderer-server.mjs'
 import {
   expandProcessPath,
 } from './process-path.mjs'
+import {
+  migrateLegacyConfig,
+  resolveDesktopConfigDirectory,
+} from './config-migration.mjs'
 import {
   createDesktopUpdater,
 } from './updater.mjs'
@@ -77,6 +91,22 @@ import { DesktopPresence } from './desktop-presence.mjs'
 // 将其扩充为用户登录 shell 的 PATH，让 Gateway 子进程与后台可用性
 // 检测能找到通过 Homebrew、nvm 或官方脚本安装的 Agent 命令。
 expandProcessPath()
+
+// 桌面版与 CLI（~/.config/qwaudio）使用相互独立的数据目录：桌面版默认走
+// Electron 应用数据目录，两者的 Gateway、锁、日志与设置互不干扰；
+// QWAUDIO_CONFIG_DIR 仍优先（高级用户 / Profile 场景）。
+// 统一应用名，让开发模式与打包版共用同一个 userData 目录（打包版
+// 的 productName 与单实例锁都基于它；开发模式默认会落到包名目录）。
+app.setName('Qwen Audio Agent')
+const legacyConfigDirectory = userConfigDirectory(process.env)
+process.env.QWAUDIO_CONFIG_DIR = resolveDesktopConfigDirectory({
+  env: process.env,
+  userDataDirectory: app.getPath('userData'),
+})
+const configMigration = migrateLegacyConfig({
+  legacyDir: legacyConfigDirectory,
+  targetDir: process.env.QWAUDIO_CONFIG_DIR,
+})
 
 const here = dirname(fileURLToPath(import.meta.url))
 const sourceRoot = resolve(here, '../..')
@@ -97,12 +127,26 @@ const logger = createLogger({
   component: 'desktop',
   fileName: 'desktop.log',
 })
+const skinsRoot = skinsDirectory(runtimeEnvironment.configDirectory)
+
+// 生效皮肤：内置 id 直接用；导入皮肤需皮肤包仍在，缺失回退 fluid。
+function effectiveOrbSkin(orbSkin) {
+  if (isBuiltinOrbSkin(orbSkin)) return orbSkin
+  if (existsSync(join(skinsRoot, orbSkin, 'pet.json'))) return orbSkin
+  return 'fluid'
+}
 logger.info('desktop.starting', {
   version: app.getVersion(),
   packaged: app.isPackaged,
   platform: process.platform,
   arch: process.arch,
 })
+if (configMigration.migrated) {
+  logger.info('desktop.config_migrated', {
+    legacyDir: configMigration.legacyDir,
+    files: configMigration.copied,
+  })
+}
 const fallbackPage = resolve(here, 'orb-unavailable.html')
 const fallbackUrl = pathToFileURL(fallbackPage).href
 const settingsPage = resolve(here, 'settings.html')
@@ -154,12 +198,24 @@ function configuredOrigin() {
 }
 
 function configuredGatewayEnvironment() {
-  const configured = parseEnv(
-    readFileSync(runtimeEnvironment.configPath, 'utf8'),
-  )
+  const raw = readFileSync(runtimeEnvironment.configPath, 'utf8')
+  const configured = parseEnv(raw)
+  // 滤掉空值：config 文件中 KEY=（无值）会解析出 KEY: ''，
+  // 展开为 desktopGatewayEnvironment.merged 时会覆盖 process.env 的同名变量。
+  const configuredNonEmpty = {}
+  for (const [key, value] of Object.entries(configured)) {
+    if (value !== '') configuredNonEmpty[key] = value
+  }
+  // 自动休眠超时必须与 orb 前端一致：config.env 可能缺省（首次安装），
+  // 这里总是注入经 parseSettings 归一化后的有效值，避免前端 60 秒隐藏
+  // 而网关 sleepTimeoutMs=0 永不休眠的分歧。
+  const settings = parseSettings(raw, process.env)
   return desktopGatewayEnvironment({
     env: process.env,
-    configured,
+    configured: {
+      ...configuredNonEmpty,
+      QWEN_AUDIO_DESKTOP_AUTO_HIDE_SECONDS: String(settings.autoHideSeconds),
+    },
     runtimeRoot,
     sourceRoot,
   })
@@ -272,6 +328,7 @@ async function ensureDesktopUi() {
     rendererServer = await startDesktopRendererServer({
       webRoot,
       target: () => appOrigin,
+      skinsRoot,
     })
   }
   if (!mainWindow || mainWindow.isDestroyed()) {
@@ -286,6 +343,7 @@ async function startConfiguredRuntime(settings = configuredOrigin().settings) {
     : configuredGatewayOrigin
   process.env.QWEN_AUDIO_AGENT_URL = appOrigin
   process.env.QWEN_AUDIO_ORB_STYLE = settings.orbStyle
+  process.env.QWEN_AUDIO_ORB_SKIN = settings.orbSkin
   await ensureDesktopUi()
   lastRuntimeError = ''
   return appOrigin
@@ -372,8 +430,9 @@ async function loadQwenAudioAgent(window) {
       process.env,
     )
     await window.loadURL(desktopOrbUrl(rendererServer.baseUrl, {
-      orbStyle: settings.orbStyle,
+      orbSkin: effectiveOrbSkin(settings.orbSkin),
       autoHideSeconds: settings.autoHideSeconds,
+      wakeWordEnabled: settings.wakeWordEnabled,
     }))
     clearTimeout(reconnectTimer)
     reconnectTimer = null
@@ -499,10 +558,10 @@ function createWindow() {
 
 function createSettingsWindow() {
   const window = new BrowserWindow({
-    width: 540,
-    height: 760,
+    width: 520,
+    height: 720,
     minWidth: 460,
-    minHeight: 620,
+    minHeight: 600,
     title: '设置',
     backgroundColor: '#f5f6f7',
     autoHideMenuBar: true,
@@ -622,9 +681,7 @@ ipcMain.on('qwen-audio-agent:lifecycle-ready', event => {
   }
 })
 
-const ALLOWED_EXTERNAL_HOSTS = new Set(['bailian.console.aliyun.com'])
-
-ipcMain.on('qwen-audio-agent:open-external', (event, value) => {
+ipcMain.on('qwen-audio-agent:open-external', async (event, value) => {
   if (!settingsWindow || event.sender !== settingsWindow.webContents) return
   let target
   try {
@@ -632,10 +689,16 @@ ipcMain.on('qwen-audio-agent:open-external', (event, value) => {
   } catch {
     return
   }
-  if (target.protocol !== 'https:' || !ALLOWED_EXTERNAL_HOSTS.has(target.hostname)) {
-    return
-  }
-  void shell.openExternal(target.href)
+  if (target.protocol !== 'https:') return
+  const { response } = await dialog.showMessageBox(settingsWindow, {
+    type: 'question',
+    buttons: ['打开', '取消'],
+    defaultId: 0,
+    cancelId: 1,
+    title: '打开外部链接',
+    message: `即将在浏览器中打开：${target.href}`,
+  })
+  if (response === 0) void shell.openExternal(target.href)
 })
 
 ipcMain.handle('qwen-audio-agent:settings-load', async event => {
@@ -648,6 +711,7 @@ ipcMain.handle('qwen-audio-agent:settings-load', async event => {
   )
   return {
     settings,
+    skins: [...BUILTIN_ORB_SKINS, ...listSkins(skinsRoot)],
     runtime: setupRequired
       ? {
           gatewayConnected: false,
@@ -664,6 +728,63 @@ ipcMain.handle('qwen-audio-agent:settings-load', async event => {
     wakeShortcutRegistered: desktopPresence.shortcutRegistered,
     restartRequired: false,
   }
+})
+
+ipcMain.handle('qwen-audio-agent:set-node-path', async (event, nodePath) => {
+  if (!settingsWindow || event.sender !== settingsWindow.webContents) {
+    throw new Error('无权设置 Node.js 路径')
+  }
+  const trimmed = String(nodePath || '').trim()
+  if (!trimmed) throw new Error('路径不能为空')
+
+  if (!existsSync(trimmed)) {
+    throw new Error(`目录不存在：${trimmed}`)
+  }
+
+  // 写入配置文件
+  const current = readFileSync(runtimeEnvironment.configPath, 'utf8')
+  const lines = current.split(/\r?\n/)
+  const key = 'QWEN_AUDIO_AGENT_NODE_PATH'
+  let found = false
+  const updated = lines.map(line => {
+    if (line.startsWith(`${key}=`)) {
+      found = true
+      return `${key}=${trimmed}`
+    }
+    return line
+  })
+  if (!found) updated.push(`${key}=${trimmed}`)
+  const content = updated.join('\n').replace(/\n+$/, '') + '\n'
+  writeFileSync(runtimeEnvironment.configPath, content, {
+    encoding: 'utf8',
+    mode: 0o600,
+  })
+  // Windows 上 chmodSync 基本是 no-op，但保留兼容性
+  try {
+    chmodSync(runtimeEnvironment.configPath, 0o600)
+  } catch {
+    // Windows 上忽略
+  }
+
+  // 立即生效：直接操作 PATH，不依赖 spawnSync（打包后可能不可用）
+  process.env.QWEN_AUDIO_AGENT_NODE_PATH = trimmed
+  const { delimiter } = win32
+  const existing = (process.env.PATH || '').split(delimiter).filter(Boolean)
+  const normalized = existing.map(d => win32.normalize(d).toLowerCase())
+  const newNormalized = win32.normalize(trimmed).toLowerCase()
+  if (!normalized.includes(newNormalized)) {
+    process.env.PATH = [...existing, trimmed].join(delimiter)
+  }
+
+  // 再跑 expandProcessPath 利用 where/reg 补充其他路径（失败不影响已设置的路径）
+  try {
+    expandProcessPath()
+  } catch {
+    logger.warn('node-path.expand-failed', { path: trimmed })
+  }
+
+  logger.info('node-path.set', { path: trimmed })
+  return { ok: true }
 })
 
 ipcMain.handle('qwen-audio-agent:settings-runtime-status', async event => {
@@ -700,11 +821,26 @@ function backendDetectionEnvironment() {
   const configured = existsSync(runtimeEnvironment.configPath)
     ? parseEnv(readFileSync(runtimeEnvironment.configPath, 'utf8'))
     : {}
-  return {
+  // 滤掉空值：config 文件中 KEY=（无值）会解析出 KEY: ''，
+  // 展开时会覆盖 process.env 的同名变量（如 PATH）。
+  const filtered = {}
+  for (const [key, value] of Object.entries(configured)) {
+    if (value !== '') filtered[key] = value
+  }
+  // Windows 上 npm 设置的是 Path（首字母大写）而非 PATH，
+  // { ...process.env } 展开会保留原始键名，导致 result.PATH 为 undefined。
+  // 归一化：将 Path 转为 PATH。
+  const result = {
     ...process.env,
-    ...configured,
+    ...filtered,
     QWEN_AUDIO_AGENT_DESKTOP_INSTALLED_ONLY: '1',
   }
+  if (result.Path && !result.PATH) {
+    result.PATH = result.Path
+  }
+  delete result.Path
+  console.error('[backendDetection] result.PATH:', String(result.PATH || '(empty)').substring(0, 80))
+  return result
 }
 
 // 执行一次完整检测：主进程沿用 Worker 读取到的登录 shell PATH（只赋值，
@@ -713,7 +849,27 @@ function backendDetectionEnvironment() {
 function runBackendDetection() {
   return detectBackendSetups({ env: backendDetectionEnvironment() })
     .then(result => {
-      if (result.path) process.env.PATH = result.path
+      if (result.path) {
+        // 合并 Worker 检测到的 PATH 到进程环境，只添加新目录，
+        // 不替换已有目录（保留 System32 等系统路径）。
+        const current = new Set(String(process.env.PATH || '')
+          .split(';')
+          .map(p => p.trim().toLowerCase())
+          .filter(Boolean))
+        const additions = []
+        for (const entry of result.path.split(';')) {
+          const trimmed = entry.trim()
+          if (trimmed && !current.has(trimmed.toLowerCase())) {
+            current.add(trimmed.toLowerCase())
+            additions.push(trimmed)
+          }
+        }
+        if (additions.length > 0) {
+          process.env.PATH = [...additions, String(process.env.PATH || '')]
+            .filter(Boolean)
+            .join(';')
+        }
+      }
       return withBackendLifecycle(result.report, {
         env: backendDetectionEnvironment(),
       })
@@ -876,11 +1032,14 @@ ipcMain.handle('qwen-audio-agent:settings-save', async (event, settings) => {
       !== normalized.speechToSpeechAuthToken
   )
   const backendModelChanged = previous.backendModel !== normalized.backendModel
-  const orbStyleChanged = previous.orbStyle !== normalized.orbStyle
+  const orbSkinChanged = previous.orbSkin !== normalized.orbSkin
   const autoHideChanged = (
     previous.autoHideSeconds !== normalized.autoHideSeconds
   )
   const wakeShortcutChanged = previous.wakeShortcut !== normalized.wakeShortcut
+  const wakeWordChanged = (
+    previous.wakeWordEnabled !== normalized.wakeWordEnabled
+  )
   const gatewayRuntimeChanged = (
     gatewayChanged
     || apiKeyChanged
@@ -889,6 +1048,7 @@ ipcMain.handle('qwen-audio-agent:settings-save', async (event, settings) => {
     || realtimeModelChanged
     || speechToSpeechChanged
     || backendModelChanged
+    || wakeWordChanged
   )
   if (!remote && borrowedGatewayOrigin && gatewayRuntimeChanged) {
     const borrowedHealth = await readGatewayHealth(borrowedGatewayOrigin)
@@ -939,9 +1099,10 @@ ipcMain.handle('qwen-audio-agent:settings-save', async (event, settings) => {
       realtimeModel: realtimeModelChanged,
       speechToSpeech: speechToSpeechChanged,
       backendModel: backendModelChanged,
-      orbStyle: orbStyleChanged,
+      orbSkin: orbSkinChanged,
       autoHide: autoHideChanged,
       wakeShortcut: wakeShortcutChanged,
+      wakeWord: wakeWordChanged,
     },
   })
   let restarted = false
@@ -969,10 +1130,11 @@ ipcMain.handle('qwen-audio-agent:settings-save', async (event, settings) => {
   lastRuntimeError = ''
   process.env.QWEN_AUDIO_AGENT_URL = appOrigin
   process.env.QWEN_AUDIO_ORB_STYLE = normalized.orbStyle
+  process.env.QWEN_AUDIO_ORB_SKIN = normalized.orbSkin
   await ensureDesktopUi()
   const runtime = await runtimeStatus(appOrigin)
   if (
-    (restarted || gatewayChanged || orbStyleChanged || autoHideChanged)
+    (restarted || gatewayChanged || orbSkinChanged || autoHideChanged)
     && mainWindow
     && !mainWindow.isDestroyed()
   ) {
@@ -985,6 +1147,36 @@ ipcMain.handle('qwen-audio-agent:settings-save', async (event, settings) => {
     runtime,
     wakeShortcutRegistered: desktopPresence.shortcutRegistered,
   }
+})
+
+ipcMain.handle('qwen-audio-agent:skin-import', async event => {
+  if (!settingsWindow || event.sender !== settingsWindow.webContents) {
+    throw new Error('无权导入皮肤')
+  }
+  const selection = await dialog.showOpenDialog(settingsWindow, {
+    title: '导入皮肤',
+    // macOS 支持同时选文件与文件夹；其余平台选 zip 或皮肤包里的 pet.json。
+    properties: process.platform === 'darwin'
+      ? ['openFile', 'openDirectory']
+      : ['openFile'],
+    filters: [{ name: '皮肤包', extensions: ['zip', 'json'] }],
+  })
+  if (selection.canceled || !selection.filePaths.length) return null
+  const imported = await importSkin({
+    source: selection.filePaths[0],
+    skinsRoot,
+  })
+  logger.info('skin.imported', { id: imported.id })
+  return imported
+})
+
+ipcMain.handle('qwen-audio-agent:skin-remove', async (event, id) => {
+  if (!settingsWindow || event.sender !== settingsWindow.webContents) {
+    throw new Error('无权删除皮肤')
+  }
+  const removed = removeSkin({ id, skinsRoot })
+  if (removed) logger.info('skin.removed', { id: String(id) })
+  return { removed }
 })
 
 ipcMain.on('qwen-audio-agent:quit', event => {

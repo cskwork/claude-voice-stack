@@ -81,6 +81,22 @@ test('npm steps report locked packages and honor package overrides', () => {
   const codex = installSupport('codex', { env: {}, platform: 'linux' })
   assert.equal(codex.steps.length, 2)
   assert.match(codex.steps[1].display, /@agentclientprotocol\/codex-acp@/)
+
+  const qwen = installSupport('qwen', { env: {}, platform: 'linux' })
+  assert.deepEqual(
+    qwen.steps.map(step => step.display),
+    ['npm install -g @qwen-code/qwen-code@0.21.6'],
+  )
+})
+
+test('Qwen Code authentication launches the CLI without a removed auth subcommand', () => {
+  const support = authenticationSupport('qwen', {
+    env: {},
+    platform: 'darwin',
+  })
+  assert.equal(support.supported, true)
+  assert.equal(support.command, 'qwen')
+  assert.doesNotMatch(support.command, /\bauth\b/)
 })
 
 test('script steps require confirmation and follow platform availability', () => {
@@ -90,8 +106,8 @@ test('script steps require confirmation and follow platform availability', () =>
   assert.match(darwin.steps[0].display, /^curl -fsSL /)
 
   const win32 = installSupport('hermes', { env: {}, platform: 'win32' })
-  assert.equal(win32.supported, false)
-  assert.match(win32.reason, /PowerShell/)
+  assert.equal(win32.supported, true)
+  assert.match(win32.steps[0].display, /iex \(irm /)
 })
 
 test('withInstallSupport annotates every reported backend', () => {

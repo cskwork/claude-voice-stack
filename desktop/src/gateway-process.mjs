@@ -1,7 +1,11 @@
 import { createConnection } from 'node:net'
 import { dirname, posix, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { normalizeBackendProtocol } from '../../shared/backend-catalog.mjs'
+import {
+  backendDefinition,
+  normalizeBackendProtocol,
+  resolveBackendOwnership,
+} from '../../shared/backend-catalog.mjs'
 import {
   resolveRealtimeFrontendConfiguration,
 } from '../../shared/realtime-provider-catalog.mjs'
@@ -109,6 +113,44 @@ export function desktopGatewayCompatibility(health, env = process.env) {
     }
   }
   if (expectedProtocol) {
+    const definition = backendDefinition(expectedProtocol)
+    const configuredBaseUrl = String(
+      definition?.baseUrlEnvironment
+        ? env[definition.baseUrlEnvironment] || ''
+        : '',
+    ).trim()
+    const expectedOwnership = resolveBackendOwnership(expectedProtocol, {
+      baseUrlConfigured: Boolean(configuredBaseUrl),
+      requestedOwnership: env.QWEN_AUDIO_AGENT_BACKEND_OWNERSHIP,
+    })
+    const actualOwnership = String(
+      health?.backend?.ownership
+      || (health?.backend?.mode === 'compatible' ? 'external' : 'owned'),
+    ).toLowerCase()
+    if (expectedOwnership !== actualOwnership) {
+      return {
+        compatible: false,
+        code: 'ownership',
+        reason: '已有 Gateway 的后台进程归属与桌面设置不一致',
+      }
+    }
+    if (expectedOwnership === 'external' && definition?.baseUrlEnvironment) {
+      const actualBaseUrl = String(health?.backend?.baseUrl || '').trim()
+      let sameOrigin = false
+      try {
+        sameOrigin = Boolean(actualBaseUrl)
+          && new URL(actualBaseUrl).origin === new URL(configuredBaseUrl).origin
+      } catch {
+        sameOrigin = false
+      }
+      if (!sameOrigin) {
+        return {
+          compatible: false,
+          code: 'backend-url',
+          reason: '已有 Gateway 的外部后台地址与桌面设置不一致',
+        }
+      }
+    }
     const expectedPermission = String(
       env.QWEN_AUDIO_AGENT_BACKEND_PERMISSION_MODE || 'native',
     ).toLowerCase()
@@ -214,16 +256,21 @@ export class EmbeddedGateway {
     this.preferredPort = preferredPort
     const busy = await this.probeImpl(this.host, preferredPort)
     this.assertActiveStart(operation)
+    // 首选端口可能被另一套独立数据目录的产品实例（如 CLI 或另一份
+    // 桌面版）或外部程序占用；回退随机端口让它们并行运行。若因此与
+    // 同目录实例产生租约竞争，启动失败后由 main 的 findRunningGateway
+    // 兜底复用。
+    const port = busy ? 0 : preferredPort
     if (busy) {
-      throw new Error(
-        `Gateway 端口已被其他程序占用：http://${this.host}:${preferredPort}`,
-      )
+      this.logger?.warn('gateway.port_busy_fallback', {
+        preferredPort,
+        selectedPort: 'random',
+      })
     }
-    const port = preferredPort
     this.logger?.info('gateway.starting', {
       preferredPort,
-      selectedPort: port,
-      portReallocated: false,
+      selectedPort: busy ? 'random' : port,
+      portReallocated: busy,
     })
     // Imported lazily so this module also loads outside Electron (tests).
     const fork = this.forkImpl || (await import('electron')).utilityProcess.fork

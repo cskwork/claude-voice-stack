@@ -73,6 +73,12 @@ contextBridge.exposeInMainWorld('qwenAudioAgentDesktop', {
     'qwen-audio-agent:settings-save',
     settings,
   ),
+  importSkin: () => ipcRenderer.invoke('qwen-audio-agent:skin-import'),
+  removeSkin: id => ipcRenderer.invoke('qwen-audio-agent:skin-remove', id),
+  setNodePath: nodePath => ipcRenderer.invoke(
+    'qwen-audio-agent:set-node-path',
+    nodePath,
+  ),
   openExternal: url => {
     if (typeof url !== 'string') return
     ipcRenderer.send('qwen-audio-agent:open-external', url)

@@ -80,6 +80,23 @@ function compatibleHealth(env) {
   }
 }
 
+function openClawHealth(env, overrides = {}) {
+  const realtime = resolveRealtimeFrontendConfiguration(env)
+  return {
+    realtimeProvider: realtime.provider,
+    realtimeConfigurationSignature: realtime.signature,
+    backend: {
+      enabled: true,
+      kind: 'openclaw',
+      permissionMode: 'native',
+      model: null,
+      ownership: 'external',
+      baseUrl: 'wss://openclaw.example.test',
+      ...overrides,
+    },
+  }
+}
+
 test('strict compatibility validation rejects mismatched runtime settings', () => {
   const env = {
     DASHSCOPE_API_KEY: 'desktop-key',
@@ -117,6 +134,43 @@ test('reports a runtime mismatch without preventing a frontend attachment', () =
   })
 })
 
+test('distinguishes an owned OpenClaw backend from an external one', () => {
+  const env = {
+    DASHSCOPE_API_KEY: 'desktop-key',
+    AGENT_PROTOCOL: 'openclaw',
+    OPENCLAW_BASE_URL: 'wss://openclaw.example.test',
+  }
+  assert.equal(desktopGatewayCompatibility(openClawHealth(env), env).compatible, true)
+  assert.deepEqual(
+    desktopGatewayCompatibility(openClawHealth(env, {
+      ownership: 'owned',
+    }), env),
+    {
+      compatible: false,
+      code: 'ownership',
+      reason: '已有 Gateway 的后台进程归属与桌面设置不一致',
+    },
+  )
+})
+
+test('rejects reusing an external OpenClaw backend at a different URL', () => {
+  const env = {
+    DASHSCOPE_API_KEY: 'desktop-key',
+    AGENT_PROTOCOL: 'openclaw',
+    OPENCLAW_BASE_URL: 'wss://openclaw.example.test',
+  }
+  assert.deepEqual(
+    desktopGatewayCompatibility(openClawHealth(env, {
+      baseUrl: 'wss://another.example.test',
+    }), env),
+    {
+      compatible: false,
+      code: 'backend-url',
+      reason: '已有 Gateway 的外部后台地址与桌面设置不一致',
+    },
+  )
+})
+
 test('starts the embedded gateway on the preferred port and adopts the reported origin', async () => {
   const { forks, gateway } = harness()
   const origin = await gateway.start()
@@ -128,15 +182,15 @@ test('starts the embedded gateway on the preferred port and adopts the reported 
   await gateway.stop()
 })
 
-test('refuses to start a second embedded Gateway when the port is busy', async () => {
+test('falls back to a random port when the preferred port is busy', async () => {
   const { forks, gateway } = harness({
     busy: true,
   })
-  await assert.rejects(
-    gateway.start({ preferredPort: 3101 }),
-    /端口已被其他程序占用/,
-  )
-  assert.equal(forks.length, 0)
+  await gateway.start({ preferredPort: 3101 })
+  assert.equal(forks.length, 1)
+  assert.equal(forks[0].options.env.PORT, '0')
+  assert.equal(gateway.running, true)
+  await gateway.stop()
 })
 
 test('shares one in-flight start promise and forks only one child', async () => {

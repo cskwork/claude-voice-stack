@@ -12,11 +12,13 @@ function harness({
   memoryStore = null,
   notesStore = null,
   onMemoryChanged = () => {},
-  coordinatorAvailable = async () => true,
+  backendAvailability = null,
   respondPermission,
   permissionPolicy,
+  onPermissionDeliveryFailed,
   clientContext = {},
   requestClientState,
+  getTurnId = () => 'turn-one',
 } = {}) {
   const outputs = []
   const transcripts = new TurnTranscripts({ waitMs: 5 })
@@ -28,17 +30,18 @@ function harness({
     getFrontend: () => ({
       sendFunctionOutput: async (...args) => outputs.push(args),
     }),
-    getTurnId: () => 'turn-one',
+    getTurnId,
     getTurnGeneration: () => 1,
     coordinator: coordinator || {
       run: async () => ({ content: '完成', metadata: {} }),
     },
-    coordinatorAvailable,
+    backendAvailability,
     memoryStore,
     notesStore,
     onMemoryChanged,
     respondPermission,
     permissionPolicy,
+    onPermissionDeliveryFailed,
     getClientContext: () => clientContext,
     requestClientState,
     getConversationContext: () => [
@@ -83,6 +86,7 @@ async function permissionHarness({
   authorizationId = 'auth-one',
   respondPermission,
   permissionPolicy,
+  onPermissionDeliveryFailed,
 }) {
   const manager = new TaskManager()
   let release
@@ -104,7 +108,12 @@ async function permissionHarness({
     },
   })
   await new Promise(resolve => setImmediate(resolve))
-  const kit = harness({ manager, respondPermission, permissionPolicy })
+  const kit = harness({
+    manager,
+    respondPermission,
+    permissionPolicy,
+    onPermissionDeliveryFailed,
+  })
   kit.transcripts.record('turn-one', answer)
   return {
     ...kit,
@@ -193,9 +202,11 @@ test('deduplicates repeated tool calls from one realtime turn', async () => {
   )
 })
 
-test('rejects delegated work immediately when the backend Agent is disconnected', async () => {
+test('rejects delegated work immediately when the backend is known to be down', async () => {
   const kit = harness({
-    coordinatorAvailable: async () => false,
+    backendAvailability: {
+      snapshot: () => ({ configured: true, ok: false, known: true }),
+    },
   })
   kit.transcripts.record('turn-one', '帮我修改项目')
   await kit.handler.handle({
@@ -210,9 +221,112 @@ test('rejects delegated work immediately when the backend Agent is disconnected'
   assert.equal(kit.manager.list({ ownerId: 'owner' }).length, 0)
 })
 
+test('accepts optimistically before the first health probe and fails via the task', async () => {
+  let probed = 0
+  const kit = harness({
+    backendAvailability: {
+      snapshot: () => {
+        probed += 1
+        return { configured: true, ok: true, known: false }
+      },
+    },
+    coordinator: {
+      run: async () => {
+        throw new Error('后台 Agent 未连接')
+      },
+    },
+  })
+  kit.transcripts.record('turn-one', '帮我修改项目')
+  await kit.handler.handle({
+    call_id: 'call-optimistic',
+    name: 'spawn_thinking',
+    arguments: '{"objective":"修改项目"}',
+  })
+
+  // The receipt is optimistic; the dispatch failure surfaces on the task,
+  // which the announcement path reports asynchronously.
+  assert.equal(probed, 1)
+  assert.equal(kit.outputs[0][1].status, 'accepted')
+  await kit.manager.wait(kit.outputs[0][1].work_id)
+  assert.equal(kit.manager.get(kit.outputs[0][1].work_id).status, 'failed')
+})
+
+test('hands out the acceptance receipt without waiting for the turn transcript', async () => {
+  let received
+  const kit = harness({
+    coordinator: {
+      run: async input => {
+        received = input
+        return { content: '完成', metadata: {} }
+      },
+    },
+  })
+  // No transcript is ever recorded: acceptance must not block on ASR and the
+  // dispatch-time resolution falls back to the model-provided objective.
+  await kit.handler.handle({
+    call_id: 'call-no-transcript',
+    name: 'spawn_thinking',
+    arguments: '{"objective":"整理会议纪要"}',
+  }, { turnId: 'turn-one', turnGeneration: 1 })
+
+  assert.equal(kit.outputs[0][1].status, 'accepted')
+  await kit.manager.wait(kit.outputs[0][1].work_id)
+  assert.equal(received.originalRequest, '整理会议纪要')
+  assert.equal(received.objective, '整理会议纪要')
+})
+
+test('keeps the verbatim request even when later turns evict the transcript', async () => {
+  const requests = []
+  let releaseFirst
+  let currentTurn = 'turn-one'
+  const kit = harness({
+    getTurnId: () => currentTurn,
+    coordinator: {
+      run: async input => {
+        requests.push(input.originalRequest)
+        if (input.objective === '堆积任务') {
+          return new Promise(resolve => {
+            releaseFirst = () => resolve({ content: '完成', metadata: {} })
+          })
+        }
+        return { content: '完成', metadata: {} }
+      },
+    },
+  })
+  // The first work blocks the owner FIFO lane so the second one queues.
+  kit.transcripts.record('turn-one', '堆积任务')
+  await kit.handler.handle({
+    call_id: 'call-blocking',
+    name: 'spawn_thinking',
+    arguments: '{"objective":"堆积任务"}',
+  }, { turnId: 'turn-one', turnGeneration: 1 })
+
+  kit.transcripts.record('turn-two', '把上周的周报发给老板')
+  currentTurn = 'turn-two'
+  await kit.handler.handle({
+    call_id: 'call-queued',
+    name: 'spawn_thinking',
+    arguments: '{"objective":"发送上周周报"}',
+  }, { turnId: 'turn-two', turnGeneration: 1 })
+  const queuedId = kit.outputs.at(-1)[1].work_id
+
+  // While the lane is blocked, twenty-plus newer turns evict turn-two from
+  // the transcript ring buffer. The pinned promise must retain the verbatim
+  // request regardless.
+  for (let index = 0; index < 25; index += 1) {
+    kit.transcripts.record(`turn-filler-${index}`, `闲聊第 ${index} 句`)
+  }
+  releaseFirst()
+  await kit.manager.wait(queuedId)
+
+  assert.deepEqual(requests, ['堆积任务', '把上周的周报发给老板'])
+})
+
 test('explains that background work is unavailable without a configured backend', async () => {
   const kit = harness({
-    coordinatorAvailable: async () => ({ enabled: false, ok: false }),
+    backendAvailability: {
+      snapshot: () => ({ configured: false, ok: false, known: true }),
+    },
   })
   kit.transcripts.record('turn-one', '帮我修改项目')
   await kit.handler.handle({
@@ -318,6 +432,7 @@ test('cancels the most recently submitted active work', async () => {
     arguments: '{}',
   })
   assert.equal(kit.outputs.at(-1)[1].status, 'cancelled')
+  assert.deepEqual(kit.outputs.at(-1)[3], {})
   assert.equal(kit.manager.list({ active: true }).length, 0)
   assert.equal(kit.manager.list()[0].status, 'cancelled')
   release?.()
@@ -442,12 +557,14 @@ test('relays a realtime semantic permission decision without evidence matching',
     }),
   })
 
+  // The receipt is issued before the fire-and-forget backend delivery lands.
+  assert.equal(kit.outputs.at(-1)[1].status, 'submitted')
+  await new Promise(resolve => setImmediate(resolve))
   assert.deepEqual(calls, [{
     id: 'auth-one',
     decision: 'always',
     options: { ownerId: 'owner' },
   }])
-  assert.equal(kit.outputs.at(-1)[1].status, 'approved')
   assert.match(
     kit.outputs.at(-1)[3].response.instructions,
     /已允许，后台继续执行/,
@@ -478,12 +595,45 @@ test('confirms a rejected realtime permission exactly once', async () => {
     }),
   })
 
-  assert.equal(kit.outputs.at(-1)[1].status, 'rejected')
+  assert.equal(kit.outputs.at(-1)[1].status, 'submitted')
   assert.match(
     kit.outputs.at(-1)[3].response.instructions,
     /已拒绝/,
   )
   assert.equal(permissionPolicy.mode('owner', 'voice'), 'ask')
+  await kit.finish()
+})
+
+test('rolls back the session policy when the permission delivery fails', async () => {
+  const failures = []
+  const permissionPolicy = new SessionPermissionPolicy()
+  const kit = await permissionHarness({
+    answer: '可以',
+    permissionPolicy,
+    respondPermission: async () => {
+      throw new Error('backend unreachable')
+    },
+    onPermissionDeliveryFailed: event => failures.push(event),
+  })
+  await kit.handler.handle({
+    call_id: 'permission-delivery-failed',
+    name: 'respond_agent_permission',
+    arguments: JSON.stringify({
+      authorization_id: 'auth-one',
+      decision: 'always',
+    }),
+  })
+
+  // The spoken confirmation is receipt-based and always issued.
+  assert.equal(kit.outputs.at(-1)[1].status, 'submitted')
+  await new Promise(resolve => setImmediate(resolve))
+  // Delivery failed: the local auto-allow rolls back and the gateway is told
+  // so the pending permission can be re-announced.
+  assert.equal(permissionPolicy.shouldAutoAllow('owner', 'voice'), false)
+  assert.equal(failures.length, 1)
+  assert.equal(failures[0].authorizationId, 'auth-one')
+  assert.equal(failures[0].decision, 'always')
+  assert.match(failures[0].error, /backend unreachable/)
   await kit.finish()
 })
 
@@ -551,8 +701,10 @@ test('accepts a semantic permission decision without an evidence field', async (
     }),
   })
 
+  // The verbatim delivery lands asynchronously behind the receipt.
+  assert.equal(kit.outputs.at(-1)[1].status, 'submitted')
+  await new Promise(resolve => setImmediate(resolve))
   assert.deepEqual(calls, [{ id: 'auth-one', decision: 'always' }])
-  assert.equal(kit.outputs.at(-1)[1].status, 'approved')
   await kit.finish()
 })
 
@@ -604,27 +756,28 @@ test('uses one scoped memory tool for recall and remember', async () => {
 
   await kit.handler.handle({
     call_id: 'memory-recall',
-    name: 'user_memory',
+    name: 'memory',
+    // The legacy 'all' spelling and an omitted scope both mean every scope.
     arguments: '{"action":"recall","scope":"all","query":"称呼"}',
   })
   assert.equal(kit.outputs.at(-1)[1].status, 'ok')
   assert.deepEqual(calls[0], ['list', 'owner', {
-    scope: 'all',
+    scope: null,
     query: '称呼',
   }])
 
   await kit.handler.handle({
     call_id: 'memory-remember',
-    name: 'user_memory',
+    name: 'memory',
     arguments: JSON.stringify({
       action: 'remember',
-      scope: 'long_term',
+      scope: 'facts',
       content: '用户喜欢苹果',
     }),
   })
   assert.equal(kit.outputs.at(-1)[1].status, 'remembered')
   assert.deepEqual(calls[1], ['remember', 'owner', {
-    scope: 'long_term',
+    scope: 'facts',
     content: '用户喜欢苹果',
   }])
   assert.equal(changes, 1)
@@ -650,7 +803,7 @@ test('routes standing user rules to the rules memory scope', async () => {
 
   await kit.handler.handle({
     call_id: 'memory-rule',
-    name: 'user_memory',
+    name: 'memory',
     arguments: JSON.stringify({
       action: 'remember',
       scope: 'rules',
@@ -678,7 +831,7 @@ test('replaces recalled text memories in one storage operation', async () => {
           replaced: 2,
           memory: {
             id: 'mem_banana',
-            scope: 'long_term',
+            scope: 'facts',
             content: input.content,
             editable: true,
           },
@@ -690,10 +843,10 @@ test('replaces recalled text memories in one storage operation', async () => {
 
   await kit.handler.handle({
     call_id: 'memory-replace',
-    name: 'user_memory',
+    name: 'memory',
     arguments: JSON.stringify({
       action: 'replace',
-      scope: 'long_term',
+      scope: 'facts',
       memory_ids: ['mem_apple', 'mem_likes_apple'],
       content: '用户最喜欢的水果是香蕉',
     }),
@@ -701,7 +854,7 @@ test('replaces recalled text memories in one storage operation', async () => {
 
   assert.deepEqual(replaced, {
     ownerId: 'owner',
-    scope: 'long_term',
+    scope: 'facts',
     ids: ['mem_apple', 'mem_likes_apple'],
     content: '用户最喜欢的水果是香蕉',
   })
@@ -720,10 +873,10 @@ test('requires recalled ids for replacement and never guesses targets', async ()
   })
   await kit.handler.handle({
     call_id: 'memory-replace-without-id',
-    name: 'user_memory',
+    name: 'memory',
     arguments: JSON.stringify({
       action: 'replace',
-      scope: 'long_term',
+      scope: 'facts',
       content: '用户最喜欢的水果是香蕉',
     }),
   })
@@ -745,7 +898,7 @@ test('forgets selected memory without re-parsing user wording', async () => {
   })
   await kit.handler.handle({
     call_id: 'memory-forget',
-    name: 'user_memory',
+    name: 'memory',
     arguments: '{"action":"forget","scope":"profile","query":"称呼"}',
   })
   assert.equal(kit.outputs.at(-1)[1].status, 'forgotten')
@@ -762,8 +915,8 @@ test('clears an entire memory scope through the explicit all parameter', async (
   const allowed = harness({ memoryStore })
   await allowed.handler.handle({
     call_id: 'memory-clear',
-    name: 'user_memory',
-    arguments: '{"action":"forget","scope":"long_term","all":true}',
+    name: 'memory',
+    arguments: '{"action":"forget","scope":"facts","all":true}',
   })
   assert.equal(allowed.outputs.at(-1)[1].status, 'forgotten')
   assert.equal(calls, 1)
@@ -779,10 +932,10 @@ test('rejects secrets and an ambiguous memory scope', async () => {
   })
   await kit.handler.handle({
     call_id: 'memory-secret',
-    name: 'user_memory',
+    name: 'memory',
     arguments: JSON.stringify({
       action: 'remember',
-      scope: 'long_term',
+      scope: 'facts',
       content: '我的 API Key 是 sk-secret',
     }),
   })
@@ -790,7 +943,7 @@ test('rejects secrets and an ambiguous memory scope', async () => {
 
   await kit.handler.handle({
     call_id: 'memory-all',
-    name: 'user_memory',
+    name: 'memory',
     arguments: JSON.stringify({
       action: 'remember',
       scope: 'all',

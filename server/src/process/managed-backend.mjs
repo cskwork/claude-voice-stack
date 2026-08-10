@@ -5,6 +5,7 @@ import {
   backendRuntimeDriver,
   normalizeBackendRuntimeProtocol,
 } from './backend-drivers/registry.mjs'
+import { serviceEndpointPort } from './backend-drivers/shared.mjs'
 
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1', '[::1]'])
 
@@ -18,12 +19,30 @@ function permissionMode(env) {
   return mode
 }
 
+function backendOwnership(driver, env) {
+  const requested = String(
+    env.QWEN_AUDIO_AGENT_BACKEND_OWNERSHIP || '',
+  ).trim().toLowerCase()
+  if (requested && !['owned', 'external'].includes(requested)) {
+    throw new Error(`不支持的后台进程归属：${requested}`)
+  }
+  if (requested === 'external' && !driver.supportsExternalService) {
+    throw new Error(`${driver.id} 不支持连接外部后台服务`)
+  }
+  if (requested) return requested
+  return driver.supportsExternalService
+    && driver.baseUrlEnvironment
+    && String(env[driver.baseUrlEnvironment] || '').trim()
+    ? 'external'
+    : 'owned'
+}
+
 export function resolveManagedBackend(env = process.env) {
   const protocol = normalizeBackendRuntimeProtocol(env.AGENT_PROTOCOL)
   if (!protocol) return null
   const driver = backendRuntimeDriver(protocol)
   const resolvedPermissionMode = permissionMode(env)
-  const ownership = driver.resolveOwnership?.({ env }) || 'owned'
+  const ownership = backendOwnership(driver, env)
   if (resolvedPermissionMode === 'full' && ownership !== 'owned') {
     throw new Error('最高权限模式只支持由 Gateway 启动的后台 Agent')
   }
@@ -50,7 +69,7 @@ export function isLocalBackend(baseUrl) {
 
 export function backendAddressInUse(baseUrl, timeoutMs = 300) {
   const target = new URL(baseUrl)
-  const port = Number(target.port || (target.protocol === 'https:' ? 443 : 80))
+  const port = serviceEndpointPort(target)
   return new Promise(resolvePromise => {
     const socket = createConnection({ host: target.hostname, port })
     const finish = value => {
@@ -92,26 +111,15 @@ function spawnSpec(root, platform, env, driver) {
     ...env,
     QWEN_AUDIO_AGENT_ENV_LOADED: '1',
     QWEN_AUDIO_AGENT_NODE: process.execPath,
-  }
-  if (platform === 'win32') {
-    return {
-      command: 'npm.cmd',
-      args: ['run', driver.managedNpmScript],
-      options: {
-        cwd: root,
-        env: childEnvironment,
-        detached: false,
-        stdio: 'inherit',
-      },
-    }
+    ELECTRON_RUN_AS_NODE: '1',
   }
   return {
-    command: resolve(root, `scripts/${driver.managedScript}`),
-    args: [],
+    command: process.execPath,
+    args: [resolve(root, `scripts/${driver.managedScript}`)],
     options: {
       cwd: root,
       env: childEnvironment,
-      detached: true,
+      detached: platform !== 'win32',
       stdio: 'inherit',
     },
   }
@@ -179,6 +187,7 @@ export async function startManagedBackend({
   const backend = resolveManagedBackend(env)
   if (!backend) return new ManagedBackendRuntime(null, { platform })
   const driver = backendRuntimeDriver(backend.protocol)
+  env.QWEN_AUDIO_AGENT_BACKEND_OWNERSHIP = backend.ownership
   applyBackendPermissionMode(env, backend)
   if (!driver.separateManagedProcess) {
     return new ManagedBackendRuntime(null, { platform })

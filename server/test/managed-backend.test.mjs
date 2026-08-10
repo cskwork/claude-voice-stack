@@ -107,6 +107,7 @@ test('copies OpenClaw capabilities without external message channels', () => {
 test('Gateway-owned backend moves away from occupied ports', async () => {
   const env = {
     AGENT_PROTOCOL: 'openclaw',
+    QWEN_AUDIO_AGENT_BACKEND_OWNERSHIP: 'owned',
     OPENCLAW_BASE_URL: 'http://127.0.0.1:18789',
     DASHSCOPE_API_KEY: 'test-key',
     QWEN_AUDIO_AGENT_BACKEND_MODEL: 'qwen-plus',
@@ -128,7 +129,8 @@ test('Gateway-owned backend moves away from occupied ports', async () => {
   runtime.killImpl = (pid, signal) => signals.push([pid, signal])
   assert.equal(env.OPENCLAW_BASE_URL, 'http://127.0.0.1:45678')
   assert.equal(env.OPENCLAW_PORT, '45678')
-  assert.equal(calls[0][0], resolve('/repo', 'scripts/openclaw-gateway'))
+  assert.equal(calls[0][0], process.execPath)
+  assert.equal(calls[0][1][0], resolve('/repo', 'scripts/openclaw-gateway.mjs'))
   assert.equal(calls[0][2].env.QWEN_AUDIO_AGENT_ENV_LOADED, '1')
   runtime.close()
   assert.deepEqual(signals, [[-4242, 'SIGTERM']])
@@ -137,6 +139,7 @@ test('Gateway-owned backend moves away from occupied ports', async () => {
 test('force-stops a managed backend that ignores graceful shutdown', async () => {
   const env = {
     AGENT_PROTOCOL: 'openclaw',
+    QWEN_AUDIO_AGENT_BACKEND_OWNERSHIP: 'owned',
     OPENCLAW_BASE_URL: 'http://127.0.0.1:18789',
   }
   const child = childProcess()
@@ -154,6 +157,53 @@ test('force-stops a managed backend that ignores graceful shutdown', async () =>
     [-4242, 'SIGTERM'],
     [-4242, 'SIGKILL'],
   ])
+})
+
+test('uses an explicitly configured OpenClaw Gateway as an external service', async () => {
+  const env = {
+    AGENT_PROTOCOL: 'openclaw',
+    OPENCLAW_BASE_URL: 'http://127.0.0.1:18789',
+    OPENCLAW_GATEWAY_TOKEN: 'existing-gateway-token',
+  }
+  assert.deepEqual(resolveManagedBackend(env), {
+    protocol: 'openclaw',
+    ownership: 'external',
+    permissionMode: 'native',
+    baseUrl: 'http://127.0.0.1:18789',
+  })
+  const runtime = await startManagedBackend({
+    root: '/repo',
+    env,
+    isAddressInUse: async () => {
+      throw new Error('external Gateway ownership must not probe or move the port')
+    },
+    spawnImpl: () => {
+      throw new Error('external Gateway ownership must not spawn OpenClaw')
+    },
+  })
+  assert.equal(runtime.ownsProcess, false)
+  assert.equal(env.QWEN_AUDIO_AGENT_BACKEND_OWNERSHIP, 'external')
+  assert.equal(env.OPENCLAW_BASE_URL, 'http://127.0.0.1:18789')
+})
+
+test('accepts a secure remote OpenClaw WebSocket without taking ownership', () => {
+  assert.deepEqual(resolveManagedBackend({
+    AGENT_PROTOCOL: 'openclaw',
+    OPENCLAW_BASE_URL: 'wss://agent.example.com/gateway',
+    OPENCLAW_GATEWAY_TOKEN: 'remote-token',
+  }), {
+    protocol: 'openclaw',
+    ownership: 'external',
+    permissionMode: 'native',
+    baseUrl: 'wss://agent.example.com',
+  })
+})
+
+test('rejects credentials embedded in an external backend address', () => {
+  assert.throws(() => resolveManagedBackend({
+    AGENT_PROTOCOL: 'openclaw',
+    OPENCLAW_BASE_URL: 'wss://user:secret@agent.example.com',
+  }), /不能包含用户名或密码/)
 })
 
 test('runs without a managed process when no backend is selected', async () => {
