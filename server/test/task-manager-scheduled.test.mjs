@@ -7,6 +7,39 @@ const trivialRunner = async objective => ({
   metadata: { presentation: { speech: objective } },
 })
 
+function persistedReminder(status, id = `work_${status}_reminder`) {
+  const now = Date.now()
+  return {
+    id,
+    status,
+    kind: 'reminder',
+    objective: '已到点的提醒',
+    ownerId: 'owner',
+    sessionId: 'voice',
+    turnId: 'turn-1',
+    priority: 0,
+    parentWorkId: null,
+    schedule: { type: 'at', at: now - 60_000, recurrence: 'once' },
+    timeoutMs: null,
+    progressCheckMs: null,
+    createdAt: now - 60_000,
+    startedAt: now - 30_000,
+    completedAt: null,
+    elapsedMs: 0,
+    result: null,
+    error: null,
+    resultMetadata: null,
+    activity: [],
+    delegation: null,
+    cancellation: null,
+    authorization: null,
+    notificationStatus: 'none',
+    notificationClaimantId: null,
+    notificationClaimedAt: null,
+    submissionKey: null,
+  }
+}
+
 test('createScheduled creates a task with status scheduled and correct kind', () => {
   const manager = new TaskManager()
   const future = Date.now() + 60_000
@@ -105,6 +138,29 @@ test('scheduled task appears in list output', () => {
   assert.equal(tasks.length, 1)
   assert.equal(tasks[0].status, 'scheduled')
   assert.equal(tasks[0].kind, 'reminder')
+})
+
+test('restore re-schedules queued and running reminders for catch-up', () => {
+  for (const status of ['queued', 'running']) {
+    const saved = persistedReminder(status)
+    const store = { load: () => [saved], save: () => {} }
+    const manager = new TaskManager({ store })
+
+    const task = manager.get(saved.id)
+    assert.equal(task.status, 'scheduled', status)
+    assert.equal(task.error, null, status)
+    assert.equal(typeof manager.tasks.get(saved.id).runner, 'function', status)
+  }
+})
+
+test('restore never re-schedules a reminder whose cancellation had started', () => {
+  const saved = persistedReminder('cancelling')
+  const store = { load: () => [saved], save: () => {} }
+  const manager = new TaskManager({ store })
+
+  const task = manager.get(saved.id)
+  assert.notEqual(task.status, 'scheduled')
+  assert.equal(manager.tasks.get(saved.id).runner, null)
 })
 
 test('restore recovers scheduled tasks with reminder runner rebuilt', () => {
