@@ -26,6 +26,8 @@ tells you:
 
 ## News
 
+- **2026-08-11 · [v1.8.1](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.8.1)**
+  🧠 Cleaner persona and memory boundaries; 🔧 more reliable tasks and reminders.
 - **2026-08-09 · [v1.8.0](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.8.0)**
   🆕 Adds Qwen Code backend; 🔧 fixes known issues.
 - **2026-08-07 · [v1.7.0](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.7.0)**

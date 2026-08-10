@@ -20,6 +20,8 @@
 
 ## News
 
+- **2026-08-11 · [v1.8.1](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.8.1)**
+  🧠 人设与记忆边界更清晰；🔧 任务与提醒更可靠。
 - **2026-08-09 · [v1.8.0](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.8.0)**
   🆕 新增 Qwen Code 后台；🔧 修复已知问题。
 - **2026-08-07 · [v1.7.0](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.7.0)**
