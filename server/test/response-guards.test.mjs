@@ -88,6 +88,19 @@ test('the registry returns only the first matching guard', () => {
   })
 })
 
+test('the registry skips malformed guards', () => {
+  const guards = [
+    { id: 'not-callable', instructions: 'ignored', matches: true },
+    { id: 'blank-instructions', instructions: '   ', matches: () => true },
+    { id: 'valid', instructions: ' correction ', matches: () => true },
+  ]
+
+  assert.deepEqual(evaluateResponseGuards({}, { guards }), {
+    guardId: 'valid',
+    instructions: 'correction',
+  })
+})
+
 test('a guard correction remains eligible only while its exact turn is current', () => {
   const current = {
     sameFrontend: true,

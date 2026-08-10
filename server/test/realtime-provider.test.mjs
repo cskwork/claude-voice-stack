@@ -1110,7 +1110,7 @@ test('surfaces a refusal a compliant provider cannot retry', async () => {
   assert.equal((await outcome).failed, true)
 })
 
-test('a compliant provider keeps every default capability', () => {
+test('the Qwen provider exposes its supported realtime capabilities', () => {
   const qwen = createQwenFrontend()
 
   assert.deepEqual(qwen.capabilities, {
@@ -1119,6 +1119,18 @@ test('a compliant provider keeps every default capability', () => {
     responseMetadataCorrelation: false,
     perResponseInstructions: true,
   })
+})
+
+test('per-response instructions require explicit provider opt-in', () => {
+  const { capabilities: _capabilities, ...provider } = REALTIME_PROVIDERS.qwen
+  const frontend = new RealtimeFrontend({
+    provider: {
+      ...provider,
+      key: 'unspecified-response-instructions',
+    },
+  })
+
+  assert.equal(frontend.capabilities.perResponseInstructions, false)
 })
 
 test('does not correlate an automatic VAD response with a pending GA response', async () => {

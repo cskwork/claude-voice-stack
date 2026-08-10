@@ -31,10 +31,9 @@ const PROTOCOL_METHODS = [
   'functionOutputItem',
 ]
 
-// Optional behavioural declarations. A provider only lists the guarantees of
-// the Realtime specification it does not uphold; omitting the block means the
-// implementation is fully compliant. See DEFAULT_CAPABILITIES in
-// realtime-provider.mjs for the compensations each flag enables.
+// Optional behavioural declarations. Providers explicitly opt in to optional
+// features and declare departures from the shared protocol baseline. See
+// DEFAULT_CAPABILITIES in realtime-provider.mjs for each flag's default.
 const CAPABILITY_FLAGS = [
   'acknowledgesSessionUpdate',
   'singleResponseSlot',

@@ -12,11 +12,14 @@ export function evaluateResponseGuards(
   { guards = RESPONSE_GUARDS } = {},
 ) {
   for (const guard of guards) {
-    if (!guard?.id || !guard?.instructions || !guard?.matches) continue
+    const instructions = typeof guard?.instructions === 'string'
+      ? guard.instructions.trim()
+      : ''
+    if (!guard?.id || !instructions || typeof guard.matches !== 'function') continue
     if (!guard.matches(observation)) continue
     return {
       guardId: guard.id,
-      instructions: guard.instructions,
+      instructions,
     }
   }
   return null
