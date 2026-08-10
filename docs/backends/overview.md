@@ -10,6 +10,7 @@ The Backend Agent handles tasks that require tools, file operations, or sustaine
 | OpenCode | Native ACP | Supports one-click install and Bailian configuration | ★★★★★ |
 | OpenClaw | Built-in ACP bridge | Supports one-click install and Bailian configuration | ★★★★★ |
 | Qoder | Native ACP | Supports one-click install, requires user configuration | ★★★★★ |
+| Qwen Code | Native ACP | Supports one-click install, requires user configuration | ★★★★☆ |
 | Kimi Code | Native ACP | Supports one-click install, requires user configuration | ★★★★★ |
 | Hermes | Native ACP | Supports one-click install, requires user configuration | ★★★★☆ |
 | CodeBuddy | Native ACP | Supports one-click install, requires user configuration | ★★★★☆ |
@@ -68,7 +69,7 @@ The command, arguments, display name, and working directory can be configured vi
 - `native` (default): Permissions are determined and prompted by the backend agent itself; the Gateway only forwards requests as-is.
 - `full`: Grants the highest permissions at startup, allowing the backend to directly execute commands, read and write files without per-action confirmation.
 
-`full` currently supports OpenCode, Qoder, Kimi Code, Hermes, CodeBuddy, Codex, and Claude Code; the Gateway will automatically approve permission requests from these backends. OpenClaw's execution authorization is constrained by exec approvals, elevated, and other configuration settings, and cannot be expressed via a single toggle — when `full` is selected, the Gateway will explicitly refuse to start. The highest permissions amplify the risk of accidental operations and should only be enabled in trusted projects.
+`full` currently supports OpenCode, Qoder, Qwen Code, Kimi Code, Hermes, CodeBuddy, Codex, and Claude Code; the Gateway will automatically approve permission requests from these backends. OpenClaw's execution authorization is constrained by exec approvals, elevated, and other configuration settings, and cannot be expressed via a single toggle — when `full` is selected, the Gateway will explicitly refuse to start. The highest permissions amplify the risk of accidental operations and should only be enabled in trusted projects.
 
 ## Backend Service
 

@@ -1,6 +1,7 @@
 import {
   baseEnvironment,
   clean,
+  processAcpConnection,
 } from './shared.mjs'
 
 export const genericAcpBackendDriver = {
@@ -23,10 +24,12 @@ export const genericAcpBackendDriver = {
     }
     return {
       label: clean(label) || this.label,
-      command,
-      args: Array.isArray(args) ? args.map(String) : [],
-      cwd: directory,
-      env: baseEnvironment(),
+      acpConnection: processAcpConnection({
+        command,
+        args: Array.isArray(args) ? args.map(String) : [],
+        cwd: directory,
+        env: baseEnvironment(),
+      }),
       externalMcp: true,
       nativeDelegation: false,
       backendUi: false,

@@ -90,6 +90,27 @@ test('starts the Gateway by default without acquiring a UI lock', async () => {
   ])
 })
 
+test('marks only an explicitly addressed OpenClaw Gateway as external', async () => {
+  const managed = harness()
+  managed.dependencies.env = { AGENT_PROTOCOL: 'openclaw' }
+  assert.equal(await main([], managed.dependencies), 0)
+  assert.equal(
+    managed.dependencies.env.QWEN_AUDIO_AGENT_BACKEND_OWNERSHIP,
+    'owned',
+  )
+
+  const external = harness()
+  external.dependencies.env = {
+    AGENT_PROTOCOL: 'openclaw',
+    OPENCLAW_BASE_URL: 'http://127.0.0.1:18789',
+  }
+  assert.equal(await main([], external.dependencies), 0)
+  assert.equal(
+    external.dependencies.env.QWEN_AUDIO_AGENT_BACKEND_OWNERSHIP,
+    'external',
+  )
+})
+
 test('--backend none overrides a configured backend with frontend-only mode', async () => {
   const target = harness()
   target.dependencies.prepareRuntime = async options => {

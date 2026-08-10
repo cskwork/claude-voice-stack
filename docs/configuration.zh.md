@@ -155,7 +155,9 @@ QWEN_AUDIO_MEMORY_API_KEY=        # 默认复用 DASHSCOPE_API_KEY
 聊天；需要后台执行的请求会返回明确错误，不会创建任务或猜测执行结果。
 也可以使用 `qwenaudio --backend none` 显式启动仅前台模式。
 
-OpenClaw 默认地址为 `http://127.0.0.1:18789`：
+OpenClaw 默认地址为 `http://127.0.0.1:18789`。显式设置
+`OPENCLAW_BASE_URL` 时，qwen-audio-agent 会把该 Gateway 作为外部黑盒直接连接，
+不会另起 OpenClaw Gateway，也不会读取、复制或修改它的模型认证数据：
 
 ```dotenv
 AGENT_PROTOCOL=openclaw
@@ -163,17 +165,45 @@ OPENCLAW_BASE_URL=http://127.0.0.1:18789
 OPENCLAW_GATEWAY_TOKEN=
 ```
 
-默认优先启动用户环境中的 `openclaw`。同时提供 `DASHSCOPE_API_KEY` 和
+远程部署可以使用 `https://` 或 `wss://` 地址；跨机器连接建议使用 `wss://`，不要把
+Token 写进 URL：
+
+```dotenv
+AGENT_PROTOCOL=openclaw
+OPENCLAW_BASE_URL=wss://openclaw.example.com
+OPENCLAW_GATEWAY_TOKEN=replace-with-your-token
+```
+
+外部模式仍会在 qwen-audio-agent 本机启动轻量的官方 `openclaw acp` bridge，并通过
+stdio ACP 与它通信；该 bridge 再连接用户管理的远程 Gateway。qwen-audio-agent 不会
+启动、停止、改端口或修改远程 Gateway。远程模式不做 300ms 本地端口预判，而由官方
+bridge 返回实际的网络、TLS 和认证错误。如果本机安全软件终止 bridge，本轮会明确失败，
+但远程 Gateway 不受影响。
+
+如果本机安全策略只拦截 qwen-audio-agent 的 OpenClaw 启动包装层，可以显式指定一个
+受信任的 OpenClaw 可执行文件，Gateway 将直接用它启动轻量 bridge：
+
+```dotenv
+OPENCLAW_ACP_BIN=/absolute/path/to/openclaw
+```
+
+这不会改变远程 Gateway 的所有权；该进程仍只是本地 ACP bridge，并随
+qwen-audio-agent Gateway 关闭。
+
+未设置 `OPENCLAW_BASE_URL` 时，默认优先启动用户环境中的 `openclaw`。同时提供
+`DASHSCOPE_API_KEY` 和
 `QWEN_AUDIO_AGENT_BACKEND_MODEL` 时，会为 qwen-audio-agent 进程生成独立的
 百炼配置和状态目录，不修改用户原生配置。未指定后台模型时则继承用户的原生
-配置、模型和认证，但不会在独立实例中启用钉钉等外部消息渠道。若原配置启用了
-Gateway Token，会自动读取并用于本地 ACP 连接；也可以通过
+配置、模型和认证，但不会在独立实例中启用钉钉等外部消息渠道。自管模式下若原配置
+启用了 Gateway Token，会自动读取并用于本地 ACP 连接；也可以通过
 `OPENCLAW_GATEWAY_TOKEN` 覆盖，或设置 `OPENCLAW_CONFIG_PATH` 明确指定另一份
-OpenClaw 配置。
+OpenClaw 配置。连接外部 Gateway 时，应同时设置 `OPENCLAW_GATEWAY_TOKEN`（或
+`OPENCLAW_GATEWAY_TOKEN_FILE`）。
 
 OpenCode：Gateway 通过 `opencode acp` 与它交互，并管理用于打开原生 Session
 界面的本地服务。没有兼容安装时会自动使用固定 npm 包，用户不需要另行安装或
-启动服务：
+启动服务。`OPENCODE_BASE_URL` 是该本地 Session UI 服务的地址，并不是可供
+qwen-audio-agent 连接的远程 ACP 执行地址：
 
 ```dotenv
 AGENT_PROTOCOL=opencode
@@ -200,6 +230,27 @@ QODER_CONFIG_DIR=
 ```
 
 Gateway 管理 Qoder ACP 子进程；Qoder 不接受 `--backend-url`。
+
+### Qwen Code
+
+Qwen Code 通过官方本地 stdio ACP 入口 `qwen --acp` 接入。Gateway 只负责启动
+这个 ACP 进程，认证、Provider、模型、MCP、Skill 和 Session 配置均复用 Qwen
+Code 自身配置。
+
+```dotenv
+AGENT_PROTOCOL=qwen
+QWEN_AUDIO_AGENT_BACKEND_PERMISSION_MODE=native
+```
+
+首次认证请直接运行 `qwen`，然后使用 `/auth`；已经移除的 `qwen auth` 不会被调用。
+可选覆盖：
+
+```dotenv
+QWEN_CODE_BIN=
+QWEN_CODE_WORKSPACE=
+```
+
+当前仅支持本地 ACP 进程，暂不把 Qwen Code 的实验性网络服务作为远程后台。
 
 ### Kimi Code
 
@@ -373,7 +424,7 @@ Kimi Code、Hermes、CodeBuddy、Codex 和 Claude Code 均由 Gateway 直接管�
 - `native`（默认）：权限由后台 Agent 自己判断和询问，Gateway 只负责原样转发。
 - `full`：启动时明确授予最高权限，后台可直接执行命令、读写文件，不再逐次确认。
 
-`full` 当前支持 OpenCode、Qoder、Kimi Code、Hermes、CodeBuddy、Codex 和
+`full` 当前支持 OpenCode、Qoder、Qwen Code、Kimi Code、Hermes、CodeBuddy、Codex 和
 Claude Code。Gateway 会自动批准这些 ACP 后台发起的权限请求；此外 Kimi Code
 会通过 ACP Session 配置切换到不会再提问的 Auto 模式，Qoder 和 CodeBuddy CLI
 会使用 `--dangerously-skip-permissions`，OpenCode 会在受管进程的内联配置中为协调

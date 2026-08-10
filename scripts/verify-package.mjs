@@ -109,16 +109,7 @@ if (isMain) {
   const files = new Set(packages[0].files.map(file => file.path))
   const required = [
     'cli/bin/qwenaudio.mjs',
-    'config/openclaw/workspace/AGENTS.md',
-    'config/hermes/workspace/AGENTS.md',
-    'config/codebuddy/workspace/AGENTS.md',
     'config/codebuddy/workspace/.codebuddy/models.json',
-    'config/codex/workspace/AGENTS.md',
-    'config/claude/workspace/AGENTS.md',
-    'config/acp/workspace/AGENTS.md',
-    'config/opencode/workspace/AGENTS.md',
-    'config/qoder/workspace/AGENTS.md',
-    'config/kimi/workspace/AGENTS.md',
     'CONTRIBUTING.md',
     'docs/architecture.md',
     'docs/architecture-overview.png',

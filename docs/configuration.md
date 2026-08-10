@@ -181,7 +181,10 @@ the Gateway only provides frontend real-time voice chat; requests requiring back
 will return a clear error without creating tasks or guessing execution results.
 You can also use `qwenaudio --backend none` to explicitly start frontend-only mode.
 
-The default OpenClaw address is `http://127.0.0.1:18789`:
+The default OpenClaw address is `http://127.0.0.1:18789`. When
+`OPENCLAW_BASE_URL` is set explicitly, qwen-audio-agent connects to that
+Gateway as an external black box. It does not start another OpenClaw Gateway
+or read, copy, or modify the Gateway's model credentials:
 
 ```dotenv
 AGENT_PROTOCOL=openclaw
@@ -189,19 +192,51 @@ OPENCLAW_BASE_URL=http://127.0.0.1:18789
 OPENCLAW_GATEWAY_TOKEN=
 ```
 
-It defaults to preferentially launching the `openclaw` in the user environment. When both
+For a remote deployment, use an `https://` or `wss://` address. Prefer
+`wss://` across machines and never embed the token in the URL:
+
+```dotenv
+AGENT_PROTOCOL=openclaw
+OPENCLAW_BASE_URL=wss://openclaw.example.com
+OPENCLAW_GATEWAY_TOKEN=replace-with-your-token
+```
+
+External mode still starts the lightweight official `openclaw acp` bridge on
+the qwen-audio-agent host and speaks ACP over stdio to it. The bridge then
+connects to the user-managed remote Gateway. qwen-audio-agent never starts,
+stops, reconfigures, or moves that remote Gateway. The official bridge reports
+the real network, TLS, and authentication error instead of using the 300 ms
+local startup probe. If local security software terminates the bridge, the turn
+fails explicitly while the remote Gateway remains untouched.
+
+If local security policy blocks only qwen-audio-agent's OpenClaw launcher,
+point to a trusted OpenClaw executable and the Gateway will run the lightweight
+bridge directly:
+
+```dotenv
+OPENCLAW_ACP_BIN=/absolute/path/to/openclaw
+```
+
+This does not change ownership of the remote Gateway. The local process remains
+an ACP bridge and is stopped with the qwen-audio-agent Gateway.
+
+When `OPENCLAW_BASE_URL` is not set, it preferentially launches the `openclaw`
+in the user environment. When both
 `DASHSCOPE_API_KEY` and `QWEN_AUDIO_AGENT_BACKEND_MODEL` are provided, an independent Bailian
 configuration and state directory is generated for the qwen-audio-agent process, without
 modifying the user's native configuration. When no backend model is specified, it inherits the
 user's native configuration, models, and authentication, but does not enable external messaging
-channels such as DingTalk in the independent instance. If the original configuration has enabled
-a Gateway Token, it will be automatically read and used for local ACP connections; it can also
-be overridden via `OPENCLAW_GATEWAY_TOKEN`, or `OPENCLAW_CONFIG_PATH` can be set to explicitly
-specify a different OpenClaw configuration.
+channels such as DingTalk in the independent instance. In managed mode, if the original configuration
+has enabled a Gateway Token, it will be automatically read and used for local ACP connections; it can
+also be overridden via `OPENCLAW_GATEWAY_TOKEN`, or `OPENCLAW_CONFIG_PATH` can be set to explicitly
+specify a different OpenClaw configuration. When connecting to an external Gateway, also set
+`OPENCLAW_GATEWAY_TOKEN` (or `OPENCLAW_GATEWAY_TOKEN_FILE`).
 
 OpenCode: The Gateway interacts with it via `opencode acp` and manages the local service used
 to open the native Session interface. When there is no compatible installation, it automatically
-uses a fixed npm package; users do not need to separately install or start the service:
+uses a fixed npm package; users do not need to separately install or start the service.
+`OPENCODE_BASE_URL` names that local Session UI service; it is not a remote ACP execution
+endpoint that qwen-audio-agent can attach to:
 
 ```dotenv
 AGENT_PROTOCOL=opencode
@@ -230,6 +265,28 @@ QODER_CONFIG_DIR=
 ```
 
 The Gateway manages the Qoder ACP subprocess; Qoder does not accept `--backend-url`.
+
+### Qwen Code
+
+Qwen Code connects through its native stdio ACP entry point, `qwen --acp`.
+The Gateway starts only this local ACP process and preserves Qwen Code's own
+authentication, provider, model, MCP, Skill, and Session configuration.
+
+```dotenv
+AGENT_PROTOCOL=qwen
+QWEN_AUDIO_AGENT_BACKEND_PERMISSION_MODE=native
+```
+
+Run `qwen` interactively and use `/auth` for first-time authentication. The
+removed `qwen auth` command is not used. Optional overrides:
+
+```dotenv
+QWEN_CODE_BIN=
+QWEN_CODE_WORKSPACE=
+```
+
+The current integration intentionally supports the local ACP process only;
+Qwen Code's experimental network service is not treated as a remote backend.
 
 ### Kimi Code
 
@@ -416,7 +473,7 @@ managed by the Gateway, and do not accept `--backend-url`.
 - `full`: Explicitly grants the highest permission at startup; the backend can directly execute
   commands, read and write files, without per-request confirmation.
 
-`full` currently supports OpenCode, Qoder, Kimi Code, Hermes, CodeBuddy, Codex, and
+`full` currently supports OpenCode, Qoder, Qwen Code, Kimi Code, Hermes, CodeBuddy, Codex, and
 Claude Code. The Gateway automatically approves permission requests initiated by these ACP
 backends; in addition, Kimi Code switches to an Auto mode that does not ask again via ACP
 Session configuration, Qoder and CodeBuddy CLI use `--dangerously-skip-permissions`, OpenCode

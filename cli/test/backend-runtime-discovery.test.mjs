@@ -205,12 +205,12 @@ test('OpenClaw auto mode prefers the user-installed command', {
       )),
       false,
     )
-    assert.match(
-      readFileSync(
-        resolve(target.directory, 'config/workspaces/openclaw/AGENTS.md'),
-        'utf8',
-      ),
-      /qwen-audio-agent/,
+    assert.equal(
+      existsSync(resolve(
+        target.directory,
+        'config/workspaces/openclaw/AGENTS.md',
+      )),
+      false,
     )
   } finally {
     target.close()

@@ -20,6 +20,8 @@
 
 ## News
 
+- **2026-08-09 · [v1.8.0](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.8.0)**
+  🆕 新增 Qwen Code 后台；🔧 修复已知问题。
 - **2026-08-07 · [v1.7.0](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.7.0)**
   🎨 悬浮球支持换肤，可导入自定义外观；🪟 优化 Windows 后台 Agent 启动。
 - **2026-08-07 · [v1.6.1](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.6.1)**
@@ -85,6 +87,7 @@ https://github.com/user-attachments/assets/42022655-36d1-46b2-9c26-ff0765284000
 | OpenCode | 原生 ACP | 支持一键安装和百炼配置 | ★★★★★ |
 | OpenClaw | 内置 ACP 桥接 | 支持一键安装和百炼配置 | ★★★★★ |
 | Qoder | 原生 ACP | 支持一键安装，需用户配置 | ★★★★★ |
+| Qwen Code | 原生 ACP | 支持一键安装，需用户配置 | ★★★★☆ |
 | Kimi Code | 原生 ACP | 支持一键安装，需用户配置 | ★★★★★ |
 | Hermes | 原生 ACP | 支持一键安装，需用户配置 | ★★★★☆ |
 | CodeBuddy | 原生 ACP | 支持一键安装，需用户配置 | ★★★★☆ |

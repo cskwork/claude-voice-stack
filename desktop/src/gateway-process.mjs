@@ -1,7 +1,11 @@
 import { createConnection } from 'node:net'
 import { dirname, posix, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { normalizeBackendProtocol } from '../../shared/backend-catalog.mjs'
+import {
+  backendDefinition,
+  normalizeBackendProtocol,
+  resolveBackendOwnership,
+} from '../../shared/backend-catalog.mjs'
 import {
   resolveRealtimeFrontendConfiguration,
 } from '../../shared/realtime-provider-catalog.mjs'
@@ -109,6 +113,44 @@ export function desktopGatewayCompatibility(health, env = process.env) {
     }
   }
   if (expectedProtocol) {
+    const definition = backendDefinition(expectedProtocol)
+    const configuredBaseUrl = String(
+      definition?.baseUrlEnvironment
+        ? env[definition.baseUrlEnvironment] || ''
+        : '',
+    ).trim()
+    const expectedOwnership = resolveBackendOwnership(expectedProtocol, {
+      baseUrlConfigured: Boolean(configuredBaseUrl),
+      requestedOwnership: env.QWEN_AUDIO_AGENT_BACKEND_OWNERSHIP,
+    })
+    const actualOwnership = String(
+      health?.backend?.ownership
+      || (health?.backend?.mode === 'compatible' ? 'external' : 'owned'),
+    ).toLowerCase()
+    if (expectedOwnership !== actualOwnership) {
+      return {
+        compatible: false,
+        code: 'ownership',
+        reason: '已有 Gateway 的后台进程归属与桌面设置不一致',
+      }
+    }
+    if (expectedOwnership === 'external' && definition?.baseUrlEnvironment) {
+      const actualBaseUrl = String(health?.backend?.baseUrl || '').trim()
+      let sameOrigin = false
+      try {
+        sameOrigin = Boolean(actualBaseUrl)
+          && new URL(actualBaseUrl).origin === new URL(configuredBaseUrl).origin
+      } catch {
+        sameOrigin = false
+      }
+      if (!sameOrigin) {
+        return {
+          compatible: false,
+          code: 'backend-url',
+          reason: '已有 Gateway 的外部后台地址与桌面设置不一致',
+        }
+      }
+    }
     const expectedPermission = String(
       env.QWEN_AUDIO_AGENT_BACKEND_PERMISSION_MODE || 'native',
     ).toLowerCase()

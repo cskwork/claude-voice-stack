@@ -10,14 +10,16 @@ import { codexBackendDriver } from '../src/agent/backends/codex.mjs'
 import { claudeBackendDriver } from '../src/agent/backends/claude.mjs'
 
 function assertLauncherPattern(profile, root, scriptName) {
-  assert.equal(profile.command, process.execPath,
+  const connection = profile.acpConnection
+  assert.equal(connection.kind, 'process')
+  assert.equal(connection.command, process.execPath,
     `command should be process.execPath for ${scriptName}`)
-  assert.ok(profile.args.length >= 1,
+  assert.ok(connection.args.length >= 1,
     `args should contain at least the launcher script for ${scriptName}`)
-  assert.equal(profile.args[0], resolve(root, `scripts/${scriptName}`),
+  assert.equal(connection.args[0], resolve(root, `scripts/${scriptName}`),
     `args[0] should be scripts/${scriptName}`)
-  if (profile.env) {
-    assert.equal(profile.env.ELECTRON_RUN_AS_NODE, '1',
+  if (connection.env) {
+    assert.equal(connection.env.ELECTRON_RUN_AS_NODE, '1',
       `${scriptName} driver must inject ELECTRON_RUN_AS_NODE`)
   }
 }
@@ -29,7 +31,7 @@ test('OpenCode driver uses process.execPath + opencode.mjs acp', () => {
     directory: '/work',
   })
   assertLauncherPattern(profile, '/repo', 'opencode.mjs')
-  assert.ok(profile.args.includes('acp'),
+  assert.ok(profile.acpConnection.args.includes('acp'),
     'args should contain "acp" subcommand')
 })
 
@@ -41,7 +43,7 @@ test('OpenClaw driver uses process.execPath + openclaw.mjs acp', () => {
     directory: '/work',
   })
   assertLauncherPattern(profile, '/repo', 'openclaw.mjs')
-  assert.ok(profile.args.includes('acp'),
+  assert.ok(profile.acpConnection.args.includes('acp'),
     'args should contain "acp" subcommand')
 })
 
@@ -53,7 +55,7 @@ test('Codex driver uses process.execPath + codex-acp.mjs', () => {
     cliPath: '/opt/codex-acp',
   })
   assertLauncherPattern(profile, '/repo', 'codex-acp.mjs')
-  assert.equal(profile.env.CODEX_ACP_BIN, '/opt/codex-acp')
+  assert.equal(profile.acpConnection.env.CODEX_ACP_BIN, '/opt/codex-acp')
 })
 
 test('Claude Code driver uses process.execPath + claude-code-acp.mjs', () => {
