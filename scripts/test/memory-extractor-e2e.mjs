@@ -12,7 +12,8 @@ import { mkdtempSync, readFileSync, rmSync, existsSync } from 'node:fs'
 import { tmpdir, homedir } from 'node:os'
 import { join } from 'node:path'
 import { ConversationSync } from '../../server/src/conversation/conversation-sync.mjs'
-import { FrontendMemoryStore } from '../../server/src/conversation/frontend-memory.mjs'
+import { FrontendMemoryService } from '../../server/src/conversation/frontend-memory-service.mjs'
+import { MarkdownContextStore } from '../../server/src/conversation/markdown-context-store.mjs'
 import { MemoryAudit } from '../../server/src/conversation/memory-audit.mjs'
 import {
   MemoryExtractor,
@@ -46,7 +47,7 @@ function session(turns) {
 
 const SCENARIOS = [
   {
-    name: '陈述型个人事实应沉淀（stated → facts, source=inferred）',
+    name: '陈述型个人事实应沉淀到自然 Markdown',
     turns: [
       ['user', '早上好'],
       ['assistant', '早上好，今天有什么安排吗'],
@@ -61,11 +62,10 @@ const SCENARIOS = [
       const memories = store.list('owner-e2e', { limit: 64 })
       const contents = memories.map(memory => memory.content).join(' / ')
       return {
-        pass: memories.length >= 1
-          && memories.length <= 5
-          && memories.every(memory => memory.source === 'inferred' && memory.scope === 'facts')
+        pass: memories.length === 1
+          && memories.every(memory => memory.format === 'markdown' && memory.scope === 'memory')
           && /跑|晨跑|运动/.test(contents),
-        detail: `${memories.length} 条: ${contents}`,
+        detail: contents,
       }
     },
   },
@@ -123,10 +123,11 @@ const SCENARIOS = [
     ],
     expect: store => {
       const memories = store.list('owner-e2e', { limit: 64 })
-      const running = memories.filter(memory => /跑/.test(memory.content))
+      const contents = memories.map(memory => memory.content).join('\n')
+      const running = contents.match(/跑[^\n]*/g) || []
       return {
         pass: running.length <= 1,
-        detail: `跑步相关 ${running.length} 条: ${memories.map(memory => memory.content).join(' / ')}`,
+        detail: `跑步相关 ${running.length} 处: ${contents}`,
       }
     },
   },
@@ -143,15 +144,26 @@ console.log(`模型: ${model}  端点: DashScope compatible-mode\n`)
 let failures = 0
 for (const scenario of SCENARIOS) {
   const directory = mkdtempSync(join(tmpdir(), 'qwenaudio-memory-e2e-'))
-  const store = new FrontendMemoryStore({
-    filePath: join(directory, 'frontend-memory.json'),
+  const store = new MarkdownContextStore({
+    filePath: join(directory, 'MEMORY.md'),
+    scope: 'memory',
+    template: '# MEMORY',
+  })
+  const userStore = new MarkdownContextStore({
+    filePath: join(directory, 'USER.md'),
+    scope: 'user',
+    template: '# USER',
+  })
+  const memoryService = new FrontendMemoryService({
+    userStore,
+    memoryStore: store,
   })
   for (const content of scenario.seed || []) {
-    store.remember('owner-e2e', content, { scope: 'facts', source: 'inferred' })
+    store.edit('owner-e2e', { append: `- ${content}` })
   }
   const auditPath = join(directory, 'memory-audit.jsonl')
   const extractor = new MemoryExtractor({
-    memoryStore: store,
+    memoryService,
     conversationSync: session(scenario.turns),
     audit: new MemoryAudit({ filePath: auditPath }),
     llmCall: createExtractorLlmCall({

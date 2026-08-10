@@ -12,7 +12,9 @@ import { resolve } from 'node:path'
 const MIGRATED_FILES = [
   'config.env',
   'state.env',
+  'ASSISTANT.md',
   'USER.md',
+  'MEMORY.md',
   'frontend-memory.json',
   'frontend-notes.json',
   'tasks.json',

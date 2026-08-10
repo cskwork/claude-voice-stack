@@ -105,18 +105,17 @@ try {
   await closed
   console.log('✅ 会话已断开，等待后台提取…')
 
-  const memoryPath = join(configDir, 'frontend-memory.json')
+  const memoryPath = join(configDir, 'MEMORY.md')
   const auditPath = join(configDir, 'memory-audit.jsonl')
   await waitFor(
     () => existsSync(memoryPath),
-    { timeoutMs: 20000, label: '提取器写入 frontend-memory.json' },
+    { timeoutMs: 20000, label: '提取器写入 MEMORY.md' },
   )
 
-  const stored = JSON.parse(readFileSync(memoryPath, 'utf8'))
-  const entries = Object.values(stored.users || {}).flatMap(user => Object.values(user))
-  const inferred = entries.filter(entry => entry.source === 'inferred')
-  console.log(`✅ 提取写入 ${inferred.length} 条 inferred 记忆:`)
-  inferred.forEach(entry => console.log(`   - [${entry.scope}] ${entry.value}`))
+  const stored = readFileSync(memoryPath, 'utf8')
+  const inferred = stored.split('\n').filter(line => /^- /.test(line))
+  console.log(`✅ MEMORY.md 中有 ${inferred.length} 条记忆:`)
+  inferred.forEach(entry => console.log(`   ${entry}`))
 
   const auditOps = existsSync(auditPath)
     ? readFileSync(auditPath, 'utf8').trim().split('\n').map(line => JSON.parse(line).op)
@@ -124,8 +123,7 @@ try {
   console.log(`✅ 审计日志: ${auditOps.join(', ') || '(无)'}`)
 
   const pass = inferred.length >= 1
-    && inferred.every(entry => entry.scope === 'facts')
-    && auditOps.includes('write')
+    && auditOps.includes('patch')
   console.log(pass ? '\n全链路冒烟通过' : '\n❌ 断言未通过')
   cleanup(pass ? 0 : 1)
 } catch (error) {

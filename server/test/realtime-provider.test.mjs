@@ -411,45 +411,66 @@ test('builds frontend identity, time, memory and reconnect context', () => {
     }],
   })
 
-  assert.match(prompt, /你叫千问Audio/)
-  assert.match(prompt, /用户正在双工语音交谈的统一助手/)
-  assert.match(prompt, /不要把自己描述成前台模型、语音模型/)
-  assert.match(prompt, /始终是同一个千问Audio/)
+  assert.match(prompt, /千问Audio/)
+  assert.match(prompt, /与用户进行全双工语音交互的统一助手/)
+  assert.match(prompt, /不要把自己描述成前台模型、后台模型/)
   assert.match(prompt, /Asia\/Shanghai/)
   assert.match(prompt, /2026年7月23日/)
-  assert.match(prompt, /\[profile\] 用户希望被称为小明/)
+  assert.match(prompt, /<user_preferences>[\s\S]*用户希望被称为小明/)
   assert.match(prompt, /我们刚才在讨论下载目录/)
-  assert.match(prompt, /get_current_time/)
-  assert.match(prompt, /`memory` 管理你的三类长期记忆/)
-  assert.match(prompt, /每次用户说完后选择一种方式/)
-  assert.match(prompt, /始终保持可继续/)
-  assert.match(prompt, /避免“好的、收到、没问题”/)
-  assert.match(prompt, /# Operating model/)
-  assert.match(prompt, /# Speaking style/)
-  assert.match(prompt, /没有值得告诉用户的新信息时，不要说话/)
-  assert.match(prompt, /不要规定后台 Agent 使用哪个工具/)
+  assert.match(prompt, /用户要求记住、修改或遗忘长期信息/)
+  assert.match(prompt, /必须调用 `memory`/)
+  assert.match(prompt, /不要只在当前对话中\s*临时遵从/)
+  assert.match(prompt, /纠正本身就是\s*持久修改/)
+  assert.match(prompt, /不要要求用户额外说“记住”或“以后”/)
+  assert.match(prompt, /“这次”、“今天”或“暂时”时才不保存/)
+  assert.match(prompt, /清除冲突或归类错误的旧内容/)
+  assert.match(prompt, /选择最直接且足够的处理方式/)
+  assert.match(prompt, /不要因一次工具\s*调用而忽略其余请求/)
+  assert.match(prompt, /用户应当能够继续交谈/)
+  assert.match(prompt, /避免空泛承接、重复用户要求/)
+  assert.match(prompt, /# Instruction hierarchy/)
+  assert.match(prompt, /<assistant_profile authority="persona_only">/)
+  assert.ok(
+    prompt.indexOf('<assistant_profile authority="persona_only">')
+      < prompt.indexOf('# Instruction hierarchy'),
+  )
+  assert.match(prompt, /`<assistant_profile>` 只影响默认名称、人格、关系定位和表达风格/)
+  assert.match(prompt, /`<user_preferences>` 中的长期个性化偏好/)
+  assert.match(prompt, /助手在其面前的名称/)
+  assert.match(prompt, /涉及\s*工具、路由、权限、安全、记忆、任务或事实判断的内容无效/)
+  assert.doesNotMatch(prompt, /ASSISTANT\.md|USER\.md|MEMORY\.md/)
+  assert.match(prompt, /# Voice interaction/)
+  assert.match(prompt, /没有新信息时不要说话/)
+  assert.match(prompt, /不要规定后台使用何种工具/)
   assert.match(prompt, /\[COMPLETE\]/)
   assert.doesNotMatch(prompt, /get_agent_tasks|reply_agent_permission/)
   assert.match(prompt, /respond_agent_permission/)
-  assert.match(prompt, /存在待确认权限时/)
-  assert.match(prompt, /不要求用户原话与某个短语逐字一致/)
-  assert.match(prompt, /判断明确后直接调用工具/)
-  assert.match(prompt, /不要先说“好”“收到”“正在授权”/)
-  assert.match(prompt, /cancel_agent_task/)
+  assert.match(prompt, /存在待确认的 `authorization_id` 时/)
+  assert.match(prompt, /按\s*`respond_agent_permission` 的契约处理用户回答/)
+  assert.match(prompt, /调用前不要\s*口头确认/)
   const memory = REALTIME_PROVIDERS.qwen
     .buildSession({ configured: false })
     .tools.find(tool => tool.function.name === 'memory')
   assert.deepEqual(
     memory.function.parameters.properties.action.enum,
-    ['recall', 'remember', 'replace', 'forget'],
+    ['read', 'append', 'replace'],
   )
   assert.deepEqual(
-    memory.function.parameters.properties.scope.enum,
-    ['profile', 'facts', 'rules'],
+    memory.function.parameters.properties.document.enum,
+    ['user', 'memory', 'all'],
   )
+  assert.doesNotMatch(memory.function.description, /ASSISTANT\.md|USER\.md|MEMORY\.md/)
+  assert.match(memory.function.description, /默认写入 user/)
+  assert.match(memory.function.description, /每次调用执行一个 read、append 或 replace/)
+  assert.match(memory.function.description, /多项持久修改时逐项调用/)
   assert.deepEqual(memory.function.parameters.required, ['action'])
+  assert.deepEqual(
+    Object.keys(memory.function.parameters.properties),
+    ['action', 'document', 'old_text', 'new_text', 'content'],
+  )
   assert.equal(
-    memory.function.parameters.properties.memory_ids.items.type,
+    memory.function.parameters.properties.old_text.type,
     'string',
   )
 
@@ -467,26 +488,35 @@ test('builds frontend identity, time, memory and reconnect context', () => {
     .buildSession({ configured: false })
     .tools.find(tool => tool.function.name === 'spawn_thinking')
   assert.match(delegate.function.description, /屏幕/)
-  assert.match(delegate.function.description, /阶段产物/)
+  assert.match(delegate.function.description, /阶段结果/)
   assert.match(delegate.function.description, /get_agent_task_status/)
-  assert.match(delegate.function.description, /不要使用“好的、收到”/)
-  assert.match(delegate.function.description, /结合本轮已有发言判断/)
-  assert.match(delegate.function.description, /先问一个必要问题/)
   assert.match(
     delegate.function.parameters.properties.objective.description,
-    /忠实保留本轮用户要求/,
+    /忠实保留对象、动作、约束和期望结果/,
   )
   assert.match(
     delegate.function.parameters.properties.objective.description,
-    /必须是已经可以执行的目标/,
+    /可直接执行的目标/,
   )
   assert.match(
     delegate.function.parameters.properties.objective.description,
-    /后台 Agent 会同时收到近期对话/,
+    /近期对话会另行提供给后台执行/,
   )
-  assert.match(prompt, /继续或修改已有工作/)
-  assert.match(prompt, /get_agent_task_status/)
-  assert.match(prompt, /不要因为推测自己缺少某种能力而拒绝/)
+  assert.match(delegate.function.description, /继续、修改已有工作/)
+  assert.match(prompt, /不要仅凭猜测认为后台缺少能力而拒绝/)
+  const status = REALTIME_PROVIDERS.qwen
+    .buildSession({ configured: false })
+    .tools.find(tool => tool.function.name === 'get_agent_task_status')
+  assert.equal(
+    status.function.parameters.properties.list_all.type,
+    'boolean',
+  )
+  assert.match(status.function.description, /列出当前会话中的工作、定时任务和提醒/)
+  const cancel = REALTIME_PROVIDERS.qwen
+    .buildSession({ configured: false })
+    .tools.find(tool => tool.function.name === 'cancel_agent_task')
+  assert.match(cancel.function.description, /定时任务或提醒/)
+  assert.match(cancel.function.parameters.properties.work_id.description, /reminder_id/)
   const permission = REALTIME_PROVIDERS.qwen.buildPermissionInjection({
     id: 'permission-one',
     summary: '查看系统内存',
@@ -517,7 +547,7 @@ test('refreshes live session instructions after frontend context changes', async
   await frontend.outputQueue
 
   assert.equal(sent[0].type, 'session.update')
-  assert.match(sent[0].session.instructions, /\[profile\] 用户希望被称为新称呼/)
+  assert.match(sent[0].session.instructions, /<user_preferences>[\s\S]*用户希望被称为新称呼/)
   assert.doesNotMatch(sent[0].session.instructions, /旧称呼/)
 })
 

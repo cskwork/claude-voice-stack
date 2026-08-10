@@ -130,41 +130,50 @@ The local identity key is automatically generated when the program first starts,
 `state.env` in the same configuration directory, with file permissions restricted to read and
 write by the current user only.
 
-The same directory also automatically creates `USER.md` for saving a stable user profile. The
-program only modifies the managed area marked within the file; other handwritten content is
-preserved as-is; modifications take effect in the next conversation round. Please do not store
-passwords, API keys, verification codes, or tokens in it.
-If you need to place the profile elsewhere, you can set:
+The same directory also creates `ASSISTANT.md`, `USER.md`, and `MEMORY.md`. `ASSISTANT.md`
+defines only the assistant instance's default name, personality, and expression style; `USER.md`
+stores the current user's explicit long-term personalization overlay; `MEMORY.md` stores durable
+facts and decisions used only for understanding and answers. All three are ordinary Markdown and direct edits
+apply to the next voice session. The assistant maintains the latter two through constrained exact
+edits and never changes `ASSISTANT.md` on its own. Do not store passwords, API keys, verification
+codes, or tokens in them.
+If you need to place user preferences elsewhere, you can set:
 
 ```dotenv
-QWEN_AUDIO_AGENT_USER_PROFILE_PATH=/absolute/path/to/USER.md
+QWEN_AUDIO_AGENT_USER_MODEL_PATH=/absolute/path/to/USER.md
+QWEN_AUDIO_AGENT_ASSISTANT_PROFILE_PATH=/absolute/path/to/ASSISTANT.md
 ```
 
-The local `USER.md` is only injected into context in the default `personal` identity mode; the
-multi-user `browser` mode does not share this profile.
+In multi-user `browser` mode, each identity gets isolated Markdown documents under `users/`;
+the default local user's files are never shared.
 
 The same user directory also stores:
 
 ```text
-frontend-memory.json  # Long-term information remembered across sessions (explicit requests + automatic sedimentation after sessions)
+ASSISTANT.md          # Customizable assistant name, personality, and expression style
+USER.md               # Explicit long-term interaction directives for the current user
+MEMORY.md             # Durable facts and decisions about the user and projects
 memory-audit.jsonl    # Audit log for automatic memory (appended entry by entry, for post-hoc review only)
 tasks.json            # Recovery state for backend tasks, results, and pending broadcast notifications
 ```
 
-These files, like `USER.md` and `state.env`, are only readable and writable by the current user
-and are not written to the source code repository. Corresponding files in the legacy repository
-`runtime/` directory are automatically migrated on first launch. Advanced users can still
-override the location via `QWEN_AUDIO_AGENT_FRONTEND_MEMORY_PATH` and
+These files, like `ASSISTANT.md`, `USER.md`, and `state.env`, are only readable and writable by the current user
+and are not written to the source code repository. Legacy `frontend-memory.json` content is split
+into `USER.md` and `MEMORY.md` on first launch. Advanced users can override the memory location
+with `QWEN_AUDIO_AGENT_MEMORY_PATH` (the old `QWEN_AUDIO_AGENT_FRONTEND_MEMORY_PATH` remains
+accepted) and the task location with
 `QWEN_AUDIO_AGENT_TASK_STATE_PATH`.
 
-### Automatic Memory Sedimentation
+### Automatic Memory Reconciliation
 
-After a session ends, the Gateway uses a lightweight text model to extract stable personal facts
-from the conversation and silently writes them to long-term memory (see
-[User Profile and Memory](reference/memory.md) for details). Related optional configuration:
+After a session ends, the Gateway uses a lightweight text model to reconcile the conversation:
+missed explicit interaction directives go to `USER.md`, while stable facts and decisions go to
+`MEMORY.md`. This path uses the same memory service as Realtime and never writes files directly
+or modifies `ASSISTANT.md` (see
+[Assistant Profile, User Preferences, and Memory](reference/memory.md) for details). Related optional configuration:
 
 ```bash
-QWEN_AUDIO_MEMORY_AUTO=on         # off globally disables automatic sedimentation (default on)
+QWEN_AUDIO_MEMORY_AUTO=on         # off globally disables automatic reconciliation (default on)
 QWEN_AUDIO_MEMORY_MODEL=qwen-flash  # Extraction model (default qwen-flash)
 QWEN_AUDIO_MEMORY_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
                                   # Any OpenAI-compatible endpoint, including local Ollama
@@ -172,7 +181,7 @@ QWEN_AUDIO_MEMORY_API_KEY=        # Defaults to reusing DASHSCOPE_API_KEY
 ```
 
 When neither Key is configured (e.g., a purely local speech-to-speech frontend), automatic
-sedimentation is silently disabled; explicitly requested memory is not affected.
+reconciliation is silently disabled; explicitly requested memory is not affected.
 
 ## Selecting a Backend
 

@@ -108,45 +108,52 @@ Gateway 不会擅自重置。
 本地身份密钥由程序首次启动时自动生成，保存在同一配置目录的 `state.env`，
 文件权限为仅当前用户可读写。
 
-同一目录还会自动创建 `USER.md`，用于保存稳定用户档案。程序只会改动文件内带标记
-的托管区域，其他手写内容会原样保留；修改后下一轮对话即可生效。请勿在其中保存
-密码、API Key、验证码或令牌。
-如需把档案放在其他位置，可设置：
+同一目录还会自动创建 `ASSISTANT.md`、`USER.md` 和 `MEMORY.md`。`ASSISTANT.md` 只定义
+助手实例的默认名称、人格和表达风格；`USER.md` 保存当前用户明确设定的长期个性化覆盖；
+`MEMORY.md` 保存只用于理解和回答的长期事实与决定。
+它们都是普通 Markdown，直接编辑后在下一次建立语音会话时生效。助手通过受限的精确
+编辑维护后两者，不会自行修改 `ASSISTANT.md`。请勿在其中保存密码、API Key、验证码或令牌。
+如需把用户偏好放在其他位置，可设置：
 
 ```dotenv
-QWEN_AUDIO_AGENT_USER_PROFILE_PATH=/absolute/path/to/USER.md
+QWEN_AUDIO_AGENT_USER_MODEL_PATH=/absolute/path/to/USER.md
+QWEN_AUDIO_AGENT_ASSISTANT_PROFILE_PATH=/absolute/path/to/ASSISTANT.md
 ```
 
-本机 `USER.md` 只在默认的 `personal` 身份模式下注入上下文；多用户 `browser`
-模式不会共享这份档案。
+多用户 `browser` 模式会在 `users/` 子目录中按身份隔离各自的 Markdown 文档，
+不会共享本机默认用户的内容。
 
 同一用户目录还保存：
 
 ```text
-frontend-memory.json  # 跨会话记住的长期信息（明确要求 + 会话后自动沉淀）
+ASSISTANT.md          # 可定制的助手名称、人格和表达风格
+USER.md               # 当前用户明确设定的长期交互方式
+MEMORY.md             # 关于用户和项目的长期事实与决定
 memory-audit.jsonl    # 自动记忆的审计日志（逐条追加，仅供事后查阅）
 tasks.json            # 后台任务、结果和待播报通知的恢复状态
 ```
 
-这些文件和 `USER.md`、`state.env` 一样只允许当前用户读写，不会写入源码仓库。
-旧版仓库 `runtime/` 目录中的对应文件会在首次启动时自动迁移。高级用户仍可通过
-`QWEN_AUDIO_AGENT_FRONTEND_MEMORY_PATH` 和 `QWEN_AUDIO_AGENT_TASK_STATE_PATH`
+这些文件和 `ASSISTANT.md`、`USER.md`、`state.env` 一样只允许当前用户读写，不会写入源码仓库。
+旧版 `frontend-memory.json` 会在首次启动时拆分迁移到 `USER.md` 和 `MEMORY.md`。
+高级用户仍可通过 `QWEN_AUDIO_AGENT_MEMORY_PATH`（旧变量
+`QWEN_AUDIO_AGENT_FRONTEND_MEMORY_PATH` 仍兼容）和 `QWEN_AUDIO_AGENT_TASK_STATE_PATH`
 覆盖位置。
 
-### 自动记忆沉淀
+### 自动记忆整理
 
-会话结束后，Gateway 会用一个轻量文本模型从对话中提取稳定的个人事实，
-静默写入长期记忆（详见[用户档案与记忆](reference/memory.zh.md)）。相关可选配置：
+会话结束后，Gateway 会用一个轻量文本模型整理对话：遗漏的明确长期交互指令进入
+`USER.md`，稳定事实与决定进入 `MEMORY.md`。自动路径与 Realtime 共用同一个记忆服务，
+不会直接写文件或修改 `ASSISTANT.md`（详见[助手画像、用户偏好与记忆](reference/memory.zh.md)）。相关可选配置：
 
 ```bash
-QWEN_AUDIO_MEMORY_AUTO=on         # off 全局关闭自动沉淀（默认 on）
+QWEN_AUDIO_MEMORY_AUTO=on         # off 全局关闭自动整理（默认 on）
 QWEN_AUDIO_MEMORY_MODEL=qwen-flash  # 提取模型（默认 qwen-flash）
 QWEN_AUDIO_MEMORY_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
                                   # 任意 OpenAI 兼容端点，含本地 Ollama
 QWEN_AUDIO_MEMORY_API_KEY=        # 默认复用 DASHSCOPE_API_KEY
 ```
 
-两个 Key 都未配置时（如纯本地 speech-to-speech 前台），自动沉淀静默关闭，
+两个 Key 都未配置时（如纯本地 speech-to-speech 前台），自动整理静默关闭，
 明确要求的记忆不受影响。
 
 ## 选择后台

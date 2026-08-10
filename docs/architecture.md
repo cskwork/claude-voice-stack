@@ -67,44 +67,42 @@ notes
 respond_agent_permission
 ```
 
-`memory` keeps one small protocol for frontend-owned memory:
+`memory` maintains two ordinary Markdown documents through one flat interface. Each call is one
+atomic `read`, `append`, or `replace` operation. `replace` locates a unique source fragment, and
+fails safely if that fragment is missing or ambiguous. Realtime may issue several calls
+in one turn; the Gateway merges their follow-up response. The documents have different authority:
 
-- `recall` reads profile or fact records and returns stable IDs;
-- `remember` adds a new durable fact;
-- `replace` atomically replaces recalled IDs when the user corrects a fact;
-- `forget` removes explicitly requested records.
+- `user` is the current user's long-term personalization overlay: forms of
+  address, relationship, the assistant's name for that user, language, expression
+  style, and default behavior. It is injected as user-authorized directive material,
+  overrides the instance-wide defaults from `ASSISTANT.md`, and yields to the user's
+  current utterance.
+- `memory` contains durable facts and decisions used for understanding and answers,
+  never as instructions. The scopes are separated by behavioral authority, not topic.
 
-Records live in three scopes: `profile` (name, timezone, locale, stable
-interaction preferences), `facts` (durable personal facts), and `rules`
-(user-authored standing instructions: speaking style, forms of address, default
-ways of doing things). `rules` are user-authorized directives, not memory data:
-they are always injected into the Realtime context as `User Directives`, take
-precedence over the assistant's default style, and yield to the user's current
-utterance. They never authorize leaking internal structure, skipping
-permission checks, or changing the assistant's identity; entries that demand
-those are void. Rules are bounded to 16 short entries so they can be injected
-in full on every turn, and they are attached to the backend Agent envelope as
-user-authored preference material. `profile` and `facts` remain
-read-on-demand data.
+Neither scope can authorize leaking internal structure, skipping permission
+checks, or changing task and safety protocols. The packaged `PROMPT.md` remains
+the core policy and cannot be overridden by personalization. Local `ASSISTANT.md`
+contains only the assistant instance's default identity, personality, relationship
+stance, and expression style. The assistant never edits it through memory. It is
+created from the packaged template once, preserved across upgrades, and reloaded
+for the next voice session after an edit.
 
-Besides explicit tool writes, a session-end extractor distils durable personal
-facts from the transcript into `facts` entries tagged `source: 'inferred'`.
-The automatic path can never write `rules` or `profile`, filters sensitive
-content, records every operation in a local audit file, and disables itself
-silently when no text-model API key is configured.
+Besides explicit tool writes, a session-end extractor reconciles missed explicit user
+directives and durable facts. It routes the former to `USER.md` and the latter to
+`MEMORY.md` through the same context service used by the realtime tool. It never writes
+files directly or modifies `ASSISTANT.md`, rejects document-boundary mistakes and sensitive
+content, records outcomes in a local audit file, and silently disables itself when no
+text-model API key is configured.
 
 `notes` manages user-named lists (shopping lists, todos, reading lists) as
 frontend-owned volatile collections: single-call add, show, match-remove,
 clear, and drop with no backend involvement. Lists are item data, not memory;
-stable facts remain in `memory`, and list items are never written into
-memory or rules. Item and list resolution matches exact text first, then a
+stable facts remain in `memory`, and list items are never written into the
+user preferences or factual memory. Item and list resolution matches exact text first, then a
 unique case-insensitive substring, and otherwise reports ambiguity with the
 candidate names back to the model for clarification. `clear` and `drop`
-additionally require an explicit current-turn user utterance before executing,
-like `memory` forget.
-
-Only the marked managed section of `USER.md` is editable. User-maintained profile
-text outside that section is returned as read-only data and cannot be replaced.
+additionally require an explicit destructive intent in the current turn.
 
 `get_agent_task_status` is the single Realtime entry point for lifecycle,
 progress, and interim-result questions. The Gateway answers non-delegated Work
