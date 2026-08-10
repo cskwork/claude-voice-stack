@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Web UI 支持英文界面：浏览器语言为非中文时自动显示英文文案，中文环境
+  保持原有文案不变；可通过 localStorage 键 `qwen-audio-lang` 手动指定语言。
+
 ## 1.8.0
 
 - 新增 Qwen Code 后台，使用官方 `qwen --acp` 接入；后台目录、安装、认证和进程
