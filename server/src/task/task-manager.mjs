@@ -13,6 +13,7 @@ const ACTIVE = new Set([
 ])
 const CANCELLABLE = new Set(['scheduled', 'queued', 'running', 'delegated', 'finalizing'])
 const TERMINAL = new Set(['completed', 'failed', 'cancelled'])
+const REPLAYABLE_REMINDER = new Set(['queued', 'running'])
 
 function publicResultMetadata(metadata) {
   if (!metadata || typeof metadata !== 'object') return null
@@ -137,7 +138,7 @@ export class TaskManager {
       // them as overdue catch-up is safe and they are never silently lost.
       const restartAsScheduled = (
         saved.kind === 'reminder'
-        && ACTIVE.has(saved.status)
+        && REPLAYABLE_REMINDER.has(saved.status)
       )
       if (saved.status === 'scheduled' || restartAsScheduled) {
         const task = {
