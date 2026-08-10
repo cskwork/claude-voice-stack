@@ -61,7 +61,7 @@ https://github.com/user-attachments/assets/42022655-36d1-46b2-9c26-ff0765284000
 - 支持创建多个独立任务，由后台 Agent 异步执行，并持续追踪任务状态
 - 任务结果自动回到当前对话，支持继续追问和修改
 - 支持 WebUI、终端 TUI 和桌面悬浮球（macOS / Windows / Linux）
-- 支持本地用户档案与跨会话个人记忆
+- 支持当前用户的长期个性化覆盖与跨会话记忆
 
 ## 参考架构
 
@@ -166,15 +166,15 @@ qwenaudio setup   # 查看当前可用的后台 Agent
 Agent 选择、后台常驻服务、通用 ACP 入口和权限模式见
 [后台 Agent 文档](docs/backends/overview.zh.md)。
 
-## 用户档案与记忆
+## 个性化与记忆
 
-用户数据保存在 `~/.config/qwaudio/`（`USER.md`、`frontend-memory.json`、
+用户数据保存在 `~/.config/qwaudio/`（`ASSISTANT.md`、`USER.md`、`MEMORY.md`、
 `tasks.json`、`logs/`），只存本机、不进仓库。详见
-[用户档案与记忆](docs/reference/memory.zh.md)。
+[助手画像、用户偏好与记忆](docs/reference/memory.zh.md)。
 
 ## 使用注意事项
 
-- 不要在用户档案或对话中保存密码、API Key、验证码和访问令牌。
+- 不要在用户偏好或对话中保存密码、API Key、验证码和访问令牌。
 - 麦克风音频与实时对话会发送到配置的 Realtime 前台服务（DashScope 或
   speech-to-speech）。
 - 后台任务可能调用所选 Agent 的模型、工具、MCP 和外部服务。

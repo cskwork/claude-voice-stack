@@ -7,6 +7,7 @@ import { TurnTranscripts } from '../src/voice/tools/turn-transcripts.mjs'
 function harness({
   coordinator = null,
   manager = new TaskManager(),
+  memoryStore = null,
 } = {}) {
   const outputs = []
   const transcripts = new TurnTranscripts({ waitMs: 5 })
@@ -23,7 +24,7 @@ function harness({
     coordinator: coordinator || {
       run: async () => ({ content: '完成', metadata: {} }),
     },
-    memoryStore: null,
+    memoryService: memoryStore,
     notesStore: null,
     onMemoryChanged: () => {},
     getClientContext: () => ({}),
@@ -137,4 +138,79 @@ test('handleScheduleReminder defaults recurrence to once', async () => {
 
   const [, output] = outputs[0]
   assert.equal(output.recurrence, 'daily')
+})
+
+test('lists scheduled reminders and cancels the latest one without an id', async () => {
+  const { outputs, manager, handler } = harness()
+  const future = new Date(Date.now() + 60_000).toISOString()
+  await handler.handle({
+    call_id: 'call-create-listable',
+    name: 'schedule_reminder',
+    arguments: JSON.stringify({
+      execute_at: future,
+      reminder: '记得开会',
+      type: 'reminder',
+    }),
+  }, { turnId: 'turn-1', turnGeneration: 1 })
+  const reminderId = outputs.at(-1)[1].reminder_id
+
+  await handler.handle({
+    call_id: 'call-list-reminders',
+    name: 'get_agent_task_status',
+    arguments: JSON.stringify({ list_all: true }),
+  }, { turnId: 'turn-1', turnGeneration: 1 })
+  const listing = outputs.at(-1)[1]
+  assert.equal(listing.status, 'ok')
+  assert.equal(listing.count, 1)
+  assert.deepEqual(listing.tasks[0], {
+    work_id: reminderId,
+    status: 'scheduled',
+    kind: 'reminder',
+    objective: '记得开会',
+    execute_at: future,
+    recurrence: 'once',
+  })
+
+  await handler.handle({
+    call_id: 'call-cancel-latest-reminder',
+    name: 'cancel_agent_task',
+    arguments: '{}',
+  }, { turnId: 'turn-1', turnGeneration: 1 })
+  assert.equal(outputs.at(-1)[1].status, 'cancelled')
+  assert.equal(manager.get(reminderId, { ownerId: 'owner' }).status, 'cancelled')
+})
+
+test('scheduled tasks resolve the latest user context when they execute', async () => {
+  let coordinatorInput
+  const memories = [{ scope: 'user', content: '默认使用中文' }]
+  const { outputs, manager, handler } = harness({
+    memoryStore: {
+      list: () => memories,
+    },
+    coordinator: {
+      run: async input => {
+        coordinatorInput = input
+        return { content: '完成', metadata: {} }
+      },
+    },
+  })
+  const future = new Date(Date.now() + 60_000).toISOString()
+  await handler.handle({
+    call_id: 'call-create-contextual-task',
+    name: 'schedule_reminder',
+    arguments: JSON.stringify({
+      execute_at: future,
+      reminder: '检查构建状态',
+      type: 'task',
+    }),
+  }, { turnId: 'turn-1', turnGeneration: 1 })
+  const taskId = outputs.at(-1)[1].reminder_id
+  memories.push({ scope: 'memory', content: '用户正在维护语音项目' })
+
+  await manager.tasks.get(taskId).runner('检查构建状态', {
+    onEvent: () => {},
+    signal: new AbortController().signal,
+  })
+
+  assert.deepEqual(coordinatorInput.userMemories, memories)
 })

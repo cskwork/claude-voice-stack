@@ -6,16 +6,16 @@
 // correction, and the audit trail, never from asking the user.
 //
 // Code-level safety invariants (do not weaken):
-// - Writes go to the facts data scope only. rules (directives) and profile
-//   accept explicit memory tool writes exclusively.
-// - Every automatic write is tagged source: 'inferred' so it can be bulk
-//   reverted without touching explicit memories.
+// - Every write goes through the same frontend context service as the realtime
+//   memory tool. The extractor never writes either Markdown file directly.
+// - USER.md accepts only explicit interaction directives; MEMORY.md rejects
+//   directive-shaped content.
 // - Failures are silent: extraction must never delay or break session close,
 //   and must never produce speech.
 
-const FACTS_SCOPE = 'facts'
+const MEMORY_DOCUMENTS = new Set(['user', 'memory'])
 const MAX_OPS_PER_RUN = 5
-const MAX_FACT_CHARS = 100
+const MAX_PATCH_CHARS = 1000
 
 // Secondary sensitive-content gate behind the extractor prompt. Conservative
 // by design: a false positive drops one candidate fact, a false negative
@@ -28,40 +28,84 @@ const SENSITIVE_PATTERNS = [
   /[A-Za-z0-9+/]{40,}={0,2}/,
 ]
 
+// Shared boundary classifier for extractor output. It requires directive-shaped
+// content in USER.md and rejects the same content from MEMORY.md.
+const USER_PREFERENCE_PATTERNS = [
+  /(?:我叫|我的名字|用户姓名|用户身份)/,
+  /(?:叫我|称呼我|如何称呼|我的称呼)/,
+  /(?:你|助手).{0,12}(?:叫|自称|名字|称为)/,
+  /(?:你|助手).{0,12}(?:像|作为|当作).{0,8}(?:朋友|伙伴|老师|教练|秘书|助理)/,
+  /(?:回复|回答|说话|表达).{0,12}(?:简短|简洁|详细|展开|正式|随意|语气|风格)/,
+  /(?:默认|以后).{0,12}(?:中文|英文|语言|时区|称呼|回复|回答)/,
+  /(?:用户)?.{0,8}(?:希望|要求|让|请).{0,8}(?:助手|你).{0,30}(?:每次|每回|始终|总是|以后|默认|开头|结尾|加上|带上|说一句)/,
+  /(?:助手|你).{0,20}(?:回复|回答|说话|表达|对话).{0,20}(?:每次|开头|结尾|加上|带上|说)/,
+  /(?:每次|每回|以后|默认).{0,12}(?:回复|回答|说话|表达|称呼)/,
+  /(?:回复|回答|说话|表达|对话).{0,12}(?:开头|结尾|加上|带上|说一句)/,
+  /(?:助手称呼用户|用户称呼助手)/,
+]
+
 const EXTRACTOR_SYSTEM_PROMPT = [
-  '你是一个记忆提取器，从语音助手与用户的对话转写中提取值得跨会话长期记住的用户个人事实。',
+  '你维护语音助手的 USER.md 和 MEMORY.md。根据对话转写，对现有普通 Markdown 做一次最小修改。',
   '只输出一个 JSON 对象，不要输出任何其他文字。格式：',
-  '{"ops":[{"action":"add","kind":"stated","content":"用户……"}]}',
+  '{"changes":[{"document":"user 或 memory","edits":[{"old_text":"文档中的精确原文","new_text":"替换后的 Markdown"}],"append":"追加的 Markdown 块"}]}',
   '',
   '规则：',
-  '- 只提取用户本人陈述的、稳定的个人事实：身份、称呼、偏好、习惯、人际关系、长期目标或计划。',
-  '- kind 只能是 stated 或 inferred：stated 表示用户明确陈述（如"我是、我喜欢、我每天"）；inferred 表示从上下文推测。拿不准时用 inferred。',
-  '- 每条 content 不超过 50 字，以"用户"开头，脱离对话也能独立成立。',
+  '- user 只保存用户本人明确提出、会直接改变未来交互方式的长期指令：称呼、关系、助手在该用户面前的名称、语言、表达风格和默认做法。不得推测。',
+  '- memory 只保存用户本人明确陈述、稳定且具有跨会话价值的非交互事实与决定：所在地、习惯、兴趣、人际关系事实、项目、长期目标或计划。不得推测。',
+  '- edits 用于更正或删除已有内容；old_text 必须逐字来自对应的现有文档且只出现一次。删除时 new_text 为空。',
+  '- append 是追加到对应文档的完整 Markdown 块，可包含多项信息并使用合适的小标题；没有新增时为空字符串。',
+  '- 保持文档简洁、自然、可直接由人阅读，不添加 ID、时间戳、来源或 JSON 字段。',
   '- 不提取：一次性情绪、临时安排、本次任务的执行细节、助手自身的行为、常识、随时可以再查到的事实。',
   '- 绝不提取：密码、密钥、验证码、令牌、证件号码、详细住址、健康与医疗信息。',
-  '- "已有记忆"里已经覆盖的事实不要重复输出。',
-  '- 没有值得记住的内容时输出 {"ops":[]}。',
+  '- 已有内容覆盖的信息不要重复追加；新陈述明确纠正旧内容时用 edits 替换，并清理另一个文档中放错位置或冲突的旧内容。',
+  '- 同一文档的修改合并为一个 change，每个 document 最多出现一次。',
+  '- 没有值得修改的内容时输出 {"changes":[]}。',
 ].join('\n')
 
 function containsSensitiveContent(value) {
   return SENSITIVE_PATTERNS.some(pattern => pattern.test(value))
 }
 
-function cleanFact(value) {
-  return [...String(value || '').replace(/\s+/g, ' ').trim()]
-    .slice(0, MAX_FACT_CHARS)
+function belongsToUserPreferences(value) {
+  return USER_PREFERENCE_PATTERNS.some(pattern => pattern.test(value))
+}
+
+function hasExplicitUserDirective(lines) {
+  const userText = lines
+    .filter(line => line.startsWith('用户:'))
+    .join('\n')
+  return [
+    /(?:以后|今后|从现在|每次|每回|始终|总是|默认|不要再|别再).{0,40}(?:叫|称呼|回复|回答|说|使用|用|加|带)/,
+    /(?:叫我|称呼我|你叫|你以后叫|我叫你)/,
+    /(?:我希望|我想让你|请你|你要).{0,40}(?:叫|称呼|回复|回答|说|表达|使用|加|带)/,
+    /(?:回复|回答|说话|表达).{0,20}(?:简短|简洁|详细|正式|随意|温柔|慢一点|快一点)/,
+  ].some(pattern => pattern.test(userText))
+}
+
+function cleanPatch(value) {
+  return [...String(value || '').replaceAll('\0', '').replace(/\r\n?/g, '\n').trim()]
+    .slice(0, MAX_PATCH_CHARS)
     .join('')
 }
 
 // The model may wrap JSON in a Markdown code fence despite instructions.
-function parseOps(text) {
+function parsePatch(text) {
   const raw = String(text || '').trim()
   const unfenced = raw.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '')
   const parsed = JSON.parse(unfenced)
-  if (!parsed || !Array.isArray(parsed.ops)) {
-    throw new Error('extractor output has no ops array')
+  if (!parsed || !Array.isArray(parsed.changes)) {
+    throw new Error('extractor output has no changes array')
   }
-  return parsed.ops
+  return parsed.changes.slice(0, 2).map(change => ({
+    document: String(change?.document || '').trim().toLowerCase(),
+    edits: Array.isArray(change?.edits)
+      ? change.edits.slice(0, MAX_OPS_PER_RUN).map(edit => ({
+          old_text: cleanPatch(edit?.old_text),
+          new_text: cleanPatch(edit?.new_text),
+        }))
+      : [],
+    append: cleanPatch(change?.append),
+  }))
 }
 
 function transcriptLines(messages, maxChars) {
@@ -124,7 +168,7 @@ export function createExtractorLlmCall({
 
 export class MemoryExtractor {
   constructor({
-    memoryStore,
+    memoryService,
     conversationSync,
     audit = null,
     llmCall = null,
@@ -134,7 +178,7 @@ export class MemoryExtractor {
     minUserMessages = 4,
     maxTranscriptChars = 6000,
   } = {}) {
-    this.memoryStore = memoryStore
+    this.memoryService = memoryService
     this.conversationSync = conversationSync
     this.audit = audit
     this.llmCall = llmCall
@@ -147,7 +191,7 @@ export class MemoryExtractor {
   }
 
   enabled() {
-    return typeof this.llmCall === 'function' && Boolean(this.memoryStore)
+    return typeof this.llmCall === 'function' && Boolean(this.memoryService)
   }
 
   // Fire-and-forget session-close hook. All gating is synchronous so a
@@ -184,76 +228,96 @@ export class MemoryExtractor {
   async run({ ownerId, messages }) {
     const lines = transcriptLines(messages, this.maxTranscriptChars)
     if (!lines.length) return
-    const existing = this.memoryStore.list(ownerId, {
-      limit: 64,
-      scope: FACTS_SCOPE,
-    })
+    const existing = this.memoryService.list(ownerId)
+    const documents = new Map(existing.map(document => [document.scope, document]))
     const user = [
-      '## 已有记忆',
-      existing.length
-        ? existing.map(memory => `- ${memory.content}`).join('\n')
-        : '（无）',
+      '## 当前 USER.md',
+      documents.get('user')?.content || '# USER',
+      '',
+      '## 当前 MEMORY.md',
+      documents.get('memory')?.content || '# MEMORY',
       '',
       '## 对话转写',
       lines.join('\n'),
     ].join('\n')
-    const ops = parseOps(
+    const changes = parsePatch(
       await this.llmCall({ system: EXTRACTOR_SYSTEM_PROMPT, user }),
     )
-    const existingValues = new Set(
-      existing.map(memory => memory.content.toLocaleLowerCase()),
-    )
-    let written = 0
-    for (const op of ops.slice(0, MAX_OPS_PER_RUN)) {
-      const content = cleanFact(op?.content)
-      const skip = reason => this.audit?.record({
-        op: 'skip', ownerId, reason, content,
-      })
-      if (!content) continue
-      // P0 routes only explicitly stated facts; inferred candidates wait for
-      // the P1 corroboration shadow store.
-      if (op?.action !== 'add' || op?.kind !== 'stated') {
-        skip('not_stated')
-        continue
-      }
-      if (containsSensitiveContent(content)) {
-        // Never echo the rejected secret into the audit trail.
-        this.audit?.record({ op: 'skip', ownerId, reason: 'sensitive' })
-        continue
-      }
-      if (existingValues.has(content.toLocaleLowerCase())) {
-        skip('duplicate')
-        continue
-      }
-      try {
-        const memory = this.memoryStore.remember(ownerId, content, {
-          scope: FACTS_SCOPE,
-          source: 'inferred',
-        })
-        existingValues.add(memory.content.toLocaleLowerCase())
-        written += 1
-        this.audit?.record({
-          op: 'write',
-          ownerId,
-          id: memory.id,
-          scope: memory.scope,
-          source: memory.source,
-          content: memory.content,
-        })
-      } catch (error) {
-        // Capacity or persistence failure: skip the rest silently.
-        this.audit?.record({
-          op: 'error',
-          ownerId,
-          content,
-          error: String(error?.message || error),
-        })
-        break
-      }
+    if (!changes.length) {
+      this.audit?.record({ op: 'skip', ownerId, reason: 'no_change' })
+      return
     }
-    this.logger?.debug?.('memory.extract_completed', {
-      ops: ops.length,
-      written,
+    if (
+      changes.some(change => !MEMORY_DOCUMENTS.has(change.document))
+      || new Set(changes.map(change => change.document)).size !== changes.length
+      || changes.some(change => !change.edits.length && !change.append)
+    ) {
+      this.audit?.record({ op: 'skip', ownerId, reason: 'invalid_change' })
+      return
+    }
+    const proposed = changes.flatMap(change => [
+      ...change.edits.map(edit => edit.new_text),
+      change.append,
+    ]).join('\n')
+    if (containsSensitiveContent(proposed)) {
+      this.audit?.record({ op: 'skip', ownerId, reason: 'sensitive' })
+      return
+    }
+    const invalidBoundary = changes.some(change => {
+      const additions = [
+        ...change.edits.map(edit => edit.new_text),
+        change.append,
+      ].filter(Boolean).join('\n')
+      if (!additions) return false
+      return change.document === 'user'
+        ? !belongsToUserPreferences(additions)
+        : belongsToUserPreferences(additions)
     })
+    if (invalidBoundary) {
+      this.audit?.record({ op: 'skip', ownerId, reason: 'document_boundary' })
+      return
+    }
+    if (
+      changes.some(change => change.document === 'user')
+      && !hasExplicitUserDirective(lines)
+    ) {
+      this.audit?.record({ op: 'skip', ownerId, reason: 'user_directive_not_explicit' })
+      return
+    }
+    const prepared = changes.map(change => ({
+      ...change,
+      expectedRevision: documents.get(change.document)?.revision || '',
+    }))
+    try {
+      const result = this.memoryService.apply(ownerId, prepared)
+      this.audit?.record({
+        op: 'patch',
+        ownerId,
+        documents: prepared.map(change => change.document),
+        changed: result.changed,
+        beforeRevisions: Object.fromEntries(prepared.map(change => [
+          change.document,
+          documents.get(change.document)?.revision || null,
+        ])),
+        afterRevisions: Object.fromEntries(result.documents.map(document => [
+          document.scope,
+          document.revision,
+        ])),
+        edits: prepared.reduce((sum, change) => sum + change.edits.length, 0),
+        appended: prepared.some(change => Boolean(change.append)),
+      })
+      this.logger?.debug?.('memory.extract_completed', {
+        documents: prepared.map(change => change.document),
+        edits: prepared.reduce((sum, change) => sum + change.edits.length, 0),
+        appended: prepared.some(change => Boolean(change.append)),
+        changed: result.changed,
+      })
+    } catch (error) {
+      this.audit?.record({
+        op: 'error',
+        ownerId,
+        error: String(error?.message || error),
+      })
+    }
   }
 }

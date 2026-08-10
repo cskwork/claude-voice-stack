@@ -339,15 +339,22 @@ export const config = {
   frontendPromptDir: process.env.QWEN_AUDIO_AGENT_FRONTEND_PROMPT_DIR
     ? resolve(root, process.env.QWEN_AUDIO_AGENT_FRONTEND_PROMPT_DIR)
     : resolve(root, 'config/frontend-agent'),
-  frontendMemoryPath: process.env.QWEN_AUDIO_AGENT_FRONTEND_MEMORY_PATH
-    ? resolve(root, process.env.QWEN_AUDIO_AGENT_FRONTEND_MEMORY_PATH)
+  assistantProfilePath: process.env.QWEN_AUDIO_AGENT_ASSISTANT_PROFILE_PATH
+    ? resolve(root, process.env.QWEN_AUDIO_AGENT_ASSISTANT_PROFILE_PATH)
+    : runtimeEnvironment.assistantProfilePath,
+  frontendMemoryPath: process.env.QWEN_AUDIO_AGENT_MEMORY_PATH
+    ? resolve(root, process.env.QWEN_AUDIO_AGENT_MEMORY_PATH)
+    : process.env.QWEN_AUDIO_AGENT_FRONTEND_MEMORY_PATH
+      ? resolve(root, process.env.QWEN_AUDIO_AGENT_FRONTEND_MEMORY_PATH)
     : runtimeEnvironment.frontendMemoryPath,
   frontendNotesPath: process.env.QWEN_AUDIO_AGENT_FRONTEND_NOTES_PATH
     ? resolve(root, process.env.QWEN_AUDIO_AGENT_FRONTEND_NOTES_PATH)
     : runtimeEnvironment.frontendNotesPath,
-  userProfilePath: process.env.QWEN_AUDIO_AGENT_USER_PROFILE_PATH
-    ? resolve(root, process.env.QWEN_AUDIO_AGENT_USER_PROFILE_PATH)
-    : runtimeEnvironment.userProfilePath,
+  userModelPath: process.env.QWEN_AUDIO_AGENT_USER_MODEL_PATH
+    ? resolve(root, process.env.QWEN_AUDIO_AGENT_USER_MODEL_PATH)
+    : process.env.QWEN_AUDIO_AGENT_USER_PROFILE_PATH
+      ? resolve(root, process.env.QWEN_AUDIO_AGENT_USER_PROFILE_PATH)
+    : runtimeEnvironment.userModelPath,
   taskStatePath: process.env.QWEN_AUDIO_AGENT_TASK_STATE_PATH
     ? resolve(root, process.env.QWEN_AUDIO_AGENT_TASK_STATE_PATH)
     : runtimeEnvironment.taskStatePath,

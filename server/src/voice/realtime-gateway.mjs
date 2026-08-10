@@ -105,7 +105,7 @@ function clientDescriptor(event = {}) {
 
 export function attachRealtimeGateway(server, {
   identityManager,
-  memoryStore,
+  memoryService,
   memoryExtractor = null,
   notesStore,
   coordinator,
@@ -366,7 +366,7 @@ export function attachRealtimeGateway(server, {
       getFrontend: () => frontend,
       getTurnId: () => committedTurnId,
       getTurnGeneration: () => committedTurnGeneration,
-      memoryStore,
+      memoryService,
       notesStore,
       getClientContext: () => clientContext,
       getConversationContext: () => conversationSync.frontendContext({
@@ -374,7 +374,7 @@ export function attachRealtimeGateway(server, {
         sessionId,
       }),
       onMemoryChanged: () => frontend?.updateAgentContext({
-        memories: memoryStore?.list(ownerId, { limit: 64 }) || [],
+        memories: memoryService?.list(ownerId, { limit: 64 }) || [],
       }),
       coordinator,
       backendAvailability,
@@ -1073,7 +1073,7 @@ export function attachRealtimeGateway(server, {
         if (responseContexts.has(id)) {
           responseContexts.get(id).hasFunctionCall = true
         }
-        toolCalls.handle(event, callContext).catch(error => {
+        toolCalls.handle(event, { ...callContext, responseId: id }).catch(error => {
           send(ws, { type: 'error', message: error.message })
         })
       } else if (
@@ -1193,6 +1193,14 @@ export function attachRealtimeGateway(server, {
         const responseFailed = ['failed', 'cancelled', 'incomplete'].includes(
           responseStatus,
         )
+        toolCalls.finishToolResponse(id, {
+          suppressResponse: responseFailed
+            || Boolean(responseContext?.suppressed)
+            || Boolean(responseContext?.hasAudio)
+            || Boolean(responseContext?.assistantTranscript?.trim()),
+        }).catch(error => {
+          send(ws, { type: 'error', message: error.message })
+        })
         // Guards run before the context is retired below, which drops the
         // transcript they inspect. They can only ask the model to reconsider;
         // they never execute tools or mutate task state directly.
@@ -1403,7 +1411,7 @@ export function attachRealtimeGateway(server, {
         agentContext: {
           client: clientContext,
           textOnly: textOnlySession,
-          memories: memoryStore?.list(ownerId, { limit: 64 }) || [],
+          memories: memoryService?.list(ownerId, { limit: 64 }) || [],
           recentMessages: conversationSync.frontendContext({ ownerId, sessionId }),
           activeTasks,
         },

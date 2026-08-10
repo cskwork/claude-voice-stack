@@ -14,7 +14,7 @@ function gatewayHarness({ memoryExtractor }) {
     identityManager: {
       resolveUpgrade: () => ({ ownerId: 'owner-hook' }),
     },
-    memoryStore: { list: () => [] },
+    memoryService: { list: () => [] },
     memoryExtractor,
     notesStore: null,
     coordinator: {},

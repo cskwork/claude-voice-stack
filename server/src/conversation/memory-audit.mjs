@@ -2,10 +2,9 @@ import { appendFileSync, mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 
 // Append-only JSONL audit trail for automatic memory operations. There is no
-// confirmation UI in the voice-only product, so this file is the reviewable
-// record of what the extractor wrote, skipped or failed — the observability
-// counterpart of an approval gate. Diagnostics must never break memory
-// writes: any filesystem error disables the audit silently.
+// confirmation UI in the voice-only product, so this file records whether an
+// automatic Markdown patch ran, was skipped, or failed. It deliberately keeps
+// full memory text out of diagnostics. Errors must never break memory writes.
 export class MemoryAudit {
   constructor({
     filePath = null,

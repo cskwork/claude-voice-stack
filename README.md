@@ -68,7 +68,7 @@ https://github.com/user-attachments/assets/42022655-36d1-46b2-9c26-ff0765284000
 - Create multiple independent tasks executed asynchronously by the backend Agent, with continuous status tracking
 - Task results automatically return to the current conversation, supporting follow-up questions and modifications
 - WebUI, terminal TUI, and desktop floating orb (macOS / Windows / Linux)
-- Local user profile and cross-session personal memory
+- Per-user long-term personalization and cross-session memory
 
 ## Architecture
 
@@ -179,15 +179,15 @@ qwenaudio setup   # View available backend Agents
 For Agent selection, persistent background service, generic ACP entry, and
 permission modes, see the [backend Agent documentation](docs/backends/overview.md).
 
-## User Profile and Memory
+## Personalization and Memory
 
-User data is stored in `~/.config/qwaudio/` (`USER.md`,
-`frontend-memory.json`, `tasks.json`, `logs/`), kept local only, never
-committed to the repository. See [user profile and memory](docs/reference/memory.md).
+User data is stored in `~/.config/qwaudio/` (`ASSISTANT.md`, `USER.md`,
+`MEMORY.md`, `tasks.json`, `logs/`), kept local only, never
+committed to the repository. See [assistant profile, user preferences, and memory](docs/reference/memory.md).
 
 ## Important Notes
 
-- Do not store passwords, API Keys, verification codes, or access tokens in the user profile or conversation.
+- Do not store passwords, API Keys, verification codes, or access tokens in user preferences or conversation.
 - Microphone audio and realtime conversation are sent to the configured Realtime frontend service (DashScope or speech-to-speech).
 - Background tasks may invoke the selected Agent's models, tools, MCP, and external services.
 - `full` permission allows the backend to execute commands and modify files; use only in trusted projects.

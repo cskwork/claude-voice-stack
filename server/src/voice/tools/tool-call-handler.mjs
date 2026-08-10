@@ -10,13 +10,14 @@ import {
   RESPOND_AGENT_PERMISSION_TOOL_NAME,
 } from '../realtime-provider.mjs'
 import { currentTimeSnapshot } from '../../conversation/frontend-agent-context.mjs'
-import { canonicalScope, isToolScope } from '../../core/memory-scopes.mjs'
+import { canonicalScope, isMemoryDocument } from '../../core/memory-scopes.mjs'
 
 const SENSITIVE_MEMORY = /(?:pass(?:word)?|secret|api[_ -]?key|access[_ -]?token|credential|验证码|密码|密钥|令牌|\bsk-[a-z0-9_-]+)/i
 
 function failure(errorCode, userMessage, {
   retryable = false,
   status = 'failed',
+  ...details
 } = {}) {
   return {
     status,
@@ -24,6 +25,7 @@ function failure(errorCode, userMessage, {
     error_code: errorCode,
     user_message: userMessage,
     retryable,
+    ...details,
   }
 }
 
@@ -38,7 +40,7 @@ export class ToolCallHandler {
     getTurnGeneration,
     coordinator,
     backendAvailability = null,
-    memoryStore,
+    memoryService,
     notesStore,
     getClientContext = () => ({}),
     getConversationContext = () => [],
@@ -57,7 +59,7 @@ export class ToolCallHandler {
     this.getTurnGeneration = getTurnGeneration
     this.coordinator = coordinator
     this.backendAvailability = backendAvailability
-    this.memoryStore = memoryStore
+    this.memoryService = memoryService
     this.notesStore = notesStore
     this.getClientContext = getClientContext
     this.getConversationContext = getConversationContext
@@ -69,6 +71,7 @@ export class ToolCallHandler {
     this.gatewayApprovedPermissions = new Set()
     this.processedCalls = new Set()
     this.turnTasks = new Map()
+    this.deferredToolResponses = new Map()
   }
 
   isStale(turnId, generation) {
@@ -89,6 +92,52 @@ export class ToolCallHandler {
       { turnId, taskId, ...(responseContext || {}) },
       frontendOptions,
     )
+  }
+
+  beginDeferredToolResponse(responseId, { turnId, turnGeneration } = {}) {
+    const key = String(responseId || '')
+    if (!key) return null
+    const batch = this.deferredToolResponses.get(key) || {
+      pending: 0,
+      sourceDone: false,
+      failed: false,
+      suppressResponse: false,
+      turnId,
+      turnGeneration,
+    }
+    if (!this.deferredToolResponses.has(key) && this.deferredToolResponses.size >= 100) {
+      this.deferredToolResponses.delete(this.deferredToolResponses.keys().next().value)
+    }
+    batch.pending += 1
+    this.deferredToolResponses.set(key, batch)
+    return key
+  }
+
+  async completeDeferredToolResponse(responseId, { failed = false } = {}) {
+    const batch = this.deferredToolResponses.get(responseId)
+    if (!batch) return
+    batch.pending = Math.max(0, batch.pending - 1)
+    batch.failed ||= failed
+    await this.flushDeferredToolResponse(responseId, batch)
+  }
+
+  async finishToolResponse(responseId, { suppressResponse = false } = {}) {
+    const key = String(responseId || '')
+    const batch = this.deferredToolResponses.get(key)
+    if (!batch) return
+    batch.sourceDone = true
+    batch.suppressResponse ||= suppressResponse
+    await this.flushDeferredToolResponse(key, batch)
+  }
+
+  async flushDeferredToolResponse(responseId, batch) {
+    if (!batch.sourceDone || batch.pending > 0) return
+    this.deferredToolResponses.delete(responseId)
+    if (batch.failed || batch.suppressResponse) return
+    await this.getFrontend()?.ensureResponse?.({
+      turnId: batch.turnId,
+      turnGeneration: batch.turnGeneration,
+    })
   }
 
   async closeStaleCall(callId, turnId) {
@@ -163,7 +212,7 @@ export class ToolCallHandler {
           originalRequest: resolved.originalRequest || objective,
           objective,
           conversationContext: this.getConversationContext(),
-          userMemories: this.memoryStore?.list(this.ownerId, { limit: 64 }) || [],
+          userMemories: this.memoryService?.list(this.ownerId, { limit: 64 }) || [],
           timeZone: this.getClientContext()?.timeZone,
           workingDirectory: this.getClientContext()?.workingDirectory,
         }, {
@@ -219,12 +268,15 @@ export class ToolCallHandler {
     // and ownerId are safe to capture — they outlive the voice session.
     const coordinator = this.coordinator
     const ownerId = this.ownerId
+    const memoryService = this.memoryService
     const runner = type === 'task'
       ? async (objective, { onEvent, signal }) => coordinator.run({
           originalRequest: objective,
           objective,
           conversationContext: [],
-          userMemories: [],
+          // Resolve at execution time so a future task sees the user's latest
+          // model and long-term memory, not a snapshot from when it was set.
+          userMemories: memoryService?.list(ownerId, { limit: 64 }) || [],
         }, {
           ownerId,
           signal,
@@ -293,7 +345,20 @@ export class ToolCallHandler {
       return
     }
     if (toolName === MEMORY_TOOL_NAME) {
-      await this.memory(callId, turnId, args)
+      const responseId = callContext.responseId || event.response_id || ''
+      const deferred = this.beginDeferredToolResponse(responseId, {
+        turnId,
+        turnGeneration: generation,
+      })
+      try {
+        await this.memory(callId, turnId, args, deferred
+          ? { createResponse: false }
+          : undefined)
+      } catch (error) {
+        await this.completeDeferredToolResponse(deferred, { failed: true })
+        throw error
+      }
+      await this.completeDeferredToolResponse(deferred)
       return
     }
     if (toolName === NOTES_TOOL_NAME) {
@@ -661,8 +726,13 @@ export class ToolCallHandler {
     const targetId = requestedId || this.taskManager.list({
       ownerId: this.ownerId,
       sessionId: this.sessionId,
-      active: true,
-    })[0]?.id
+    }).find(task => [
+      'scheduled',
+      'queued',
+      'running',
+      'delegated',
+      'finalizing',
+    ].includes(task.status))?.id
     if (!targetId) {
       await this.sendOutput(callId, {
         status: 'not_found',
@@ -703,6 +773,27 @@ export class ToolCallHandler {
   }
 
   async getAgentTaskStatus(callId, turnId, args) {
+    if (args.list_all === true) {
+      const tasks = this.taskManager.list({
+        ownerId: this.ownerId,
+        sessionId: this.sessionId,
+      }).slice(0, 20).map(task => ({
+        work_id: task.id,
+        status: task.status,
+        kind: task.kind,
+        objective: String(task.objective || '').slice(0, 300),
+        execute_at: task.schedule?.at
+          ? new Date(task.schedule.at).toISOString()
+          : null,
+        recurrence: task.schedule?.recurrence || null,
+      }))
+      await this.sendOutput(callId, {
+        status: tasks.length ? 'ok' : 'empty',
+        count: tasks.length,
+        tasks,
+      }, turnId)
+      return
+    }
     const requestedId = String(args.work_id || '').trim()
     const task = requestedId
       ? this.taskManager.get(requestedId, { ownerId: this.ownerId })
@@ -843,100 +934,83 @@ export class ToolCallHandler {
     }, turnId)
   }
 
-  async memory(callId, turnId, args) {
+  async memory(callId, turnId, args, responseOptions) {
     const action = String(args.action || '').trim().toLowerCase()
-    // Omitted scope (or the legacy 'all' spelling) means every scope for the
-    // read-side actions; remember/replace still require a concrete scope.
-    const requestedScope = String(args.scope || '').trim().toLowerCase()
-    const scope = requestedScope === 'all' ? '' : canonicalScope(requestedScope)
+    const document = canonicalScope(String(args.document || (action === 'read' ? 'all' : '')))
+    const oldText = String(args.old_text || '')
+    const newText = String(args.new_text || '')
+    const hasNewText = Object.prototype.hasOwnProperty.call(args, 'new_text')
     const content = String(args.content || '').trim()
-    const query = String(args.query || '').trim()
-    const memoryIds = Array.isArray(args.memory_ids)
-      ? args.memory_ids.map(id => String(id || '').trim()).filter(Boolean).slice(0, 20)
-      : []
-    const all = args.all === true
+    const proposedContent = action === 'append' ? content : newText
     let output
-    if (!this.memoryStore) {
+    if (!this.memoryService) {
       output = failure('memory_unavailable', '前台记忆功能当前不可用。')
-    } else if (!['recall', 'remember', 'replace', 'forget'].includes(action)) {
+    } else if (!['read', 'append', 'replace'].includes(action)) {
       output = failure('invalid_memory_action', '没有识别出要执行的记忆操作。')
-    } else if (scope && !isToolScope(scope)) {
-      output = failure('invalid_memory_scope', '没有识别出记忆范围。')
-    } else if (action === 'recall') {
-      const memories = this.memoryStore.list(this.ownerId, {
-        scope: scope || null,
-        query,
-      })
+    } else if (action === 'read') {
+      const scope = document === 'all' ? null : document
+      if (scope && !isMemoryDocument(scope)) {
+        await this.sendOutput(callId, failure(
+          'invalid_memory_document',
+          '没有识别出要读取的记忆文档。',
+        ), turnId, null, responseOptions)
+        return
+      }
+      const memories = scope
+        ? this.memoryService.list(this.ownerId, { scope })
+        : this.memoryService.list(this.ownerId)
       output = {
         status: memories.length ? 'ok' : 'not_found',
         count: memories.length,
-        memories,
+        documents: memories,
       }
-    } else if (action === 'remember' || action === 'replace') {
-      if (!scope || !content) {
-        output = failure('missing_memory', '需要明确记忆类型和要记住的内容。')
-      } else if (action === 'replace' && !memoryIds.length) {
-        output = failure(
-          'missing_memory_ids',
-          '需要先找到要被新事实取代的旧记忆。',
-          { retryable: true },
-        )
-      } else if (SENSITIVE_MEMORY.test(content)) {
-        output = failure(
-          'sensitive_memory',
-          '为了安全，不会保存密码、密钥、验证码或令牌。',
-          { status: 'rejected' },
-        )
-      } else {
-        try {
-          if (action === 'replace') {
-            const result = this.memoryStore.replace(this.ownerId, {
-              scope,
-              ids: memoryIds,
-              content,
-            })
-            output = {
-              status: result.replaced ? 'replaced' : 'not_found',
-              ...result,
-            }
-            if (result.replaced) this.notifyMemoryChanged()
-          } else {
-            output = {
-              status: 'remembered',
-              memory: this.memoryStore.remember(this.ownerId, { scope, content }),
-            }
-            this.notifyMemoryChanged()
-          }
-        } catch {
-          output = failure(
-            'memory_write_failed',
-            '暂时无法保存这项记忆，请稍后再试。',
-            { retryable: true },
-          )
-        }
-      }
+    } else if (!isMemoryDocument(document)) {
+      output = failure('invalid_memory_document', '写入记忆时必须指定 user 或 memory。')
+    } else if (action === 'append' && !content) {
+      output = failure('invalid_memory_edit', 'append 需要明确的 content。')
+    } else if (action === 'replace' && (!oldText || !hasNewText)) {
+      output = failure('invalid_memory_edit', 'replace 需要精确 old_text 和明确的 new_text。')
+    } else if (SENSITIVE_MEMORY.test(proposedContent)) {
+      output = failure(
+        'sensitive_memory',
+        '为了安全，不会保存密码、密钥、验证码或令牌。',
+        { status: 'rejected' },
+      )
     } else {
-      if (!all && !query) {
-        output = failure('missing_memory_query', '需要明确要遗忘的内容。')
-      } else {
-        try {
-          const removed = this.memoryStore.forget(this.ownerId, {
-            scope: scope || null,
-            query,
-            all,
-          })
-          if (removed) this.notifyMemoryChanged()
-          output = { status: removed ? 'forgotten' : 'not_found', removed }
-        } catch {
+      try {
+        const change = {
+          document,
+          edits: action === 'replace' ? [{ old_text: oldText, new_text: newText }] : [],
+          append: action === 'append' ? content : '',
+        }
+        const changes = [change]
+        const result = this.memoryService.apply(this.ownerId, changes)
+        if (result.changed) this.notifyMemoryChanged()
+        output = {
+          status: result.changed ? 'updated' : 'unchanged',
+          changed: result.changed,
+          documents: result.documents,
+        }
+      } catch (error) {
+        if (['stale_document', 'edit_not_found', 'ambiguous_edit'].includes(error.code)) {
+          output = failure(
+            error.code,
+            '记忆文档已经变化或原文没有精确匹配，请重新读取后再修改。',
+            {
+              retryable: true,
+              documents: this.memoryService.list(this.ownerId),
+            },
+          )
+        } else {
           output = failure(
             'memory_write_failed',
-            '暂时无法删除这项记忆，请稍后再试。',
+            '暂时无法修改记忆，请稍后再试。',
             { retryable: true },
           )
         }
       }
     }
-    await this.sendOutput(callId, output, turnId)
+    await this.sendOutput(callId, output, turnId, null, responseOptions)
   }
 
   async notes(callId, turnId, args) {

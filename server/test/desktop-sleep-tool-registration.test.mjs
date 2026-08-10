@@ -71,7 +71,7 @@ async function startGateway() {
       secret: process.env.QWEN_AUDIO_AGENT_AUTH_SECRET,
       mode: 'personal',
     }),
-    memoryStore: fakeMemoryStore(),
+    memoryService: fakeMemoryStore(),
     notesStore: fakeNotesStore(),
     coordinator: null,
     backendAvailability: {

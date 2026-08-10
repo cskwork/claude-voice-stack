@@ -21,22 +21,25 @@ function harness({
   getTurnId = () => 'turn-one',
 } = {}) {
   const outputs = []
+  const ensuredResponses = []
   const transcripts = new TurnTranscripts({ waitMs: 5 })
+  const frontend = {
+    sendFunctionOutput: async (...args) => outputs.push(args),
+    ensureResponse: async (...args) => ensuredResponses.push(args),
+  }
   const handler = new ToolCallHandler({
     taskManager: manager,
     ownerId: 'owner',
     sessionId: 'voice',
     transcripts,
-    getFrontend: () => ({
-      sendFunctionOutput: async (...args) => outputs.push(args),
-    }),
+    getFrontend: () => frontend,
     getTurnId,
     getTurnGeneration: () => 1,
     coordinator: coordinator || {
       run: async () => ({ content: '完成', metadata: {} }),
     },
     backendAvailability,
-    memoryStore,
+    memoryService: memoryStore,
     notesStore,
     onMemoryChanged,
     respondPermission,
@@ -48,7 +51,7 @@ function harness({
       { role: 'user', content: '之前在改首页' },
     ],
   })
-  return { outputs, manager, transcripts, handler }
+  return { outputs, ensuredResponses, manager, transcripts, handler }
 }
 
 test('asks a capable client to enter sleep without creating another response', async () => {
@@ -731,70 +734,42 @@ test('rejects a permission id that is not pending on the current task', async ()
   await kit.finish()
 })
 
-test('uses one scoped memory tool for recall and remember', async () => {
+test('reads both natural Markdown memory documents', async () => {
   const calls = []
-  let changes = 0
   const memoryStore = {
     list: (ownerId, options) => {
       calls.push(['list', ownerId, options])
       return [{
-        id: 'profile_one',
-        scope: 'profile',
-        content: '用户希望被称为老大',
+        id: 'user_document',
+        scope: 'user',
+        content: '# USER\n\n- 称呼：船长',
+        revision: 'rev-user',
         editable: true,
       }]
     },
-    remember: (ownerId, input) => {
-      calls.push(['remember', ownerId, input])
-      return { id: 'mem_one', ...input, editable: true }
-    },
   }
-  const kit = harness({
-    memoryStore,
-    onMemoryChanged: () => { changes += 1 },
-  })
+  const kit = harness({ memoryStore })
 
   await kit.handler.handle({
-    call_id: 'memory-recall',
+    call_id: 'memory-read',
     name: 'memory',
-    // The legacy 'all' spelling and an omitted scope both mean every scope.
-    arguments: '{"action":"recall","scope":"all","query":"称呼"}',
+    arguments: '{"action":"read"}',
   })
   assert.equal(kit.outputs.at(-1)[1].status, 'ok')
-  assert.deepEqual(calls[0], ['list', 'owner', {
-    scope: null,
-    query: '称呼',
-  }])
-
-  await kit.handler.handle({
-    call_id: 'memory-remember',
-    name: 'memory',
-    arguments: JSON.stringify({
-      action: 'remember',
-      scope: 'facts',
-      content: '用户喜欢苹果',
-    }),
-  })
-  assert.equal(kit.outputs.at(-1)[1].status, 'remembered')
-  assert.deepEqual(calls[1], ['remember', 'owner', {
-    scope: 'facts',
-    content: '用户喜欢苹果',
-  }])
-  assert.equal(changes, 1)
+  assert.deepEqual(calls[0], ['list', 'owner', undefined])
+  assert.equal(kit.outputs.at(-1)[1].documents[0].revision, 'rev-user')
 })
 
-test('routes standing user rules to the rules memory scope', async () => {
-  const calls = []
+test('replaces one exact Markdown fragment', async () => {
+  let call
   let changes = 0
   const kit = harness({
     memoryStore: {
-      remember: (ownerId, input) => {
-        calls.push(['remember', ownerId, input])
+      apply: (ownerId, changes) => {
+        call = { ownerId, changes }
         return {
-          id: 'mem_rule',
-          scope: 'rules',
-          content: input.content,
-          editable: true,
+          changed: 3,
+          documents: changes.map(change => ({ scope: change.document, revision: 'next' })),
         }
       },
     },
@@ -802,155 +777,147 @@ test('routes standing user rules to the rules memory scope', async () => {
   })
 
   await kit.handler.handle({
-    call_id: 'memory-rule',
-    name: 'memory',
-    arguments: JSON.stringify({
-      action: 'remember',
-      scope: 'rules',
-      content: '回复默认先给结论',
-    }),
-  })
-
-  assert.deepEqual(calls[0], ['remember', 'owner', {
-    scope: 'rules',
-    content: '回复默认先给结论',
-  }])
-  assert.equal(kit.outputs.at(-1)[1].status, 'remembered')
-  assert.equal(kit.outputs.at(-1)[1].memory.scope, 'rules')
-  assert.equal(changes, 1)
-})
-
-test('replaces recalled text memories in one storage operation', async () => {
-  let replaced
-  let changes = 0
-  const kit = harness({
-    memoryStore: {
-      replace: (ownerId, input) => {
-        replaced = { ownerId, ...input }
-        return {
-          replaced: 2,
-          memory: {
-            id: 'mem_banana',
-            scope: 'facts',
-            content: input.content,
-            editable: true,
-          },
-        }
-      },
-    },
-    onMemoryChanged: () => { changes += 1 },
-  })
-
-  await kit.handler.handle({
-    call_id: 'memory-replace',
+    call_id: 'memory-edit',
     name: 'memory',
     arguments: JSON.stringify({
       action: 'replace',
-      scope: 'facts',
-      memory_ids: ['mem_apple', 'mem_likes_apple'],
-      content: '用户最喜欢的水果是香蕉',
+      document: 'user',
+      old_text: '- 称呼：老板',
+      new_text: '- 称呼：船长',
     }),
   })
 
-  assert.deepEqual(replaced, {
+  assert.deepEqual(call, {
     ownerId: 'owner',
-    scope: 'facts',
-    ids: ['mem_apple', 'mem_likes_apple'],
-    content: '用户最喜欢的水果是香蕉',
+    changes: [{
+      document: 'user',
+      edits: [{ old_text: '- 称呼：老板', new_text: '- 称呼：船长' }],
+      append: '',
+    }],
   })
-  assert.equal(kit.outputs.at(-1)[1].status, 'replaced')
-  assert.equal(kit.outputs.at(-1)[1].replaced, 2)
+  assert.equal(kit.outputs.at(-1)[1].status, 'updated')
   assert.equal(changes, 1)
 })
 
-test('requires recalled ids for replacement and never guesses targets', async () => {
+test('appends one memory item', async () => {
+  let call
   const kit = harness({
     memoryStore: {
-      replace: () => {
-        throw new Error('must not run')
+      apply: (ownerId, changes) => {
+        call = { ownerId, changes }
+        return {
+          changed: 2,
+          documents: changes.map(change => ({ scope: change.document, revision: 'next' })),
+        }
       },
     },
   })
+
   await kit.handler.handle({
-    call_id: 'memory-replace-without-id',
+    call_id: 'memory-cross-scope',
+    name: 'memory',
+    arguments: JSON.stringify({
+      action: 'append',
+      document: 'user',
+      content: '- 助手称呼用户：老大',
+    }),
+  })
+
+  assert.equal(call.ownerId, 'owner')
+  assert.equal(call.changes[0].document, 'user')
+  assert.equal(call.changes[0].append, '- 助手称呼用户：老大')
+  assert.equal(kit.outputs.at(-1)[1].status, 'updated')
+  assert.equal(kit.outputs.at(-1)[1].documents.length, 1)
+})
+
+test('combines multiple memory writes from one model response into one follow-up', async () => {
+  const kit = harness({
+    memoryStore: {
+      apply: (_ownerId, changes) => ({
+        changed: 1,
+        documents: changes.map(change => ({ scope: change.document })),
+      }),
+    },
+  })
+  const context = {
+    turnId: 'turn-one',
+    turnGeneration: 1,
+    responseId: 'response-memory-batch',
+  }
+  await Promise.all([
+    ['memory-name', 'user', '- 助手称呼用户：船长'],
+    ['memory-assistant-name', 'user', '- 当前用户称呼助手：小舟'],
+    ['memory-hobby', 'memory', '- 喜欢打篮球'],
+  ].map(async ([callId, scope, append]) => kit.handler.handle({
+    call_id: callId,
+    response_id: 'response-memory-batch',
+    name: 'memory',
+    arguments: JSON.stringify({
+      action: 'append',
+      document: scope,
+      content: append,
+    }),
+  }, context)))
+
+  assert.equal(kit.outputs.length, 3)
+  assert.ok(kit.outputs.every(output => output[3].createResponse === false))
+  assert.equal(kit.ensuredResponses.length, 0)
+
+  await kit.handler.finishToolResponse('response-memory-batch')
+  assert.equal(kit.ensuredResponses.length, 1)
+  assert.deepEqual(kit.ensuredResponses[0][0], {
+    turnId: 'turn-one',
+    turnGeneration: 1,
+  })
+})
+
+test('returns the latest document when an exact edit no longer matches', async () => {
+  const kit = harness({
+    memoryStore: {
+      apply: () => {
+        const error = new Error('stale')
+        error.code = 'edit_not_found'
+        throw error
+      },
+      list: () => [{ scope: 'memory', content: '# MEMORY', revision: 'latest' }],
+    },
+  })
+  await kit.handler.handle({
+    call_id: 'memory-stale',
     name: 'memory',
     arguments: JSON.stringify({
       action: 'replace',
-      scope: 'facts',
-      content: '用户最喜欢的水果是香蕉',
+      document: 'memory',
+      old_text: '- 喜欢香蕉',
+      new_text: '- 喜欢苹果',
     }),
   })
-  assert.equal(kit.outputs.at(-1)[1].error_code, 'missing_memory_ids')
+  assert.equal(kit.outputs.at(-1)[1].error_code, 'edit_not_found')
+  assert.equal(kit.outputs.at(-1)[1].documents[0].revision, 'latest')
 })
 
-test('forgets selected memory without re-parsing user wording', async () => {
+test('rejects sensitive additions and incomplete atomic edits', async () => {
   const kit = harness({
     memoryStore: {
-      forget: (_ownerId, options) => {
-        assert.deepEqual(options, {
-          scope: 'profile',
-          query: '称呼',
-          all: false,
-        })
-        return 1
-      },
-    },
-  })
-  await kit.handler.handle({
-    call_id: 'memory-forget',
-    name: 'memory',
-    arguments: '{"action":"forget","scope":"profile","query":"称呼"}',
-  })
-  assert.equal(kit.outputs.at(-1)[1].status, 'forgotten')
-})
-
-test('clears an entire memory scope through the explicit all parameter', async () => {
-  let calls = 0
-  const memoryStore = {
-    forget: () => {
-      calls += 1
-      return 2
-    },
-  }
-  const allowed = harness({ memoryStore })
-  await allowed.handler.handle({
-    call_id: 'memory-clear',
-    name: 'memory',
-    arguments: '{"action":"forget","scope":"facts","all":true}',
-  })
-  assert.equal(allowed.outputs.at(-1)[1].status, 'forgotten')
-  assert.equal(calls, 1)
-})
-
-test('rejects secrets and an ambiguous memory scope', async () => {
-  const kit = harness({
-    memoryStore: {
-      remember: () => {
-        throw new Error('must not write')
-      },
+      apply: () => { throw new Error('must not write') },
     },
   })
   await kit.handler.handle({
     call_id: 'memory-secret',
     name: 'memory',
     arguments: JSON.stringify({
-      action: 'remember',
-      scope: 'facts',
-      content: '我的 API Key 是 sk-secret',
+      action: 'append',
+      document: 'memory',
+      content: '- API Key：sk-secret',
     }),
   })
   assert.equal(kit.outputs.at(-1)[1].error_code, 'sensitive_memory')
-
   await kit.handler.handle({
-    call_id: 'memory-all',
+    call_id: 'memory-no-scope',
     name: 'memory',
-    arguments: JSON.stringify({
-      action: 'remember',
-      scope: 'all',
-      content: '用户喜欢苹果',
-    }),
+    arguments: '{"action":"replace","document":"user","old_text":"- 称呼：船长"}',
   })
-  assert.equal(kit.outputs.at(-1)[1].error_code, 'missing_memory')
+  assert.equal(kit.outputs.at(-1)[1].error_code, 'invalid_memory_edit')
 })
 
 test('notes: adds items to a named list and reports ambiguous removals', async () => {

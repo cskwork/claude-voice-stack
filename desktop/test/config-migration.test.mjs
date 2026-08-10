@@ -23,7 +23,9 @@ function seedLegacy(legacyDir) {
   mkdirSync(legacyDir, { recursive: true })
   writeFileSync(join(legacyDir, 'config.env'), 'DASHSCOPE_API_KEY=sk-legacy\n', 'utf8')
   writeFileSync(join(legacyDir, 'state.env'), 'QWEN_AUDIO_AGENT_AUTH_SECRET=secret\n', 'utf8')
+  writeFileSync(join(legacyDir, 'ASSISTANT.md'), '# ASSISTANT\n\n你叫小舟。\n', 'utf8')
   writeFileSync(join(legacyDir, 'USER.md'), '# USER\n', 'utf8')
+  writeFileSync(join(legacyDir, 'MEMORY.md'), '# MEMORY\n', 'utf8')
   writeFileSync(join(legacyDir, 'gateway.lock'), '{}\n', 'utf8')
 }
 
@@ -53,8 +55,20 @@ test('copies user config files from the legacy CLI directory once', () => {
     seedLegacy(legacyDir)
     const result = migrateLegacyConfig({ legacyDir, targetDir })
     assert.equal(result.migrated, true)
-    assert.deepEqual(result.copied, ['config.env', 'state.env', 'USER.md'])
-    for (const name of ['config.env', 'state.env', 'USER.md']) {
+    assert.deepEqual(result.copied, [
+      'config.env',
+      'state.env',
+      'ASSISTANT.md',
+      'USER.md',
+      'MEMORY.md',
+    ])
+    for (const name of [
+      'config.env',
+      'state.env',
+      'ASSISTANT.md',
+      'USER.md',
+      'MEMORY.md',
+    ]) {
       assert.ok(existsSync(join(targetDir, name)))
     }
     // 运行时状态不迁移，CLI 侧原件保留
@@ -66,7 +80,13 @@ test('copies user config files from the legacy CLI directory once', () => {
     )
     const marker = JSON.parse(readFileSync(join(targetDir, 'migrated-from.json'), 'utf8'))
     assert.equal(marker.legacyDir, resolve(legacyDir))
-    assert.deepEqual(marker.files, ['config.env', 'state.env', 'USER.md'])
+    assert.deepEqual(marker.files, [
+      'config.env',
+      'state.env',
+      'ASSISTANT.md',
+      'USER.md',
+      'MEMORY.md',
+    ])
     // 重复执行保持幂等，不覆盖已有配置
     const again = migrateLegacyConfig({ legacyDir, targetDir })
     assert.equal(again.migrated, false)

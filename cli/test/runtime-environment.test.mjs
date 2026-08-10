@@ -23,6 +23,12 @@ function fixture() {
   const homeDirectory = resolve(base, 'home')
   mkdirSync(root, { recursive: true })
   mkdirSync(homeDirectory, { recursive: true })
+  const frontendAgentConfig = resolve(root, 'config/frontend-agent')
+  mkdirSync(frontendAgentConfig, { recursive: true })
+  writeFileSync(
+    resolve(frontendAgentConfig, 'ASSISTANT.md'),
+    '# Assistant Profile\n\n## Identity\n\n你默认叫测试助手。\n',
+  )
   const codeBuddyConfig = resolve(
     root,
     'config/codebuddy/workspace/.codebuddy',
@@ -122,8 +128,10 @@ test('generates and reuses a private stable local identity secret', () => {
   )
   assert.doesNotMatch(configContent, /S2S_REALTIME_URL=/)
   assertPrivateMode(result.configPath)
-  assert.match(readFileSync(result.userProfilePath, 'utf8'), /^# USER/m)
-  assertPrivateMode(result.userProfilePath)
+  assert.match(readFileSync(result.userModelPath, 'utf8'), /^# USER/m)
+  assertPrivateMode(result.userModelPath)
+  assert.match(readFileSync(result.assistantProfilePath, 'utf8'), /测试助手/)
+  assertPrivateMode(result.assistantProfilePath)
 })
 
 test('reuses the persisted secret when the environment provides an empty value', () => {
@@ -146,12 +154,12 @@ test('reuses the persisted secret when the environment provides an empty value',
   assert.equal(result.generatedSecret, false)
 })
 
-test('does not overwrite an existing user profile', () => {
+test('does not overwrite an existing user model', () => {
   const target = fixture()
   const configDirectory = resolve(target.homeDirectory, '.config/qwaudio')
   mkdirSync(configDirectory, { recursive: true })
-  const profilePath = resolve(configDirectory, 'USER.md')
-  writeFileSync(profilePath, '# USER\n\n- 称呼：老大\n')
+  const userModelPath = resolve(configDirectory, 'USER.md')
+  writeFileSync(userModelPath, '# USER\n\n- 称呼：老大\n')
 
   const result = loadRuntimeEnvironment({
     root: target.root,
@@ -160,9 +168,36 @@ test('does not overwrite an existing user profile', () => {
     generateSecret: false,
   })
 
-  assert.equal(result.userProfilePath, profilePath)
-  assert.equal(readFileSync(profilePath, 'utf8'), '# USER\n\n- 称呼：老大\n')
-  assertPrivateMode(profilePath)
+  assert.equal(result.userModelPath, userModelPath)
+  assert.equal(readFileSync(userModelPath, 'utf8'), '# USER\n\n- 称呼：老大\n')
+  assertPrivateMode(userModelPath)
+})
+
+test('copies the assistant profile template once and preserves user customization', () => {
+  const target = fixture()
+  const first = loadRuntimeEnvironment({
+    root: target.root,
+    homeDirectory: target.homeDirectory,
+    env: {},
+    generateSecret: false,
+  })
+  assert.match(readFileSync(first.assistantProfilePath, 'utf8'), /测试助手/)
+
+  writeFileSync(
+    first.assistantProfilePath,
+    '# Assistant Profile\n\n## Identity\n\n你叫小舟。\n',
+  )
+  const second = loadRuntimeEnvironment({
+    root: target.root,
+    homeDirectory: target.homeDirectory,
+    env: {},
+    generateSecret: false,
+  })
+
+  assert.equal(second.assistantProfilePath, first.assistantProfilePath)
+  assert.match(readFileSync(second.assistantProfilePath, 'utf8'), /你叫小舟/)
+  assert.doesNotMatch(readFileSync(second.assistantProfilePath, 'utf8'), /测试助手/)
+  assertPrivateMode(second.assistantProfilePath)
 })
 
 test('supports an explicit cross-platform user config directory', () => {
@@ -369,7 +404,7 @@ test('desktop client setup does not require packaged backend templates', () => {
   })
 
   assert.equal(existsSync(result.configPath), true)
-  assert.equal(existsSync(result.userProfilePath), true)
+  assert.equal(existsSync(result.userModelPath), true)
   assert.equal(existsSync(result.openCodeWorkspace), false)
   assert.equal(existsSync(result.openClawWorkspace), false)
   assert.equal(existsSync(result.qoderWorkspace), false)
@@ -397,7 +432,15 @@ test('migrates private runtime data into the user config directory', () => {
   mkdirSync(legacyDirectory, { recursive: true })
   const legacyMemory = resolve(legacyDirectory, 'frontend-memory.json')
   const legacyTasks = resolve(legacyDirectory, 'tasks.json')
-  writeFileSync(legacyMemory, '{\"memory\":true}')
+  writeFileSync(legacyMemory, JSON.stringify({
+    version: 1,
+    users: {
+      user_personal: {
+        old_memory: { value: '用户喜欢篮球', scope: 'memory' },
+        old_user: { value: '称呼用户为船长', scope: 'user' },
+      },
+    },
+  }))
   writeFileSync(legacyTasks, '{\"tasks\":true}')
 
   const result = loadRuntimeEnvironment({
@@ -409,22 +452,24 @@ test('migrates private runtime data into the user config directory', () => {
 
   assert.equal(
     result.frontendMemoryPath,
-    resolve(result.configDirectory, 'frontend-memory.json'),
+    resolve(result.configDirectory, 'MEMORY.md'),
   )
   assert.equal(
     result.taskStatePath,
     resolve(result.configDirectory, 'tasks.json'),
   )
-  assert.equal(readFileSync(result.frontendMemoryPath, 'utf8'), '{\"memory\":true}')
+  assert.match(readFileSync(result.frontendMemoryPath, 'utf8'), /用户喜欢篮球/)
+  assert.match(readFileSync(result.userModelPath, 'utf8'), /称呼用户为船长/)
   assert.equal(readFileSync(result.taskStatePath, 'utf8'), '{\"tasks\":true}')
   assertPrivateMode(result.frontendMemoryPath)
   assertPrivateMode(result.taskStatePath)
   assert.equal(existsSync(legacyMemory), false)
   assert.equal(existsSync(legacyTasks), false)
-  assert.deepEqual(result.migratedFiles, [
+  assert.deepEqual(new Set(result.migratedFiles), new Set([
     result.frontendMemoryPath,
+    result.userModelPath,
     result.taskStatePath,
-  ])
+  ]))
 })
 
 test('requires only a DashScope credential from the user', () => {

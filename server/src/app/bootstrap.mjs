@@ -9,15 +9,14 @@ import { config } from '../core/config.mjs'
 import { logger, runWithLogContext } from '../core/logger.mjs'
 import { conversationSync } from '../conversation/conversation-sync.mjs'
 import { IdentityManager } from '../core/identity.mjs'
-import { FrontendMemoryStore } from '../conversation/frontend-memory.mjs'
 import { FrontendNotesStore } from '../conversation/frontend-notes.mjs'
 import { MemoryAudit } from '../conversation/memory-audit.mjs'
 import {
   MemoryExtractor,
   createExtractorLlmCall,
 } from '../conversation/memory-extractor.mjs'
-import { ProfiledMemoryStore } from '../conversation/profiled-memory-store.mjs'
-import { UserProfile } from '../conversation/user-profile.mjs'
+import { FrontendMemoryService } from '../conversation/frontend-memory-service.mjs'
+import { MarkdownContextStore } from '../conversation/markdown-context-store.mjs'
 import { enforceSameOrigin } from '../core/request-security.mjs'
 import { attachRealtimeGateway } from '../voice/realtime-gateway.mjs'
 import { describeActiveRealtime } from '../voice/realtime-provider.mjs'
@@ -118,22 +117,25 @@ conversationSync.configureRetention({
   sessionTtlMs: config.conversationSessionTtlMs,
   maxSessions: config.maxConversationSessions,
 })
-const dynamicMemory = new FrontendMemoryStore({
+const userDocuments = new MarkdownContextStore({
+  filePath: config.userModelPath,
+  scope: 'user',
+  personalOwnerId: config.personalOwnerId,
+  maxChars: 6000,
+  template: '# USER',
+  onWarning: warning => logger.warn('user_model.persistence_warning', { warning }),
+})
+const memoryDocuments = new MarkdownContextStore({
   filePath: config.frontendMemoryPath,
-  maxOwners: config.maxFrontendMemoryOwners,
-  ownerTtlMs: config.frontendMemoryOwnerTtlMs,
+  scope: 'memory',
+  personalOwnerId: config.personalOwnerId,
+  maxChars: 8000,
+  template: '# MEMORY',
   onWarning: warning => logger.warn('memory.persistence_warning', { warning }),
 })
-const frontendMemory = new ProfiledMemoryStore({
-  memoryStore: dynamicMemory,
-  userProfile: config.identityMode === 'personal'
-    ? new UserProfile({
-        filePath: config.userProfilePath,
-        onWarning: warning => logger.warn('profile.persistence_warning', {
-          warning,
-        }),
-      })
-    : null,
+const frontendMemoryService = new FrontendMemoryService({
+  userStore: userDocuments,
+  memoryStore: memoryDocuments,
 })
 const notesStore = new FrontendNotesStore({
   filePath: config.frontendNotesPath,
@@ -142,13 +144,13 @@ const notesStore = new FrontendNotesStore({
   onWarning: warning => logger.warn('notes.persistence_warning', { warning }),
 })
 // Invisible memory (issue #92): after a voice session closes, a lightweight
-// text model distils durable personal facts into facts entries tagged
-// source: 'inferred'. Without an API key createExtractorLlmCall returns null
+// text model reconciles explicit user directives and durable facts through the
+// same context service used by the realtime memory tool.
+// Without an API key createExtractorLlmCall returns null
 // and the extractor stays silently disabled; explicit memories are
-// unaffected. Writes deliberately target the raw FrontendMemoryStore, never
-// ProfiledMemoryStore, so the automatic path cannot reach rules or profile.
+// unaffected. ASSISTANT.md is never exposed as a writable document.
 const memoryExtractor = new MemoryExtractor({
-  memoryStore: dynamicMemory,
+  memoryService: frontendMemoryService,
   conversationSync,
   audit: new MemoryAudit({
     filePath: config.memoryAuditPath,
@@ -219,7 +221,7 @@ app.get('/api/health', async (req, res) => {
     resultContextMaxChars: config.resultContextMaxChars,
     announcementBatchMs: config.announcementBatchMs,
     announcementQuietMs: config.announcementQuietMs,
-    frontendMemory: frontendMemory.health(),
+    frontendMemory: frontendMemoryService.health(),
     notes: notesStore.health(),
     taskStore: taskStore.health(),
     identityMode: config.identityMode,
@@ -386,7 +388,7 @@ const backendAvailability = new BackendAvailability({
 backendAvailability.refresh()
 realtimeGateway = attachRealtimeGateway(server, {
   identityManager,
-  memoryStore: frontendMemory,
+  memoryService: frontendMemoryService,
   memoryExtractor,
   notesStore,
   coordinator,

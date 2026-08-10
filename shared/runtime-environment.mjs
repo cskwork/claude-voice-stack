@@ -1,6 +1,8 @@
 import { randomBytes } from 'node:crypto'
 import {
   chmodSync,
+  constants,
+  copyFileSync,
   linkSync,
   lstatSync,
   mkdirSync,
@@ -39,26 +41,33 @@ const USER_CONFIG_TEMPLATE = [
   '# QWEN_AUDIO_LOG_MAX_FILES=5',
   '',
 ].join('\n')
-const USER_PROFILE_TEMPLATE = [
+const USER_MODEL_TEMPLATE = [
   '# USER',
   '',
   '<!--',
-  '这是你的本地长期档案。只填写希望语音助手长期了解的稳定信息。',
+  '这是当前用户对助手的长期个性化覆盖。只填写用户明确设定的称呼、关系、表达偏好和默认做法。',
+  '它可以覆盖 ASSISTANT.md 的默认人设，但不能覆盖 PROMPT.md 的运行规则。',
+  '仅用于理解用户、不应直接支配行为的事实请写入 MEMORY.md。',
   '不要在这里保存密码、API Key、验证码或令牌。',
   '-->',
   '',
-  '## 基本信息',
+  '## 称呼与关系',
   '',
-  '- 称呼：',
-  '- 所在地：',
+  '<!-- 例如：- 助手称呼用户：老大 -->',
+  '<!-- 例如：- 当前用户称呼助手：小舟 -->',
   '',
-  '## 长期偏好',
+  '## 交互偏好',
   '',
-  '- ',
+  '<!-- 例如：- 默认使用简短、自然的中文回答 -->',
   '',
-  '## 常用项目',
+].join('\n')
+const MEMORY_TEMPLATE = [
+  '# MEMORY',
   '',
-  '- ',
+  '<!--',
+  '这里保存语音助手从对话中确认的长期背景信息。内容使用普通 Markdown。',
+  '称呼和交互偏好请写入 USER.md；不要保存密码、API Key、验证码或令牌。',
+  '-->',
   '',
 ].join('\n')
 
@@ -141,10 +150,10 @@ function ensureUserConfig(configDirectory) {
   return configPath
 }
 
-function ensureUserProfile(configDirectory) {
-  const profilePath = resolve(configDirectory, 'USER.md')
+function ensureUserModel(configDirectory) {
+  const userModelPath = resolve(configDirectory, 'USER.md')
   try {
-    writeFileSync(profilePath, USER_PROFILE_TEMPLATE, {
+    writeFileSync(userModelPath, USER_MODEL_TEMPLATE, {
       encoding: 'utf8',
       flag: 'wx',
       mode: 0o600,
@@ -153,11 +162,106 @@ function ensureUserProfile(configDirectory) {
     if (error.code !== 'EEXIST') throw error
   }
   try {
-    chmodSync(profilePath, 0o600)
+    chmodSync(userModelPath, 0o600)
   } catch (error) {
     if (error.code !== 'ENOENT') throw error
   }
-  return profilePath
+  return userModelPath
+}
+
+function ensureAssistantProfile(configDirectory, templatePath) {
+  const targetPath = resolve(configDirectory, 'ASSISTANT.md')
+  let template
+  try {
+    template = readFileSync(templatePath, 'utf8')
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error
+    return templatePath
+  }
+  try {
+    writeFileSync(targetPath, template, {
+      encoding: 'utf8',
+      flag: 'wx',
+      mode: 0o600,
+    })
+  } catch (error) {
+    if (error.code !== 'EEXIST') throw error
+  }
+  try {
+    chmodSync(targetPath, 0o600)
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error
+  }
+  return targetPath
+}
+
+function ensureLongTermMemory(configDirectory) {
+  const memoryPath = resolve(configDirectory, 'MEMORY.md')
+  try {
+    writeFileSync(memoryPath, MEMORY_TEMPLATE, {
+      encoding: 'utf8',
+      flag: 'wx',
+      mode: 0o600,
+    })
+  } catch (error) {
+    if (error.code !== 'EEXIST') throw error
+  }
+  try {
+    chmodSync(memoryPath, 0o600)
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error
+  }
+  return memoryPath
+}
+
+function migrateLegacyMemory({
+  legacyPath,
+  memoryPath,
+  userModelPath,
+  ownerId,
+  configDirectory,
+}) {
+  const markerPath = resolve(configDirectory, 'state/frontend-memory-markdown-v1')
+  try {
+    lstatSync(markerPath)
+    return false
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error
+  }
+  let parsed
+  try {
+    parsed = JSON.parse(readFileSync(legacyPath, 'utf8'))
+  } catch (error) {
+    if (error.code === 'ENOENT' || error instanceof SyntaxError) return false
+    throw error
+  }
+  const users = parsed?.users && typeof parsed.users === 'object' ? parsed.users : {}
+  const selected = users[ownerId] || Object.values(users)[0] || {}
+  const values = Object.values(selected).filter(entry => String(entry?.value || '').trim())
+  const memory = values.filter(entry => !['user', 'profile', 'rules'].includes(entry.scope))
+  const user = values.filter(entry => ['user', 'profile', 'rules'].includes(entry.scope))
+  const appendMigrated = (path, heading, entries) => {
+    if (!entries.length) return
+    const current = readFileSync(path, 'utf8').trimEnd()
+    if (current.includes(heading)) return
+    const block = [
+      '',
+      heading,
+      '',
+      ...entries.map(entry => `- ${String(entry.value).replace(/\s+/g, ' ').trim()}`),
+      '',
+    ].join('\n')
+    writeFileSync(path, `${current}${block}`, { encoding: 'utf8', mode: 0o600 })
+    chmodSync(path, 0o600)
+  }
+  appendMigrated(userModelPath, '## 从旧版本迁移的用户信息', user)
+  appendMigrated(memoryPath, '## 从旧版本迁移的长期记忆', memory)
+  mkdirSync(dirname(markerPath), { recursive: true, mode: 0o700 })
+  writeFileSync(markerPath, `${new Date().toISOString()}\n`, {
+    encoding: 'utf8',
+    mode: 0o600,
+  })
+  return Boolean(user.length || memory.length)
 }
 
 function resolveBackendWorkspaces(env, root, configDirectory) {
@@ -322,10 +426,19 @@ export function loadRuntimeEnvironment({
   const configPath = readOnly
     ? resolve(configDirectory, 'config.env')
     : ensureUserConfig(configDirectory)
-  const userProfilePath = readOnly
+  const userModelPath = readOnly
     ? resolve(configDirectory, 'USER.md')
-    : ensureUserProfile(configDirectory)
-  const frontendMemoryPath = resolve(configDirectory, 'frontend-memory.json')
+    : ensureUserModel(configDirectory)
+  const assistantProfilePath = readOnly
+    ? resolve(configDirectory, 'ASSISTANT.md')
+    : ensureAssistantProfile(
+        configDirectory,
+        resolve(root, 'config/frontend-agent/ASSISTANT.md'),
+      )
+  const frontendMemoryPath = readOnly
+    ? resolve(configDirectory, 'MEMORY.md')
+    : ensureLongTermMemory(configDirectory)
+  const legacyFrontendMemoryPath = resolve(configDirectory, 'frontend-memory.json')
   const frontendNotesPath = resolve(configDirectory, 'frontend-notes.json')
   const taskStatePath = resolve(configDirectory, 'tasks.json')
   const backendWorkspaces = resolveBackendWorkspaces(
@@ -349,6 +462,19 @@ export function loadRuntimeEnvironment({
     : resolve(configDirectory, 'backends/openclaw/state')
   let migratedFiles = []
   if (prepareBackendRuntime && !readOnly) {
+    migratePrivateFile(
+      resolve(root, 'runtime/frontend-memory.json'),
+      legacyFrontendMemoryPath,
+    )
+    if (migrateLegacyMemory({
+      legacyPath: legacyFrontendMemoryPath,
+      memoryPath: frontendMemoryPath,
+      userModelPath,
+      ownerId: env.QWEN_AUDIO_AGENT_PERSONAL_OWNER_ID || 'user_personal',
+      configDirectory,
+    })) {
+      migratedFiles.push(frontendMemoryPath, userModelPath)
+    }
     for (const entry of Object.values(backendWorkspaces)) {
       if (entry.managed) {
         mkdirSync(entry.directory, { recursive: true, mode: 0o700 })
@@ -364,12 +490,11 @@ export function loadRuntimeEnvironment({
     }
     mkdirSync(openClawStateDirectory, { recursive: true, mode: 0o700 })
     env.QWEN_AUDIO_AGENT_OPENCLAW_STATE_DIR = openClawStateDirectory
-    migratedFiles = [
-      [resolve(root, 'runtime/frontend-memory.json'), frontendMemoryPath],
+    migratedFiles.push(...[
       [resolve(root, 'runtime/tasks.json'), taskStatePath],
     ].filter(([legacyPath, targetPath]) => (
       migratePrivateFile(legacyPath, targetPath)
-    )).map(([, targetPath]) => targetPath)
+    )).map(([, targetPath]) => targetPath))
   }
   const secret = generateSecret && !readOnly
     ? ensureGeneratedSecret(env, configDirectory)
@@ -377,7 +502,8 @@ export function loadRuntimeEnvironment({
   return {
     configDirectory,
     configPath,
-    userProfilePath,
+    assistantProfilePath,
+    userModelPath,
     frontendMemoryPath,
     frontendNotesPath,
     taskStatePath,
