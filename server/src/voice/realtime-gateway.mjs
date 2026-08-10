@@ -35,6 +35,10 @@ import { ReconnectBackoff } from './reconnect-backoff.mjs'
 import { SleepController } from './sleep-controller.mjs'
 import { createSherpaWakeWordDetector } from './wake-word/sherpa-detector.mjs'
 import {
+  evaluateResponseGuards,
+  isResponseGuardTurnCurrent,
+} from './response-guards/index.mjs'
+import {
   isResponseActivityEvent,
   realtimeResponseId,
 } from './response-lifecycle.mjs'
@@ -1136,6 +1140,7 @@ export function attachRealtimeGateway(server, {
         )
         if (context.suppressed) return
         context.transcriptDone = true
+        context.assistantTranscript = event.transcript || ''
         if (!context.playbackStarted) {
           context.pendingTranscripts.push({
             content: event.transcript || '',
@@ -1173,6 +1178,7 @@ export function attachRealtimeGateway(server, {
         )
         if (context.suppressed) return
         context.transcriptDone = true
+        context.assistantTranscript = event.text || ''
         emitAssistantTranscript({
           id,
           context,
@@ -1187,6 +1193,16 @@ export function attachRealtimeGateway(server, {
         const responseFailed = ['failed', 'cancelled', 'incomplete'].includes(
           responseStatus,
         )
+        // Guards run before the context is retired below, which drops the
+        // transcript they inspect. They can only ask the model to reconsider;
+        // they never execute tools or mutate task state directly.
+        const responseGuardDecision = evaluateResponseGuards({
+          origin: responseContext?.origin || 'model',
+          hasFunctionCall: Boolean(responseContext?.hasFunctionCall),
+          failed: responseFailed,
+          suppressed: Boolean(responseContext?.suppressed),
+          transcript: responseContext?.assistantTranscript || '',
+        })
         if (!responseContext?.suppressed) {
           send(ws, { type: 'audio.done', responseId: id, turnId: responseTurnId })
           if (!responseContext?.hasAudio) {
@@ -1247,6 +1263,33 @@ export function attachRealtimeGateway(server, {
           suppressed: Boolean(responseContext?.suppressed),
           failed: responseFailed,
         })
+        if (
+          responseGuardDecision
+          && outputEnabled
+          && frontend?.ready
+          && frontend.capabilities.perResponseInstructions
+        ) {
+          const correctionFrontend = frontend
+          const correctionGeneration = responseContext?.turnGeneration
+          correctionFrontend.ensureResponse({
+            turnId: responseTurnId,
+            turnGeneration: correctionGeneration,
+          }, {
+            shouldCreate: () => isResponseGuardTurnCurrent({
+              sameFrontend: frontend === correctionFrontend,
+              outputEnabled,
+              userSpeaking,
+              responseTurnId,
+              responseTurnGeneration: correctionGeneration,
+              committedTurnId,
+              committedTurnGeneration,
+            }),
+            response: {
+              modalities: textOnlySession ? ['text'] : undefined,
+              instructions: responseGuardDecision.instructions,
+            },
+          }).catch(error => send(ws, { type: 'error', message: error.message }))
+        }
         const timer = setTimeout(
           () => announcements.flush(),
           config.announcementQuietMs,

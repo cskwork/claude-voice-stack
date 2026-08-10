@@ -7,7 +7,9 @@ export const openClawRuntimeDriver = {
   id: 'openclaw',
   separateManagedProcess: true,
   managedScript: 'openclaw-gateway.mjs',
-  managedNpmScript: 'openclaw',
+  baseUrlEnvironment: 'OPENCLAW_BASE_URL',
+  defaultBaseUrl: 'http://127.0.0.1:18789',
+  supportsExternalService: true,
 
   resolve({ env, ownership, permissionMode }) {
     if (permissionMode === 'full') {
@@ -21,14 +23,15 @@ export const openClawRuntimeDriver = {
       env,
       ownership,
       permissionMode,
-      baseUrlEnvironment: 'OPENCLAW_BASE_URL',
-      defaultBaseUrl: 'http://127.0.0.1:18789',
+      baseUrlEnvironment: this.baseUrlEnvironment,
+      defaultBaseUrl: this.defaultBaseUrl,
+      protocols: ['http:', 'https:', 'ws:', 'wss:'],
     })
   },
 
   applyAddress(env, backend) {
     applyLocalAddress(env, backend, {
-      baseUrlEnvironment: 'OPENCLAW_BASE_URL',
+      baseUrlEnvironment: this.baseUrlEnvironment,
       portEnvironment: 'OPENCLAW_PORT',
     })
   },

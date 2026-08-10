@@ -591,7 +591,7 @@ test('can give the model contextual guidance after an accepted tool call', async
   })
 })
 
-test('can force one model response when Smart Turn stays silent', async () => {
+test('can force one model response with ephemeral instructions', async () => {
   const frontend = createQwenFrontend({
     responseStartTimeoutMs: 50,
     responseCompletionTimeoutMs: 50,
@@ -602,11 +602,23 @@ test('can force one model response when Smart Turn stays silent', async () => {
 
   const outcome = frontend.ensureResponse(
     { turnId: 'permission-turn' },
-    { shouldCreate: () => true },
+    {
+      shouldCreate: () => true,
+      response: {
+        instructions: '重新判断是否需要调用工具。',
+        modalities: ['text'],
+      },
+    },
   )
   await new Promise(resolve => setImmediate(resolve))
 
-  assert.deepEqual(sent, [{ type: 'response.create' }])
+  assert.deepEqual(sent, [{
+    type: 'response.create',
+    response: {
+      instructions: '重新判断是否需要调用工具。',
+      modalities: ['text'],
+    },
+  }])
   frontend.handleLifecycle({
     type: 'response.created',
     response: { id: 'response-permission' },
@@ -1098,14 +1110,27 @@ test('surfaces a refusal a compliant provider cannot retry', async () => {
   assert.equal((await outcome).failed, true)
 })
 
-test('a compliant provider keeps every default capability', () => {
+test('the Qwen provider exposes its supported realtime capabilities', () => {
   const qwen = createQwenFrontend()
 
   assert.deepEqual(qwen.capabilities, {
     acknowledgesSessionUpdate: true,
     singleResponseSlot: false,
     responseMetadataCorrelation: false,
+    perResponseInstructions: true,
   })
+})
+
+test('per-response instructions require explicit provider opt-in', () => {
+  const { capabilities: _capabilities, ...provider } = REALTIME_PROVIDERS.qwen
+  const frontend = new RealtimeFrontend({
+    provider: {
+      ...provider,
+      key: 'unspecified-response-instructions',
+    },
+  })
+
+  assert.equal(frontend.capabilities.perResponseInstructions, false)
 })
 
 test('does not correlate an automatic VAD response with a pending GA response', async () => {

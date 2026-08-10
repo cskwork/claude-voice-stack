@@ -243,6 +243,31 @@ test('waits for the managed OpenClaw Gateway before starting its ACP bridge', as
   assert.equal(starts, 1)
 })
 
+test('backs off repeated health spawns when a local ACP executable is missing', async () => {
+  let starts = 0
+  const missing = new Error('spawn qwen ENOENT')
+  missing.code = 'ENOENT'
+  const client = {
+    stderr: '',
+    async start() {
+      starts += 1
+      throw missing
+    },
+    async close() {},
+  }
+  const adapter = new AcpBackendAdapter({ protocol: 'qwen', client })
+
+  const first = await adapter.health()
+  const second = await adapter.health()
+  assert.equal(first.ok, false)
+  assert.strictEqual(second, first)
+  assert.equal(starts, 1)
+
+  adapter.lastSpawnFailure.at -= 10_001
+  await adapter.health()
+  assert.equal(starts, 2)
+})
+
 test('retries an empty ACP coordinator response in a fresh Session', async () => {
   const prompts = []
   let nextSession = 0
@@ -446,25 +471,36 @@ test('continues a remembered project Session when session_send omits directory',
 
 test('uses one ACP profile family while preserving backend differences', () => {
   const root = '/repo'
+  const connection = profile => profile.acpConnection
   assert.deepEqual(
-    acpBackendProfile({
+    connection(acpBackendProfile({
       protocol: 'opencode',
       root,
       directory: '/work',
       permissionMode: 'native',
-    }).args,
+    })).args,
     [resolve(root, 'scripts/opencode.mjs'), 'acp'],
   )
   assert.deepEqual(
-    acpBackendProfile({
+    connection(acpBackendProfile({
       protocol: 'qoder',
       root,
       directory: '/work',
       permissionMode: 'full',
       model: 'qwen3.7-max',
-    }).args,
+    })).args,
     ['--acp', '--dangerously-skip-permissions'],
   )
+  const qwen = acpBackendProfile({
+    protocol: 'qwen',
+    root,
+    directory: '/work',
+    cliPath: '/opt/qwen',
+    permissionMode: 'full',
+  })
+  assert.equal(connection(qwen).command, '/opt/qwen')
+  assert.deepEqual(connection(qwen).args, ['--acp'])
+  assert.deepEqual(qwen.sessionConfigOptions, [])
   const openClaw = acpBackendProfile({
     protocol: 'openclaw',
     root,
@@ -476,7 +512,7 @@ test('uses one ACP profile family while preserving backend differences', () => {
     permissionMode: 'native',
   })
   assert.equal(openClaw.externalMcp, false)
-  assert.deepEqual(openClaw.args, [
+  assert.deepEqual(connection(openClaw).args, [
     resolve(root, 'scripts/openclaw.mjs'),
     'acp',
     '--url',
@@ -485,7 +521,7 @@ test('uses one ACP profile family while preserving backend differences', () => {
     '/state/gateway-token',
     '--verbose',
   ])
-  assert.equal(openClaw.env.OPENCLAW_STATE_DIR, '/state')
+  assert.equal(connection(openClaw).env.OPENCLAW_STATE_DIR, '/state')
   const openClawWithTokenFileOnly = acpBackendProfile({
     protocol: 'openclaw',
     root,
@@ -495,7 +531,7 @@ test('uses one ACP profile family while preserving backend differences', () => {
     tokenFile: '/state/gateway-token',
     permissionMode: 'native',
   })
-  assert.ok(openClawWithTokenFileOnly.args.includes('--token-file'))
+  assert.ok(connection(openClawWithTokenFileOnly).args.includes('--token-file'))
   const generic = acpBackendProfile({
     protocol: 'acp',
     root,
@@ -506,8 +542,8 @@ test('uses one ACP profile family while preserving backend differences', () => {
     permissionMode: 'native',
   })
   assert.equal(generic.label, 'Example Agent')
-  assert.equal(generic.command, 'example-agent')
-  assert.deepEqual(generic.args, ['--acp', '--profile', 'voice'])
+  assert.equal(connection(generic).command, 'example-agent')
+  assert.deepEqual(connection(generic).args, ['--acp', '--profile', 'voice'])
   assert.equal(generic.externalMcp, true)
   const hermes = acpBackendProfile({
     protocol: 'hermes',
@@ -516,8 +552,8 @@ test('uses one ACP profile family while preserving backend differences', () => {
     cliPath: '/opt/hermes',
     permissionMode: 'native',
   })
-  assert.equal(hermes.command, '/opt/hermes')
-  assert.deepEqual(hermes.args, ['acp', '--accept-hooks'])
+  assert.equal(connection(hermes).command, '/opt/hermes')
+  assert.deepEqual(connection(hermes).args, ['acp', '--accept-hooks'])
   const kimi = acpBackendProfile({
     protocol: 'kimi',
     root,
@@ -525,8 +561,8 @@ test('uses one ACP profile family while preserving backend differences', () => {
     cliPath: '/opt/kimi',
     permissionMode: 'full',
   })
-  assert.equal(kimi.command, '/opt/kimi')
-  assert.deepEqual(kimi.args, ['acp'])
+  assert.equal(connection(kimi).command, '/opt/kimi')
+  assert.deepEqual(connection(kimi).args, ['acp'])
   assert.deepEqual(kimi.sessionConfigOptions, [
     { id: 'mode', value: 'auto' },
   ])
@@ -538,14 +574,14 @@ test('uses one ACP profile family while preserving backend differences', () => {
     modelUrl: 'https://example.com/v1/chat/completions',
     permissionMode: 'full',
   })
-  assert.deepEqual(codeBuddy.args, [
+  assert.deepEqual(connection(codeBuddy).args, [
     '--acp',
     '--model',
     'qwen3.7-max',
     '--dangerously-skip-permissions',
   ])
   assert.equal(
-    codeBuddy.env.CODEBUDDY_MODEL_URL,
+    connection(codeBuddy).env.CODEBUDDY_MODEL_URL,
     'https://example.com/v1/chat/completions',
   )
   const nativeCodeBuddy = acpBackendProfile({
@@ -554,8 +590,8 @@ test('uses one ACP profile family while preserving backend differences', () => {
     directory: '/work',
     permissionMode: 'native',
   })
-  assert.deepEqual(nativeCodeBuddy.args, ['--acp'])
-  assert.equal(nativeCodeBuddy.env.CODEBUDDY_MODEL_URL, undefined)
+  assert.deepEqual(connection(nativeCodeBuddy).args, ['--acp'])
+  assert.equal(connection(nativeCodeBuddy).env.CODEBUDDY_MODEL_URL, undefined)
   const codex = acpBackendProfile({
     protocol: 'codex',
     root,
@@ -564,10 +600,10 @@ test('uses one ACP profile family while preserving backend differences', () => {
     modelUrl: 'https://example.com/compatible-mode/v1',
     permissionMode: 'full',
   })
-  assert.equal(codex.command, process.execPath)
-  assert.equal(codex.args[0], resolve(root, 'scripts/codex-acp.mjs'))
-  assert.equal(codex.env.INITIAL_AGENT_MODE, 'agent-full-access')
-  const codexConfig = JSON.parse(codex.env.CODEX_CONFIG)
+  assert.equal(connection(codex).command, process.execPath)
+  assert.equal(connection(codex).args[0], resolve(root, 'scripts/codex-acp.mjs'))
+  assert.equal(connection(codex).env.INITIAL_AGENT_MODE, 'agent-full-access')
+  const codexConfig = JSON.parse(connection(codex).env.CODEX_CONFIG)
   assert.equal(codexConfig.model, 'qwen3.7-max')
   assert.equal(
     codexConfig.model_providers['qwen-audio-agent'].base_url,
@@ -580,11 +616,11 @@ test('uses one ACP profile family while preserving backend differences', () => {
     cliPath: '/opt/codex-acp',
     permissionMode: 'native',
   })
-  assert.equal(nativeCodex.command, process.execPath)
-  assert.equal(nativeCodex.args[0], resolve(root, 'scripts/codex-acp.mjs'))
-  assert.equal(nativeCodex.env.CODEX_ACP_BIN, '/opt/codex-acp')
-  assert.equal(nativeCodex.env.CODEX_CONFIG, undefined)
-  assert.equal(nativeCodex.env.MODEL_PROVIDER, undefined)
+  assert.equal(connection(nativeCodex).command, process.execPath)
+  assert.equal(connection(nativeCodex).args[0], resolve(root, 'scripts/codex-acp.mjs'))
+  assert.equal(connection(nativeCodex).env.CODEX_ACP_BIN, '/opt/codex-acp')
+  assert.equal(connection(nativeCodex).env.CODEX_CONFIG, undefined)
+  assert.equal(connection(nativeCodex).env.MODEL_PROVIDER, undefined)
   const claude = acpBackendProfile({
     protocol: 'claude',
     root,
@@ -593,13 +629,79 @@ test('uses one ACP profile family while preserving backend differences', () => {
     claudeExecutable: '/opt/claude',
     permissionMode: 'full',
   })
-  assert.equal(claude.command, process.execPath)
-  assert.equal(claude.args[0], resolve(root, 'scripts/claude-code-acp.mjs'))
-  assert.equal(claude.cwd, '/work')
-  assert.equal(claude.env.CLAUDE_CODE_ACP_BIN, '/opt/claude-code-acp')
-  assert.equal(claude.env.CLAUDE_CODE_EXECUTABLE, '/opt/claude')
-  assert.equal(claude.env.CLAUDE_CONFIG_DIR, undefined)
+  assert.equal(connection(claude).command, process.execPath)
+  assert.equal(connection(claude).args[0], resolve(root, 'scripts/claude-code-acp.mjs'))
+  assert.equal(connection(claude).cwd, '/work')
+  assert.equal(connection(claude).env.CLAUDE_CODE_ACP_BIN, '/opt/claude-code-acp')
+  assert.equal(connection(claude).env.CLAUDE_CODE_EXECUTABLE, '/opt/claude')
+  assert.equal(connection(claude).env.CLAUDE_CONFIG_DIR, undefined)
   assert.equal(claude.externalMcp, true)
+})
+
+test('lets the official OpenClaw bridge diagnose external Gateway failures', () => {
+  const external = acpBackendProfile({
+    protocol: 'openclaw',
+    root: '/repo',
+    ownership: 'external',
+    directory: '/work',
+    baseUrl: 'wss://agent.example.com',
+    tokenFile: '/state/gateway-token',
+    permissionMode: 'native',
+  })
+  assert.equal(external.readinessMessage, '')
+  assert.ok(external.acpConnection.args.includes('wss://agent.example.com'))
+
+  const owned = acpBackendProfile({
+    protocol: 'openclaw',
+    root: '/repo',
+    ownership: 'owned',
+    directory: '/work',
+    baseUrl: 'http://127.0.0.1:18789',
+    permissionMode: 'native',
+  })
+  assert.match(owned.readinessMessage, /正在启动/)
+})
+
+test('can launch a trusted OpenClaw ACP bridge executable directly', () => {
+  const profile = acpBackendProfile({
+    protocol: 'openclaw',
+    root: '/repo',
+    ownership: 'external',
+    directory: '/work',
+    cliPath: '/opt/openclaw',
+    baseUrl: 'wss://agent.example.com',
+    tokenFile: '/state/gateway-token',
+    permissionMode: 'native',
+  })
+  assert.equal(profile.acpConnection.command, '/opt/openclaw')
+  assert.deepEqual(profile.acpConnection.args, [
+    'acp',
+    '--url',
+    'wss://agent.example.com',
+    '--token-file',
+    '/state/gateway-token',
+    '--verbose',
+  ])
+})
+
+test('direct OpenClaw bridge prepares a private explicit-token file', () => {
+  const profile = acpBackendProfile({
+    protocol: 'openclaw',
+    root: '/repo',
+    ownership: 'external',
+    directory: '/work',
+    cliPath: '/opt/openclaw',
+    baseUrl: 'wss://agent.example.com',
+    token: 'remote-token',
+    tokenFile: '/state/not-materialized',
+    permissionMode: 'native',
+  })
+  assert.equal(
+    profile.acpConnection.env.OPENCLAW_GATEWAY_TOKEN,
+    'remote-token',
+  )
+  assert.equal(profile.acpConnection.args.includes('--token-file'), true)
+  assert.equal(typeof profile.acpConnection.prepare, 'function')
 })
 
 test('Kimi full permission mode configures coordinator and project Sessions', async () => {

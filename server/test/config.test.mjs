@@ -4,14 +4,9 @@ import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 import {
   numberSetting,
-  resolveCodeBuddyWorkspace,
-  resolveCodexWorkspace,
   resolveBackendModels,
-  resolveHermesWorkspace,
-  resolveKimiWorkspace,
+  resolveBackendWorkspace,
   resolveOpenCodeCoordinatorAgent,
-  resolveOpenCodeWorkspace,
-  resolveQoderWorkspace,
 } from '../src/core/config.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
@@ -30,14 +25,14 @@ test('preserves explicit zero numeric settings', () => {
 test('uses the user data directory for the default OpenCode workspace', () => {
   const directory = resolve('/home/user/.config/qwaudio')
   assert.equal(
-    resolveOpenCodeWorkspace({}, directory),
+    resolveBackendWorkspace('opencode', {}, directory),
     resolve(directory, 'workspaces/opencode'),
   )
 })
 
 test('uses only the explicit OPENCODE_WORKSPACE setting', () => {
   assert.equal(
-    resolveOpenCodeWorkspace({
+    resolveBackendWorkspace('opencode', {
       OPENCODE_WORKSPACE: 'projects/voice',
       OPENCODE_DIRECTORY: 'legacy',
     }),
@@ -62,7 +57,7 @@ test('uses the default ACP Session mode unless a custom OpenCode Agent is explic
 test('uses the user data directory for the default Qoder workspace', () => {
   const directory = resolve('/home/user/.config/qwaudio')
   assert.equal(
-    resolveQoderWorkspace({}, directory),
+    resolveBackendWorkspace('qoder', {}, directory),
     resolve(directory, 'workspaces/qoder'),
   )
 })
@@ -70,20 +65,24 @@ test('uses the user data directory for the default Qoder workspace', () => {
 test('uses the user data directory for additional ACP backend workspaces', () => {
   const directory = resolve('/home/user/.config/qwaudio')
   assert.equal(
-    resolveHermesWorkspace({}, directory),
+    resolveBackendWorkspace('hermes', {}, directory),
     resolve(directory, 'workspaces/hermes'),
   )
   assert.equal(
-    resolveKimiWorkspace({}, directory),
+    resolveBackendWorkspace('kimi', {}, directory),
     resolve(directory, 'workspaces/kimi'),
   )
   assert.equal(
-    resolveCodeBuddyWorkspace({}, directory),
+    resolveBackendWorkspace('codebuddy', {}, directory),
     resolve(directory, 'workspaces/codebuddy'),
   )
   assert.equal(
-    resolveCodexWorkspace({}, directory),
+    resolveBackendWorkspace('codex', {}, directory),
     resolve(directory, 'workspaces/codex'),
+  )
+  assert.equal(
+    resolveBackendWorkspace('qwen', {}, directory),
+    resolve(directory, 'workspaces/qwen'),
   )
 })
 
@@ -95,6 +94,7 @@ test('maps one backend model name to each managed backend provider', () => {
     openCode: 'alibaba-cn/qwen3.7-plus',
     openClaw: 'bailian/qwen3.7-plus',
     qoder: 'qwen3.7-plus',
+    qwen: 'qwen3.7-plus',
     kimi: 'qwen3.7-plus',
     hermes: 'qwen3.7-plus',
     codeBuddy: 'qwen3.7-plus',
@@ -113,6 +113,7 @@ test('ignores backend-native model variables as Gateway overrides', () => {
     openCode: '',
     openClaw: '',
     qoder: '',
+    qwen: '',
     kimi: '',
     hermes: '',
     codeBuddy: '',
@@ -130,6 +131,7 @@ test('treats legacy auto as no backend model override', () => {
     openCode: '',
     openClaw: '',
     qoder: '',
+    qwen: '',
     kimi: '',
     hermes: '',
     codeBuddy: '',
@@ -148,6 +150,7 @@ test('uses only the unified backend model override', () => {
     openCode: 'alibaba-cn/qwen3.7-max',
     openClaw: 'bailian/qwen3.7-max',
     qoder: 'qwen3.7-max',
+    qwen: 'qwen3.7-max',
     kimi: 'qwen3.7-max',
     hermes: 'qwen3.7-max',
     codeBuddy: 'qwen3.7-max',

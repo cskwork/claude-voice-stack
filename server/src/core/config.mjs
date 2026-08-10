@@ -5,6 +5,7 @@ import {
   backendDefinition,
   backendNames,
   normalizeBackendProtocol,
+  resolveBackendOwnership,
 } from '../../../shared/backend-catalog.mjs'
 import {
   resolveRealtimeFrontendConfiguration,
@@ -27,85 +28,19 @@ export function numberSetting(value, fallback, {
   return Math.min(max, Math.max(min, parsed))
 }
 
-export function resolveOpenCodeWorkspace(
+export function resolveBackendWorkspace(
+  protocol,
   env = process.env,
   configDirectory = runtimeEnvironment.configDirectory,
 ) {
-  return env.OPENCODE_WORKSPACE
-    ? resolve(root, env.OPENCODE_WORKSPACE)
-    : resolve(configDirectory, 'workspaces/opencode')
-}
-
-export function resolveQoderWorkspace(
-  env = process.env,
-  configDirectory = runtimeEnvironment.configDirectory,
-) {
-  return env.QODER_WORKSPACE
-    ? resolve(root, env.QODER_WORKSPACE)
-    : resolve(configDirectory, 'workspaces/qoder')
-}
-
-export function resolveKimiWorkspace(
-  env = process.env,
-  configDirectory = runtimeEnvironment.configDirectory,
-) {
-  return env.KIMI_WORKSPACE
-    ? resolve(root, env.KIMI_WORKSPACE)
-    : resolve(configDirectory, 'workspaces/kimi')
-}
-
-export function resolveHermesWorkspace(
-  env = process.env,
-  configDirectory = runtimeEnvironment.configDirectory,
-) {
-  return env.HERMES_WORKSPACE
-    ? resolve(root, env.HERMES_WORKSPACE)
-    : resolve(configDirectory, 'workspaces/hermes')
-}
-
-export function resolveCodeBuddyWorkspace(
-  env = process.env,
-  configDirectory = runtimeEnvironment.configDirectory,
-) {
-  return env.CODEBUDDY_WORKSPACE
-    ? resolve(root, env.CODEBUDDY_WORKSPACE)
-    : resolve(configDirectory, 'workspaces/codebuddy')
-}
-
-export function resolveCodexWorkspace(
-  env = process.env,
-  configDirectory = runtimeEnvironment.configDirectory,
-) {
-  return env.CODEX_WORKSPACE
-    ? resolve(root, env.CODEX_WORKSPACE)
-    : resolve(configDirectory, 'workspaces/codex')
-}
-
-export function resolveClaudeWorkspace(
-  env = process.env,
-  configDirectory = runtimeEnvironment.configDirectory,
-) {
-  return env.CLAUDE_WORKSPACE
-    ? resolve(root, env.CLAUDE_WORKSPACE)
-    : resolve(configDirectory, 'workspaces/claude')
-}
-
-export function resolveOpenClawWorkspace(
-  env = process.env,
-  configDirectory = runtimeEnvironment.configDirectory,
-) {
-  return env.QWEN_AUDIO_AGENT_OPENCLAW_WORKSPACE
-    ? resolve(root, env.QWEN_AUDIO_AGENT_OPENCLAW_WORKSPACE)
-    : resolve(configDirectory, 'workspaces/openclaw')
-}
-
-export function resolveAcpWorkspace(
-  env = process.env,
-  configDirectory = runtimeEnvironment.configDirectory,
-) {
-  return env.ACP_WORKSPACE
-    ? resolve(root, env.ACP_WORKSPACE)
-    : resolve(configDirectory, 'workspaces/acp')
+  const definition = backendDefinition(protocol)
+  if (!definition?.workspaceEnvironment) {
+    throw new Error(`后台 ${protocol} 没有 workspace 配置`)
+  }
+  const configured = env[definition.workspaceEnvironment]
+  return configured
+    ? resolve(root, configured)
+    : resolve(configDirectory, `workspaces/${definition.id}`)
 }
 
 export function resolveAcpArgs(value) {
@@ -143,6 +78,7 @@ export function resolveBackendModels(env = process.env) {
     openCode: common ? `alibaba-cn/${name}` : '',
     openClaw: common ? `bailian/${name}` : '',
     qoder: name,
+    qwen: name,
     kimi: common,
     hermes: common,
     codeBuddy: name,
@@ -155,7 +91,24 @@ export function resolveBackendModels(env = process.env) {
 const configuredAgentProtocol = normalizeBackendProtocol(
   process.env.AGENT_PROTOCOL,
 )
-const backendOwnership = 'owned'
+const configuredBackendDefinition = backendDefinition(configuredAgentProtocol)
+if (configuredAgentProtocol && !configuredBackendDefinition) {
+  throw new Error(
+    `不支持的后台 Agent：${configuredAgentProtocol}`
+    + `（可选 ${backendNames().join('、')}）`,
+  )
+}
+const backendOwnership = configuredAgentProtocol
+  ? resolveBackendOwnership(configuredAgentProtocol, {
+      baseUrlConfigured: Boolean(
+        configuredBackendDefinition.baseUrlEnvironment
+        && String(
+          process.env[configuredBackendDefinition.baseUrlEnvironment] || '',
+        ).trim()
+      ),
+      requestedOwnership: process.env.QWEN_AUDIO_AGENT_BACKEND_OWNERSHIP,
+    })
+  : 'owned'
 const backendModels = resolveBackendModels()
 const managedOpenClawBailian = (
   configuredAgentProtocol === 'openclaw'
@@ -175,12 +128,6 @@ if (
   )
 }
 const requestedAgentProtocol = configuredAgentProtocol
-if (requestedAgentProtocol && !backendDefinition(requestedAgentProtocol)) {
-  throw new Error(
-    `不支持的后台 Agent：${requestedAgentProtocol}`
-    + `（可选 ${backendNames().join('、')}）`,
-  )
-}
 const sharedBackendAgent = String(
   process.env.QWEN_AUDIO_AGENT_BACKEND_AGENT || '',
 ).trim()
@@ -252,7 +199,7 @@ export const config = {
         || 'http://127.0.0.1:4096'
       ).replace(/\/+$/, ''),
       model: backendModels.openCode,
-      directory: resolveOpenCodeWorkspace(),
+      directory: resolveBackendWorkspace('opencode'),
       coordinatorAgent: resolveOpenCodeCoordinatorAgent(),
     },
     openclaw: {
@@ -273,7 +220,8 @@ export const config = {
         || resolve(runtimeEnvironment.openClawStateDirectory, 'gateway-token')
       ),
       model: backendModels.openClaw,
-      directory: resolveOpenClawWorkspace(),
+      directory: resolveBackendWorkspace('openclaw'),
+      cliPath: String(process.env.OPENCLAW_ACP_BIN || '').trim(),
       coordinatorAgent: (
         sharedBackendAgent
         || legacyBackendAgent(
@@ -285,7 +233,7 @@ export const config = {
     },
     qoder: {
       model: String(backendModels.qoder).trim(),
-      directory: resolveQoderWorkspace(),
+      directory: resolveBackendWorkspace('qoder'),
       cliPath: String(
         process.env.QODERCLI_PATH || process.env.QODER_CLI_PATH || '',
       ).trim(),
@@ -293,14 +241,19 @@ export const config = {
         ? resolve(process.env.QODER_CONFIG_DIR)
         : '',
     },
+    qwen: {
+      model: String(backendModels.qwen).trim(),
+      directory: resolveBackendWorkspace('qwen'),
+      cliPath: String(process.env.QWEN_CODE_BIN || '').trim(),
+    },
     kimi: {
       model: String(backendModels.kimi).trim(),
-      directory: resolveKimiWorkspace(),
+      directory: resolveBackendWorkspace('kimi'),
       cliPath: String(process.env.KIMI_CODE_BIN || '').trim(),
     },
     hermes: {
       model: String(backendModels.hermes).trim(),
-      directory: resolveHermesWorkspace(),
+      directory: resolveBackendWorkspace('hermes'),
       cliPath: String(process.env.HERMES_BIN || '').trim(),
     },
     codebuddy: {
@@ -313,7 +266,7 @@ export const config = {
             : 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'
         ) : '')
       ),
-      directory: resolveCodeBuddyWorkspace(),
+      directory: resolveBackendWorkspace('codebuddy'),
       cliPath: String(process.env.CODEBUDDY_BIN || '').trim(),
     },
     codex: {
@@ -326,12 +279,12 @@ export const config = {
             : 'https://dashscope.aliyuncs.com/compatible-mode/v1'
         ) : '')
       ).replace(/\/+$/, ''),
-      directory: resolveCodexWorkspace(),
+      directory: resolveBackendWorkspace('codex'),
       cliPath: String(process.env.CODEX_ACP_BIN || '').trim(),
     },
     claude: {
       model: String(backendModels.claude).trim(),
-      directory: resolveClaudeWorkspace(),
+      directory: resolveBackendWorkspace('claude'),
       cliPath: String(process.env.CLAUDE_CODE_ACP_BIN || '').trim(),
       claudeExecutable: String(
         process.env.CLAUDE_CODE_EXECUTABLE || '',
@@ -342,7 +295,7 @@ export const config = {
     },
     acp: {
       model: String(backendModels.acp).trim(),
-      directory: resolveAcpWorkspace(),
+      directory: resolveBackendWorkspace('acp'),
       cliPath: String(process.env.ACP_COMMAND || '').trim(),
       args: resolveAcpArgs(process.env.ACP_ARGS),
       label: String(process.env.ACP_LABEL || 'ACP Agent').trim() || 'ACP Agent',

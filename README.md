@@ -26,8 +26,10 @@ tells you:
 
 ## News
 
+- **2026-08-09 · [v1.8.0](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.8.0)**
+  🆕 Adds Qwen Code backend; 🔧 fixes known issues.
 - **2026-08-07 · [v1.7.0](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.7.0)**
-  🎨 The orb now supports skins, with custom look imports; 🪟 improved Windows backend Agent startup.
+  🎨 The orb opens up custom skins — import your own look, compatible with pet packs from the [Awesome Codex Pet](https://codexpet.top/) community gallery; 🪟 improved Windows backend Agent startup.
 - **2026-08-07 · [v1.6.1](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.6.1)**
   ⚡ Task delegation and permission decisions confirm instantly; 🖥️ built-in computer-use lets backend Agents operate the computer out of the box; 🎙️ more reliable wake; 📚 fully bilingual docs.
 - **2026-08-06 · [v1.6.0](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.6.0)**
@@ -93,6 +95,7 @@ For the full design and module breakdown, see the [architecture document](docs/a
 | OpenCode | Native ACP | One-click install + Bailian config | ★★★★★ |
 | OpenClaw | Built-in ACP bridge | One-click install + Bailian config | ★★★★★ |
 | Qoder | Native ACP | One-click install, user config required | ★★★★★ |
+| Qwen Code | Native ACP | One-click install, user config required | ★★★★☆ |
 | Kimi Code | Native ACP | One-click install, user config required | ★★★★★ |
 | Hermes | Native ACP | One-click install, user config required | ★★★★☆ |
 | CodeBuddy | Native ACP | One-click install, user config required | ★★★★☆ |
