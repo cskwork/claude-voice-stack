@@ -50,10 +50,10 @@ export function realtimeEventErrorMessage(event, fallback = '实时语音服务�
   return [...new Set(details)].join(': ') || fallback
 }
 
-// Behavioural capabilities of a provider's Realtime implementation. Every
-// default describes the fully specification-compliant behaviour, so providers
-// only declare the guarantees they do NOT uphold and the frontend compensates
-// without ever branching on a provider name.
+// Behavioural capabilities of a provider's Realtime implementation. Defaults
+// encode the shared protocol baseline; optional features require opt-in and
+// providers declare known constraints, without the frontend ever branching on
+// a provider name.
 const DEFAULT_CAPABILITIES = Object.freeze({
   // Acknowledges session.update with session.updated.
   acknowledgesSessionUpdate: true,
@@ -62,6 +62,9 @@ const DEFAULT_CAPABILITIES = Object.freeze({
   // Echoes response metadata so client-created responses can be correlated
   // without confusing them with automatic server-side responses.
   responseMetadataCorrelation: false,
+  // Applies instructions supplied on one response.create without requiring a
+  // persistent conversation item.
+  perResponseInstructions: false,
 })
 
 export class RealtimeFrontend {
@@ -215,10 +218,10 @@ export class RealtimeFrontend {
     })
   }
 
-  ensureResponse(context = {}, { shouldCreate } = {}) {
+  ensureResponse(context = {}, { shouldCreate, response } = {}) {
     return this.enqueueResponse('agent', context, () => {
       if (shouldCreate && !shouldCreate()) return false
-      this.send(this.protocol.responseCreate())
+      this.send(this.protocol.responseCreate(response))
     })
   }
 

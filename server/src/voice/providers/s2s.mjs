@@ -47,6 +47,8 @@ export const s2sProvider = {
     // be distinguished from automatic server-VAD responses without relying on
     // event arrival order.
     responseMetadataCorrelation: true,
+    // Supports transient instructions on an individual response.create.
+    perResponseInstructions: true,
   },
 
   model: () => null,
