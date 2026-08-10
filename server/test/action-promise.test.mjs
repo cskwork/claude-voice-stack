@@ -2,15 +2,16 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   ACTION_PROMISE_MAX_CHARS,
+  isCurrentActionPromiseTurn,
   promisesAction,
   shouldCorrectActionPromise,
 } from '../src/voice/action-promise.mjs'
 
 test('a short spoken promise to act is recognised', () => {
   assert.equal(promisesAction('我来查一下杭州今天的天气。'), true)
-  assert.equal(promisesAction('好的，我先帮你把这个仓库拉下来。'), true)
+  assert.equal(promisesAction('好的，我马上检查这个仓库。'), true)
   assert.equal(promisesAction('马上去看这个文件。'), true)
-  assert.equal(promisesAction('稍等，正在处理。'), true)
+  assert.equal(promisesAction('稍等，我来核实一下。'), true)
 })
 
 test('a statement without an action claim is not a promise', () => {
@@ -28,9 +29,14 @@ test('a request for confirmation is not a promise', () => {
 })
 
 test('a turn already delivering substance is not treated as a bare promise', () => {
-  const delivered = `我来给你念一下：${'排序结果依次是甲乙丙丁'.repeat(6)}`
-  assert.ok(delivered.length > ACTION_PROMISE_MAX_CHARS)
-  assert.equal(promisesAction(delivered), false)
+  assert.equal(promisesAction('我来解释一下：ACP 是一种协议。'), false)
+  assert.equal(promisesAction('我来确认一下，结果是配置错误。'), false)
+  assert.equal(promisesAction('我来查一下：杭州今天二十六度。'), false)
+  assert.equal(promisesAction('稍等，正在处理。'), false)
+
+  const longPromise = `我来查一下${'这个非常具体的项目问题'.repeat(6)}`
+  assert.ok(longPromise.length > ACTION_PROMISE_MAX_CHARS)
+  assert.equal(promisesAction(longPromise), false)
 })
 
 test('standing down is not a promise even with the same opening', () => {
@@ -47,7 +53,7 @@ test('standing down is not a promise even with the same opening', () => {
   assert.equal(promisesAction('我先去查一下这个报错。'), true)
 })
 
-test('a promise without a tool call is corrected once per turn', () => {
+test('a model promise without a tool call is eligible for correction', () => {
   const promise = {
     origin: 'model',
     hasFunctionCall: false,
@@ -55,10 +61,6 @@ test('a promise without a tool call is corrected once per turn', () => {
   }
 
   assert.equal(shouldCorrectActionPromise(promise), true)
-  assert.equal(
-    shouldCorrectActionPromise({ ...promise, alreadyCorrected: true }),
-    false,
-  )
 })
 
 test('a kept promise is never corrected', () => {
@@ -84,4 +86,34 @@ test('an interrupted, failed or announced turn proves nothing about routing', ()
     shouldCorrectActionPromise({ transcript, origin: 'announcement' }),
     false,
   )
+  assert.equal(
+    shouldCorrectActionPromise({ transcript, origin: 'agent' }),
+    false,
+  )
+})
+
+test('a correction remains eligible only while its exact turn is current', () => {
+  const current = {
+    sameFrontend: true,
+    outputEnabled: true,
+    responseTurnId: 'turn-one',
+    responseTurnGeneration: 1,
+    committedTurnId: 'turn-one',
+    committedTurnGeneration: 1,
+  }
+
+  assert.equal(isCurrentActionPromiseTurn(current), true)
+  assert.equal(isCurrentActionPromiseTurn({
+    ...current,
+    userSpeaking: true,
+  }), false)
+  assert.equal(isCurrentActionPromiseTurn({
+    ...current,
+    committedTurnId: 'turn-two',
+    committedTurnGeneration: 2,
+  }), false)
+  assert.equal(isCurrentActionPromiseTurn({
+    ...current,
+    sameFrontend: false,
+  }), false)
 })

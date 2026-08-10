@@ -36,6 +36,7 @@ import { SleepController } from './sleep-controller.mjs'
 import { createSherpaWakeWordDetector } from './wake-word/sherpa-detector.mjs'
 import {
   ACTION_PROMISE_CORRECTION,
+  isCurrentActionPromiseTurn,
   shouldCorrectActionPromise,
 } from './action-promise.mjs'
 import {
@@ -166,7 +167,6 @@ export function attachRealtimeGateway(server, {
     let committedTurnId = ''
     let committedTurnGeneration = 0
     let userSpeaking = false
-    let correctedActionTurnId = ''
     let inputEnabled = false
     let outputEnabled = false
     let textOnlySession = false
@@ -1202,7 +1202,6 @@ export function attachRealtimeGateway(server, {
           failed: responseFailed,
           suppressed: Boolean(responseContext?.suppressed),
           transcript: responseContext?.assistantTranscript || '',
-          alreadyCorrected: correctedActionTurnId === responseTurnId,
         })
         if (!responseContext?.suppressed) {
           send(ws, { type: 'audio.done', responseId: id, turnId: responseTurnId })
@@ -1268,12 +1267,26 @@ export function attachRealtimeGateway(server, {
         // or stay silent, so the user is not left waiting for something that
         // never started.
         if (promisedUnsubmittedAction && outputEnabled && frontend?.ready) {
-          correctedActionTurnId = responseTurnId
-          frontend.sendUserText(
-            ACTION_PROMISE_CORRECTION,
-            { turnId: responseTurnId },
-            { modalities: textOnlySession ? ['text'] : undefined },
-          ).catch(error => send(ws, { type: 'error', message: error.message }))
+          const correctionFrontend = frontend
+          const correctionGeneration = responseContext?.turnGeneration
+          correctionFrontend.ensureResponse({
+            turnId: responseTurnId,
+            turnGeneration: correctionGeneration,
+          }, {
+            shouldCreate: () => isCurrentActionPromiseTurn({
+              sameFrontend: frontend === correctionFrontend,
+              outputEnabled,
+              userSpeaking,
+              responseTurnId,
+              responseTurnGeneration: correctionGeneration,
+              committedTurnId,
+              committedTurnGeneration,
+            }),
+            response: {
+              modalities: textOnlySession ? ['text'] : undefined,
+              instructions: ACTION_PROMISE_CORRECTION,
+            },
+          }).catch(error => send(ws, { type: 'error', message: error.message }))
         }
         const timer = setTimeout(
           () => announcements.flush(),

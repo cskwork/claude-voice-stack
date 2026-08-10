@@ -215,10 +215,10 @@ export class RealtimeFrontend {
     })
   }
 
-  ensureResponse(context = {}, { shouldCreate } = {}) {
+  ensureResponse(context = {}, { shouldCreate, response } = {}) {
     return this.enqueueResponse('agent', context, () => {
       if (shouldCreate && !shouldCreate()) return false
-      this.send(this.protocol.responseCreate())
+      this.send(this.protocol.responseCreate(response))
     })
   }
 

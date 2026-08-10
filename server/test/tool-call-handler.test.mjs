@@ -432,6 +432,7 @@ test('cancels the most recently submitted active work', async () => {
     arguments: '{}',
   })
   assert.equal(kit.outputs.at(-1)[1].status, 'cancelled')
+  assert.deepEqual(kit.outputs.at(-1)[3], {})
   assert.equal(kit.manager.list({ active: true }).length, 0)
   assert.equal(kit.manager.list()[0].status, 'cancelled')
   release?.()
