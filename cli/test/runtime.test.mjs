@@ -78,6 +78,19 @@ test('reuses one healthy Gateway without starting processes', async () => {
   assert.deepEqual(calls, [])
 })
 
+test('compares an explicitly requested model with health profile identity', () => {
+  assert.throws(() => assertRealtimeGatewayCompatibility({
+    realtimeProvider: 'dashscope',
+    realtimeConfigurationSignature: DEFAULT_FRONTEND.signature,
+    realtimeModelProfile: { id: 'qwen3.5-omni-plus-realtime-2026-03-15' },
+  }, { ...DEFAULT_FRONTEND_ENV, QWEN_AUDIO_REALTIME_MODEL: 'qwen3.5-omni-flash-realtime-2026-03-15' }), /Realtime 模型.*不一致/)
+  assert.doesNotThrow(() => assertRealtimeGatewayCompatibility({
+    realtimeProvider: 'dashscope',
+    realtimeConfigurationSignature: DEFAULT_FRONTEND.signature,
+    realtimeModelProfile: { id: DEFAULT_FRONTEND.dashscopeModel },
+  }, DEFAULT_FRONTEND_ENV))
+})
+
 test('rejects an existing Gateway using a different realtime frontend', async () => {
   await assert.rejects(
     ensureRuntime(options, {

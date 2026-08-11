@@ -11,6 +11,7 @@ import {
   DEFAULT_DASHSCOPE_REALTIME_MODEL,
   DEFAULT_REALTIME_PROVIDER,
   DEFAULT_SPEECH_TO_SPEECH_REALTIME_URL,
+  resolveDashScopeRealtimeModelProfile,
   normalizeRealtimeProvider,
 } from '../../shared/realtime-provider-catalog.mjs'
 
@@ -46,6 +47,11 @@ const SETTING_KEYS = {
   speechToSpeechAuthToken: 'SPEECH_TO_SPEECH_AUTH_TOKEN',
   backendModel: 'QWEN_AUDIO_AGENT_BACKEND_MODEL',
   nodePath: 'QWEN_AUDIO_AGENT_NODE_PATH',
+}
+
+function normalizeRealtimeModel(value) {
+  const profile = resolveDashScopeRealtimeModelProfile(value)
+  return profile.family === 'unknown' ? DEFAULTS.realtimeModel : profile.id
 }
 
 function configured(values, key, fallback) {
@@ -220,11 +226,11 @@ export function parseSettings(content = '', fallback = {}) {
       'AGENT_PROTOCOL',
       fallback.AGENT_PROTOCOL || DEFAULTS.agentProtocol,
     )),
-    realtimeModel: String(configured(
+    realtimeModel: normalizeRealtimeModel(String(configured(
       values,
       'QWEN_AUDIO_REALTIME_MODEL',
       fallback.QWEN_AUDIO_REALTIME_MODEL || DEFAULTS.realtimeModel,
-    ) || DEFAULTS.realtimeModel).trim(),
+    ) || DEFAULTS.realtimeModel).trim()),
     speechToSpeechRealtimeUrl: String(
       configuredS2sUrl
       || (realtimeProvider === 'speech-to-speech'
@@ -279,12 +285,7 @@ export function normalizeSettings(settings = {}) {
     agentProtocol: cleanAgentProtocol(
       settings.agentProtocol ?? DEFAULTS.agentProtocol,
     ),
-    realtimeModel: [
-      'qwen-audio-3.0-realtime-plus',
-      'qwen-audio-3.0-realtime-flash',
-    ].includes(String(settings.realtimeModel || '').trim())
-      ? String(settings.realtimeModel).trim()
-      : DEFAULTS.realtimeModel,
+    realtimeModel: normalizeRealtimeModel(String(settings.realtimeModel || '').trim()),
     speechToSpeechRealtimeUrl: requestedS2sUrl
       ? cleanRealtimeUrl(requestedS2sUrl, '')
       : realtimeProvider === 'speech-to-speech'

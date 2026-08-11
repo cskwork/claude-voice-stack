@@ -3,9 +3,15 @@ import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import {
   parseSettings,
+  normalizeSettings,
   realtimeSettingsConfigured,
   updateSettingsContent,
 } from '../src/settings-config.mjs'
+import {
+  DASHSCOPE_OMNI_FLASH_REALTIME_MODEL,
+  DASHSCOPE_OMNI_PLUS_REALTIME_MODEL,
+  DEFAULT_DASHSCOPE_REALTIME_MODEL,
+} from '../../shared/realtime-provider-catalog.mjs'
 
 const REALTIME_DEFAULTS = {
   wakeShortcut: 'CommandOrControl+Shift+Space',
@@ -28,6 +34,21 @@ test('reads desktop-owned settings with friendly defaults', () => {
     backendModel: '',
     nodePath: '',
   })
+})
+
+test('preserves every catalog model and falls back unknown ids to legacy', () => {
+  for (const model of [
+    DASHSCOPE_OMNI_FLASH_REALTIME_MODEL,
+    DASHSCOPE_OMNI_PLUS_REALTIME_MODEL,
+    DEFAULT_DASHSCOPE_REALTIME_MODEL,
+  ]) {
+    assert.equal(normalizeSettings({ realtimeModel: model }).realtimeModel, model)
+    assert.equal(parseSettings(`QWEN_AUDIO_REALTIME_MODEL=${model}\n`).realtimeModel, model)
+  }
+  assert.equal(
+    normalizeSettings({ realtimeModel: 'unknown-model' }).realtimeModel,
+    DEFAULT_DASHSCOPE_REALTIME_MODEL,
+  )
 })
 
 test('shows effective client settings when user config is empty', () => {
@@ -78,7 +99,7 @@ test('updates client settings without changing Gateway-owned configuration', () 
     dashscopeApiKey: 'secret',
     ...REALTIME_DEFAULTS,
     agentProtocol: 'qoder',
-    realtimeModel: 'realtime-model',
+    realtimeModel: 'qwen-audio-3.0-realtime-plus',
     backendModel: '',
     nodePath: '',
   })
@@ -235,13 +256,13 @@ test('updates the realtime model and clears an explicit backend model', () => {
     'QWEN_AUDIO_AGENT_BACKEND_MODEL=qwen3.7-max',
     '',
   ].join('\n'), {
-    realtimeModel: 'qwen-audio-3.0-realtime-flash',
+    realtimeModel: 'qwen3.5-omni-flash-realtime-2026-03-15',
     backendModel: '',
   })
 
   assert.match(
     content,
-    /QWEN_AUDIO_REALTIME_MODEL=qwen-audio-3\.0-realtime-flash/,
+    /QWEN_AUDIO_REALTIME_MODEL=qwen3\.5-omni-flash-realtime-2026-03-15/,
   )
   assert.match(content, /QWEN_AUDIO_AGENT_BACKEND_MODEL=\n?/)
 })
@@ -402,4 +423,36 @@ test('desktop settings expose the embedded voice service without editing backend
   ]) {
     assert.doesNotMatch(html, new RegExp(`id="${id}"`))
   }
+})
+
+test('opens DashScope provider docs through the Desktop external-link IPC', () => {
+  const html = readFileSync(
+    new URL('../src/settings.html', import.meta.url),
+    'utf8',
+  )
+  const script = readFileSync(
+    new URL('../src/settings.js', import.meta.url),
+    'utf8',
+  )
+
+  assert.match(html, /<button[^>]+id="provider-docs"[^>]+type="button"/)
+  assert.doesNotMatch(html, /href="https:\/\/help\.aliyun\.com\/zh\/model-studio\/omni\/"/)
+  assert.match(script, /providerDocs\.addEventListener\('click'/)
+  assert.match(script, /openExternal\(DASHSCOPE_REALTIME_DOCS_URL\)/)
+})
+
+test('wires remote model validation to a not-applied renderer outcome', () => {
+  const main = readFileSync(
+    new URL('../src/main.mjs', import.meta.url),
+    'utf8',
+  )
+  const renderer = readFileSync(
+    new URL('../src/settings.js', import.meta.url),
+    'utf8',
+  )
+
+  assert.match(main, /remoteRealtimeModelOutcome\(remoteRuntime, normalized\)/)
+  assert.match(main, /if \(modelOutcome\) \{\s+return \{/)
+  assert.match(renderer, /if \(result\.applied === false\)/)
+  assert.match(renderer, /showMessage\(result\.message, 'error'\)/)
 })

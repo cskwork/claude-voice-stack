@@ -83,6 +83,9 @@ export class RealtimeFrontend {
       throw new Error(`Realtime Provider ${provider.key || provider.label} 缺少 protocol`)
     }
     this.capabilities = { ...DEFAULT_CAPABILITIES, ...provider.capabilities }
+    this.modelProfile = provider.modelProfile?.() || null
+    this.modelCapabilities = this.modelProfile?.modelCapabilities || null
+    this.transportCapabilities = this.modelProfile?.transportCapabilities || null
     this.onEvent = onEvent
     this.onError = onError
     this.onClose = onClose
@@ -104,6 +107,12 @@ export class RealtimeFrontend {
   }
 
   connect() {
+    if (this.modelProfile?.family === 'unknown') {
+      return Promise.reject(new Error(
+        `不支持的 Realtime 模型：${this.modelProfile.id}`
+        + `（${this.provider.label}）`,
+      ))
+    }
     if (!this.provider.isConfigured()) {
       return Promise.reject(new Error(this.provider.missingConfigurationMessage))
     }

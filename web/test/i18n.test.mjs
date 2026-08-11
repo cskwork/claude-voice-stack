@@ -36,6 +36,9 @@ test('non-Chinese locales get English', () => {
       t('等待{holder}释放语音', { holder: 'Desktop' }),
       'Waiting for Desktop to release voice',
     )
+    assert.equal(t('模型支持：{modes}', { modes: 'text' }), 'Model supports: text')
+    assert.equal(t('Web 传输：{modes}', { modes: 'audio' }), 'Web transport: audio')
+    assert.equal(t('已恢复为服务器默认前台'), 'Restored the server default frontend')
   })
 })
 

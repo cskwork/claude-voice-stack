@@ -9,7 +9,9 @@ import {
   EmbeddedGateway,
   GATEWAY_READY_MESSAGE,
 } from '../src/gateway-process.mjs'
+import * as gatewayProcess from '../src/gateway-process.mjs'
 import {
+  DASHSCOPE_OMNI_PLUS_REALTIME_MODEL,
   resolveRealtimeFrontendConfiguration,
 } from '../../shared/realtime-provider-catalog.mjs'
 
@@ -121,7 +123,7 @@ test('strict compatibility validation rejects mismatched runtime settings', () =
   )
 })
 
-test('reports a runtime mismatch without preventing a frontend attachment', () => {
+test('reports a backend mismatch in Gateway compatibility details', () => {
   const env = {
     DASHSCOPE_API_KEY: 'desktop-key',
     AGENT_PROTOCOL: 'qoder',
@@ -131,6 +133,72 @@ test('reports a runtime mismatch without preventing a frontend attachment', () =
     compatible: false,
     code: 'backend',
     reason: '已有 Gateway 的后台 Agent 与桌面设置不一致',
+  })
+})
+
+test('rejects a model-mismatched borrowed Gateway before attachment', () => {
+  const env = {
+    DASHSCOPE_API_KEY: 'desktop-key',
+    AGENT_PROTOCOL: 'opencode',
+    QWEN_AUDIO_REALTIME_MODEL: 'qwen-audio-3.0-realtime-plus',
+  }
+  const active = {
+    origin: 'http://127.0.0.1:3101',
+    health: {
+      ...compatibleHealth(env),
+      realtimeModel: DASHSCOPE_OMNI_PLUS_REALTIME_MODEL,
+      realtimeModelProfile: { id: DASHSCOPE_OMNI_PLUS_REALTIME_MODEL },
+    },
+  }
+
+  assert.equal(
+    typeof gatewayProcess.resolveBorrowedGatewayAttachment,
+    'function',
+  )
+  assert.throws(
+    () => gatewayProcess.resolveBorrowedGatewayAttachment(active, env),
+    /Realtime 模型与桌面设置不一致/,
+  )
+})
+
+test('keeps non-model compatibility warnings attachable', () => {
+  const healthEnv = {
+    DASHSCOPE_API_KEY: 'desktop-key',
+    AGENT_PROTOCOL: 'opencode',
+  }
+  const active = {
+    origin: 'http://127.0.0.1:3101',
+    health: compatibleHealth(healthEnv),
+  }
+
+  assert.deepEqual(gatewayProcess.resolveBorrowedGatewayAttachment(active, {
+    ...healthEnv,
+    AGENT_PROTOCOL: 'qoder',
+  }), {
+    origin: active.origin,
+    compatibility: {
+      compatible: false,
+      code: 'backend',
+      reason: '已有 Gateway 的后台 Agent 与桌面设置不一致',
+    },
+  })
+})
+
+test('rejects a borrowed Gateway whose advertised realtime model differs', () => {
+  const env = {
+    DASHSCOPE_API_KEY: 'desktop-key',
+    AGENT_PROTOCOL: 'opencode',
+    QWEN_AUDIO_REALTIME_MODEL: 'qwen-audio-3.0-realtime-plus',
+  }
+  const health = {
+    ...compatibleHealth(env),
+    realtimeModel: DASHSCOPE_OMNI_PLUS_REALTIME_MODEL,
+    realtimeModelProfile: { id: DASHSCOPE_OMNI_PLUS_REALTIME_MODEL },
+  }
+  assert.deepEqual(desktopGatewayCompatibility(health, env), {
+    compatible: false,
+    code: 'realtime-model',
+    reason: '已有 Gateway 的 Realtime 模型与桌面设置不一致',
   })
 })
 

@@ -1,5 +1,8 @@
 import { config } from '../../core/config.mjs'
-import { normalizeRealtimeProvider } from '../../../../shared/realtime-provider-catalog.mjs'
+import {
+  listDashScopeRealtimeModelProfiles,
+  normalizeRealtimeProvider,
+} from '../../../../shared/realtime-provider-catalog.mjs'
 import { dashscopeProvider } from './dashscope.mjs'
 import { s2sProvider } from './s2s.mjs'
 
@@ -40,6 +43,93 @@ const CAPABILITY_FLAGS = [
   'responseMetadataCorrelation',
   'perResponseInstructions',
 ]
+
+const MODEL_CAPABILITY_FLAGS = [
+  'textInput',
+  'audioInput',
+  'imageInput',
+  'videoInput',
+  'textOutput',
+  'audioOutput',
+  'functionCalling',
+]
+
+const TRANSPORT_CAPABILITY_FLAGS = [
+  'textInput',
+  'audioInput',
+  'imageInput',
+  'observationInput',
+  'nativeVideoInput',
+]
+
+function validateCapabilitySet(provider, profile, property, requiredFlags) {
+  const capabilities = profile[property]
+  if (
+    !capabilities
+    || typeof capabilities !== 'object'
+    || Array.isArray(capabilities)
+    || requiredFlags.some(flag => typeof capabilities[flag] !== 'boolean')
+    || Object.values(capabilities).some(value => typeof value !== 'boolean')
+  ) {
+    throw new Error(
+      `Realtime Provider ${provider.key} modelProfile.${property} 不完整`,
+    )
+  }
+}
+
+function validateModelProfile(provider) {
+  if (provider.modelProfile === undefined) return
+  if (typeof provider.modelProfile !== 'function') {
+    throw new Error(`Realtime Provider ${provider.key} modelProfile 必须是函数`)
+  }
+  const profile = provider.modelProfile()
+  if (profile === null) return
+  if (
+    !profile
+    || typeof profile !== 'object'
+    || Array.isArray(profile)
+    || ['id', 'label', 'family'].some(property => (
+      typeof profile[property] !== 'string' || !profile[property].trim()
+    ))
+  ) {
+    throw new Error(`Realtime Provider ${provider.key} modelProfile 无效`)
+  }
+  validateCapabilitySet(
+    provider,
+    profile,
+    'modelCapabilities',
+    MODEL_CAPABILITY_FLAGS,
+  )
+  validateCapabilitySet(
+    provider,
+    profile,
+    'transportCapabilities',
+    TRANSPORT_CAPABILITY_FLAGS,
+  )
+  if (
+    !profile.sessionDefaults
+    || typeof profile.sessionDefaults !== 'object'
+    || (
+      profile.sessionDefaults.voice !== null
+      && (
+        typeof profile.sessionDefaults.voice !== 'string'
+        || !profile.sessionDefaults.voice.trim()
+      )
+    )
+    || (
+      profile.sessionDefaults.turnDetection !== null
+      && (
+        typeof profile.sessionDefaults.turnDetection !== 'object'
+        || typeof profile.sessionDefaults.turnDetection.type !== 'string'
+        || !profile.sessionDefaults.turnDetection.type.trim()
+      )
+    )
+  ) {
+    throw new Error(
+      `Realtime Provider ${provider.key} modelProfile.sessionDefaults 不完整`,
+    )
+  }
+}
 
 export function validateRealtimeProvider(provider) {
   if (!provider?.key || !provider.label) {
@@ -86,6 +176,7 @@ export function validateRealtimeProvider(provider) {
       )
     }
   }
+  validateModelProfile(provider)
   return provider
 }
 
@@ -110,16 +201,26 @@ export function listRealtimeProviders() {
       key: provider.key,
       label: provider.label,
       model: provider.model(),
+      realtimeModelIds: provider.key === 'dashscope'
+        ? listDashScopeRealtimeModelProfiles().map(profile => profile.id)
+        : null,
       configured: provider.isConfigured(),
     }))
 }
 
 export function describeActiveRealtime(requested) {
   const provider = resolveRealtimeProvider(requested)
+  const modelProfile = provider.modelProfile?.() || null
   return {
     provider: provider.key,
     label: provider.label,
     model: provider.model(),
+    modelProfile,
+    modelCapabilities: modelProfile?.modelCapabilities || null,
+    transportCapabilities: modelProfile?.transportCapabilities || null,
+    modelCatalog: provider.key === 'dashscope'
+      ? listDashScopeRealtimeModelProfiles()
+      : [],
     voice: provider.voice(),
     inputSampleRate: provider.inputSampleRate,
     configured: provider.isConfigured(),

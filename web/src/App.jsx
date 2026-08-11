@@ -31,7 +31,9 @@ import {
   taskView,
 } from './task-view.js'
 import useRealtimeVoice, {
-  retainedRealtimeProvider,
+  realtimeModelStatus,
+  realtimeProviderForConnection,
+  realtimeProviderSelection,
   shouldClaimReleasedVoice,
 } from './useRealtimeVoice.js'
 import { requestedSessionId } from './session.js'
@@ -136,6 +138,9 @@ export default function App() {
   const [realtimeProvider, setRealtimeProvider] = useState(
     () => localStorage.getItem('qwen-audio-agent.realtimeProvider') || '',
   )
+  const [modelStatus, setModelStatus] = useState(() => realtimeModelStatus())
+  const [providerNotice, setProviderNotice] = useState('')
+  const [healthValidated, setHealthValidated] = useState(false)
   const [backend, setBackend] = useState({ label: 'Agent', ready: false })
   const [agentTasks, setAgentTasks] = useState([])
   const [orbDragging, setOrbDragging] = useState(false)
@@ -227,7 +232,7 @@ export default function App() {
 
   useEffect(() => {
     let cancelled = false
-    fetch('api/health')
+    fetch('api/health', { cache: 'no-store' })
       .then(async response => ({ response, payload: await response.json() }))
       .then(({ response, payload }) => {
         if (cancelled) return
@@ -236,20 +241,20 @@ export default function App() {
           label: payload.realtimeLabel || payload.realtimeProvider || 'Realtime Agent',
         })
         setRealtimeProviders(payload.realtimeProviders || [])
+        setModelStatus(realtimeModelStatus(payload))
         // A front end persisted by an earlier visit may no longer exist on this
         // server (removed provider, different deployment). Sending it would be
         // refused on every connect, so the stale selection is dropped in favour
         // of the server default instead of leaving the client stuck.
         setRealtimeProvider(current => {
-          const retained = retainedRealtimeProvider(
-            current,
-            payload.realtimeProviders,
-          )
-          if (retained !== current) {
+          const selection = realtimeProviderSelection(current, payload)
+          setProviderNotice(selection.notice)
+          if (selection.provider !== current) {
             localStorage.removeItem('qwen-audio-agent.realtimeProvider')
           }
-          return retained
+          return selection.provider
         })
+        setHealthValidated(true)
         setBackend({
           label,
           ready: response.ok && payload.backend?.ok,
@@ -678,7 +683,10 @@ export default function App() {
     clientLabel: desktopOrbMode ? t('桌面端') : 'WebUI',
     clientStates: desktopOrbMode ? ['sleeping'] : [],
     takeover: takeoverRequested,
-    realtimeProvider,
+    realtimeProvider: realtimeProviderForConnection(
+      realtimeProvider,
+      healthValidated,
+    ),
     onEvent: onRealtimeEvent,
     onInputError: message => {
       setVoiceEnabled(false)
@@ -811,13 +819,32 @@ export default function App() {
   // the realtime effect's dependencies, so changing it tears the current socket
   // down and connects again with the newly selected provider.
   const selectRealtimeProvider = value => {
-    setRealtimeProvider(value)
-    if (value) {
-      localStorage.setItem('qwen-audio-agent.realtimeProvider', value)
+    const selection = realtimeProviderSelection(value, {
+      realtimeModel: modelStatus.id,
+      realtimeModelProfile: modelStatus.id ? { id: modelStatus.id } : null,
+      realtimeProviders,
+    })
+    setRealtimeProvider(selection.provider)
+    setProviderNotice(selection.notice)
+    if (selection.provider) {
+      localStorage.setItem(
+        'qwen-audio-agent.realtimeProvider',
+        selection.provider,
+      )
     } else {
       localStorage.removeItem('qwen-audio-agent.realtimeProvider')
     }
   }
+
+  const inputModeLabels = {
+    text: t('文字'),
+    audio: t('语音'),
+    image: t('图片'),
+    video: t('视频'),
+    observation: t('画面观察'),
+    nativeVideo: t('原生视频'),
+  }
+  const modeList = modes => modes.map(mode => inputModeLabels[mode]).join(' / ')
 
   const resetSession = () => {
     taskDismissTimers.current.forEach(timer => clearTimeout(timer))
@@ -1072,6 +1099,22 @@ export default function App() {
         <i className={backend.ready ? 'ready' : ''} />
         {backend.label}
       </a>
+      <div className="model-status" title={modelStatus.id}>
+        <b>{modelStatus.label || t('模型信息不可用')}</b>
+        {modelStatus.metadataStatus === 'current'
+          ? <>
+              <small>{t('模型支持：{modes}', {
+                modes: modeList(modelStatus.modelInputModes),
+              })}</small>
+              <small>{t('Web 传输：{modes}', {
+                modes: modeList(modelStatus.transportInputModes),
+              })}</small>
+            </>
+          : <small>{t('模型能力信息不可用')}</small>}
+        {providerNotice && <small className="provider-notice" role="status">
+          {t(providerNotice)}
+        </small>}
+      </div>
       {realtimeProviders.length > 1 && <select
         className="ghost frontend-provider"
         value={realtimeProvider}

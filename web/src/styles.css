@@ -54,6 +54,25 @@ header {
 .backend { margin-left: auto; padding-right: 11px; border-right: 1px solid #ffffff12; }
 .backend i, .status i { width: 7px; height: 7px; border-radius: 50%; background: #555; }
 .backend i.ready { background: #50dfab; box-shadow: 0 0 12px #50dfab; }
+.model-status {
+  min-width: 0;
+  max-width: 270px;
+  display: grid;
+  gap: 2px;
+  color: #9795a0;
+  font-size: 11px;
+  line-height: 1.25;
+}
+.model-status b {
+  overflow: hidden;
+  color: #d6d2df;
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.model-status small { overflow-wrap: anywhere; }
+.model-status .provider-notice { color: #f1c665; }
 .status i { width: 7px; height: 7px; border-radius: 50%; background: #555; }
 .status i.listening { background: #50dfab; box-shadow: 0 0 12px #50dfab; }
 .status i.thinking { background: #f1c665; box-shadow: 0 0 12px #f1c665; }
@@ -803,7 +822,8 @@ article.user .message-body .inline-code { background: #5e44c9; color: #f0eaff; }
 
 @media (max-width: 600px) {
   header { padding: 0 14px; }
-  .brand small, header .ghost, .backend { display: none; }
+  .brand small, header .ghost, .backend, .model-status small { display: none; }
+  .model-status { max-width: min(42vw, 220px); }
   .workspace { padding: 24px 0 14px; }
   .orb:not(.desktop-orb) { width: 92px; height: 92px; }
   .hero p { margin-top: 14px; }

@@ -1,5 +1,8 @@
 import { config, realtimeUrl } from '../../core/config.mjs'
 import {
+  resolveDashScopeRealtimeModelProfile,
+} from '../../../../shared/realtime-provider-catalog.mjs'
+import {
   buildFrontendInstructions,
   frontendTools,
   resultResponseInstructions,
@@ -24,6 +27,18 @@ function classifyError(message) {
   return 'other'
 }
 
+function activeModelProfile() {
+  return resolveDashScopeRealtimeModelProfile(config.audioModel)
+}
+
+function responseModalities(profile, { textOnly = false } = {}) {
+  const capabilities = profile.modelCapabilities
+  return [
+    capabilities.textOutput ? 'text' : null,
+    !textOnly && capabilities.audioOutput ? 'audio' : null,
+  ].filter(Boolean)
+}
+
 export const dashscopeProvider = {
   key: 'dashscope',
   label: 'Qwen-Audio-Realtime',
@@ -36,7 +51,8 @@ export const dashscopeProvider = {
   },
 
   model: () => config.audioModel,
-  voice: () => config.audioVoice,
+  modelProfile: activeModelProfile,
+  voice: () => config.audioVoice || activeModelProfile().sessionDefaults.voice,
   isConfigured: () => Boolean(config.dashscopeApiKey),
   missingConfigurationMessage: '请先配置 DASHSCOPE_API_KEY',
   connectTimeoutMessage: '连接 Qwen Audio Realtime 超时',
@@ -47,23 +63,32 @@ export const dashscopeProvider = {
 
   buildSession: ({ configured, agentContext }) => {
     const textOnly = agentContext?.textOnly === true
+    const profile = activeModelProfile()
     const session = {
       instructions: buildFrontendInstructions(agentContext),
-      tools: frontendTools(agentContext),
+    }
+    if (profile.modelCapabilities.functionCalling) {
+      session.tools = frontendTools(agentContext)
     }
     if (!configured) {
-      session.modalities = textOnly ? ['text'] : ['text', 'audio']
-      session.voice = config.audioVoice
-      session.input_audio_format = 'pcm'
-      session.output_audio_format = 'pcm'
-      session.turn_detection = textOnly ? null : { type: 'smart_turn' }
+      session.modalities = responseModalities(profile, { textOnly })
+      if (profile.modelCapabilities.audioOutput) {
+        session.voice = dashscopeProvider.voice()
+        session.output_audio_format = 'pcm'
+      }
+      if (profile.transportCapabilities.audioInput) {
+        session.input_audio_format = 'pcm'
+      }
+      session.turn_detection = !textOnly && profile.transportCapabilities.audioInput
+        ? profile.sessionDefaults.turnDetection
+        : null
     }
     return session
   },
 
   buildSpeakResponse: (content, { textOnly = false } = {}) => ({
     conversation: 'none',
-    modalities: textOnly ? ['text'] : ['text', 'audio'],
+    modalities: responseModalities(activeModelProfile(), { textOnly }),
     instructions: speakResponseInstructions(content),
   }),
 
@@ -74,7 +99,7 @@ export const dashscopeProvider = {
       content: [{ type: 'input_text', text: content }],
     },
     response: {
-      modalities: textOnly ? ['text'] : ['text', 'audio'],
+      modalities: responseModalities(activeModelProfile(), { textOnly }),
       tool_choice: 'none',
       instructions: resultResponseInstructions,
     },
@@ -95,7 +120,7 @@ export const dashscopeProvider = {
       }],
     },
     response: {
-      modalities: textOnly ? ['text'] : ['text', 'audio'],
+      modalities: responseModalities(activeModelProfile(), { textOnly }),
       tool_choice: 'none',
       instructions: permissionResponseInstructions,
     },

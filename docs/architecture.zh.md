@@ -299,10 +299,12 @@ Codex 也遵循同一边界：qwen-audio-agent 通过 ACP stdio 启动 `codex-ac
 通过自己的本地 stdio 协议启动 Codex App Server。Codex App Server 可以提供其他传输，
 但它们不是远程 ACP 端点，不应泄漏进共享 ACP 适配层。
 
-Desktop、TUI 和 WebUI 是可替换的 Gateway 客户端。它们绝不能生成、重启或停止
-Gateway 或后端。因此，关闭 UI 不会影响排队中的工作或固定的后端 Agent Session。
-更改实时或后端行为的配置在下次 Gateway 启动时生效；更改 UI 的 Gateway URL
-仅重新连接该 UI。
+Desktop、TUI 和 WebUI 是可替换的 Gateway 客户端。Gateway 是当前 Realtime 模型的
+唯一所有者，并通过 health 发布精确模型档案与传输能力。Desktop 只能配置和重启其
+本地自有 Gateway；WebUI 与 TUI 将档案视为只读。借用或远程 Gateway 的模型不一致
+会被拒绝，而不会被静默覆盖。关闭 UI 不会影响排队中的工作或固定的后端 Agent
+Session。更改实时或后端行为的配置在下次 Gateway 启动时生效；更改 UI 的 Gateway
+URL 仅重新连接该 UI。
 
 macOS 桌面渲染器打包在应用程序内部。Electron 从私有的随机回环路径提供这些
 不可变资源，并仅代理 Gateway HTTP API 和 Realtime WebSocket 流量。桌面 UI

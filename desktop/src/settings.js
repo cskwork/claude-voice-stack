@@ -4,10 +4,17 @@ import {
 } from './backend-options.mjs'
 import {
   realtimeConnectionStatus,
-  realtimeModelStatusLabel,
+  realtimeModelPresentation,
+  realtimeModelRuntimeStatus,
   realtimeStatusLabel,
 } from './realtime-status.mjs'
 import { updaterButtonState, updaterStatusText } from './update-status.mjs'
+import {
+  DASHSCOPE_OMNI_FLASH_REALTIME_MODEL,
+  DASHSCOPE_OMNI_PLUS_REALTIME_MODEL,
+  listDashScopeRealtimeModelProfiles,
+  resolveDashScopeRealtimeModelProfile,
+} from '../../shared/realtime-provider-catalog.mjs'
 
 const form = document.querySelector('#settings-form')
 const gatewayUrl = document.querySelector('#gateway-url')
@@ -35,6 +42,8 @@ const speechToSpeechAuthToken = document.querySelector(
 const backendList = document.querySelector('#backend-list')
 const refreshBackends = document.querySelector('#refresh-backends')
 const realtimeModel = document.querySelector('#realtime-model')
+const realtimeModelHint = document.querySelector('#realtime-model-hint')
+const providerDocs = document.querySelector('#provider-docs')
 const backendModel = document.querySelector('#backend-model')
 const nodePathInput = document.querySelector('#node-path')
 const applyNodePath = document.querySelector('#apply-node-path')
@@ -43,6 +52,40 @@ const getApiKey = document.querySelector('#get-api-key')
 const message = document.querySelector('#message')
 const currentRealtime = document.querySelector('#current-realtime')
 const currentGateway = document.querySelector('#current-gateway')
+
+function populateRealtimeModels() {
+  if (!realtimeModel) return
+  const groups = new Map([
+    [DASHSCOPE_OMNI_FLASH_REALTIME_MODEL, 'Omni Flash'],
+    [DASHSCOPE_OMNI_PLUS_REALTIME_MODEL, 'Omni Plus'],
+  ])
+  const elements = []
+  for (const profile of listDashScopeRealtimeModelProfiles()) {
+    const groupLabel = groups.get(profile.id) || 'Legacy Audio'
+    let group = elements.find(element => element.label === groupLabel)
+    if (!group) {
+      group = document.createElement('optgroup')
+      group.label = groupLabel
+      elements.push(group)
+    }
+    const option = document.createElement('option')
+    const presentation = realtimeModelPresentation(profile)
+    option.value = profile.id
+    option.textContent = `${profile.label} · ${presentation.optionHint}`
+    option.title = 'Provider 文档：DashScope Realtime'
+    group.append(option)
+  }
+  realtimeModel.replaceChildren(...elements)
+}
+
+function renderRealtimeModelHint() {
+  const profile = resolveDashScopeRealtimeModelProfile(realtimeModel?.value)
+  if (realtimeModelHint) {
+    realtimeModelHint.textContent = realtimeModelPresentation(profile).selectedHint
+  }
+}
+
+populateRealtimeModels()
 const currentBackend = document.querySelector('#current-backend')
 const updaterStatus = document.querySelector('#updater-status')
 const checkUpdates = document.querySelector('#check-updates')
@@ -543,6 +586,7 @@ function renderRealtimeProvider(value, { populateDefault = false } = {}) {
 }
 
 const BAILIAN_API_KEY_URL = 'https://bailian.console.aliyun.com/?tab=model#/api-key'
+const DASHSCOPE_REALTIME_DOCS_URL = 'https://help.aliyun.com/zh/model-studio/omni/'
 
 function formSettings() {
   return {
@@ -612,9 +656,18 @@ function renderRuntime() {
   currentGateway.textContent = '已连接'
   currentGateway.className = 'connection-status connected'
   const realtimeLabel = realtimeStatusLabel(runtime.realtimeProvider)
-  const realtimeModelLabel = realtimeModelStatusLabel(runtime.realtimeModel)
+  const modelRuntime = realtimeModelRuntimeStatus(
+    runtime,
+    settings.realtimeModel,
+  )
+  const realtimeModelLabel = modelRuntime.label
+  const modelMismatchLabel = modelRuntime.mismatch ? '模型不一致' : ''
   if (!runtime.voiceConfigured) {
-    setRealtimeStatus(`${realtimeLabel} · 配置不完整`, 'disconnected')
+    setRealtimeStatus(
+      [realtimeLabel, realtimeModelLabel, modelMismatchLabel, '配置不完整']
+        .filter(Boolean).join(' · '),
+      'disconnected',
+    )
   } else {
     const state = realtimeConnectionStatus(
       runtime.realtimeConnection?.byProvider?.[runtime.realtimeProvider],
@@ -630,6 +683,7 @@ function renderRuntime() {
       [
         realtimeLabel,
         realtimeModelLabel,
+        modelMismatchLabel,
         stateLabel,
         state === 'unavailable'
           ? truncate(
@@ -771,6 +825,7 @@ function render() {
   renderBackendOptions(settings.agentProtocol || 'none')
   realtimeModel.value = settings.realtimeModel
     || 'qwen-audio-3.0-realtime-plus'
+  renderRealtimeModelHint()
   speechToSpeechRealtimeUrl.value = settings.speechToSpeechRealtimeUrl || ''
   speechToSpeechAuthToken.value = settings.speechToSpeechAuthToken || ''
   renderRealtimeProvider(settings.realtimeProvider)
@@ -803,12 +858,17 @@ for (const control of [
     if (realtimeProviderInputs.includes(control)) {
       renderRealtimeProvider(control.value, { populateDefault: true })
     }
+    if (control === realtimeModel) renderRealtimeModelHint()
     updateApplyState()
   })
 }
 
 getApiKey.addEventListener('click', () => {
   window.qwenAudioAgentDesktop.openExternal(BAILIAN_API_KEY_URL)
+})
+
+providerDocs.addEventListener('click', () => {
+  window.qwenAudioAgentDesktop.openExternal(DASHSCOPE_REALTIME_DOCS_URL)
 })
 
 orbSkinSelect.addEventListener('change', updateRemoveSkinState)
@@ -894,7 +954,9 @@ form.addEventListener('submit', async event => {
     runtime = result.runtime
     renderWakeShortcutStatus(result.wakeShortcutRegistered)
     render()
-    if (!runtime.gatewayConnected) {
+    if (result.applied === false) {
+      showMessage(result.message, 'error')
+    } else if (!runtime.gatewayConnected) {
       showMessage('配置已保存，Gateway 正在启动…', 'notice')
     } else if (runtime.backend && !runtime.backend.connected) {
       showMessage('Gateway 已启动，后台 Agent 正在连接…', 'notice')

@@ -659,6 +659,33 @@ You can also specify a different OpenCode user configuration directory via
 `QWEN_AUDIO_AGENT_OPENCODE_XDG_CONFIG_HOME`. After isolation, MCPs and plugins from the
 original global configuration are not automatically loaded.
 
+## Realtime model selection
+
+One Gateway owns one active Realtime model. The Desktop settings page can configure the model
+for a locally owned Gateway, and the CLI provides the equivalent commands:
+
+```bash
+qwenaudio config show
+qwenaudio config set --realtime-model qwen3.5-omni-flash-realtime-2026-03-15
+qwenaudio gateway restart
+```
+
+The exact supported IDs are:
+
+| Model | Model input | Model output | Current client transport |
+| --- | --- | --- | --- |
+| `qwen3.5-omni-flash-realtime-2026-03-15` | text, audio, image, video | text, audio | text, audio |
+| `qwen3.5-omni-plus-realtime-2026-03-15` | text, audio, image, video | text, audio | text, audio |
+| `qwen-audio-3.0-realtime-plus` (default) | text, audio | text, audio | text, audio |
+
+All three profiles support Function Calling. Model capability is not the same as an implemented
+client transport: JPEG observation frames and native video are both disabled in this release.
+WebUI and TUI read the authoritative profile from Gateway health and only display it. Separate
+clients cannot select conflicting models on one Gateway. A Desktop attached to a borrowed
+Gateway, or a later CLI runtime using a conflicting configured model, refuses the mismatch
+instead of silently changing the running service. To roll back, set the legacy ID above and
+restart the Gateway.
+
 ## Advanced Settings
 
 The following settings all have stable default values; ordinary users do not need to write

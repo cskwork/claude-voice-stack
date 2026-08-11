@@ -173,6 +173,15 @@ export async function readTuiHealth(baseUrl, {
   }
 }
 
+export function realtimeModelStatusText(health = {}) {
+  const profile = health.realtimeModelProfile
+  const label = profile?.label || health.realtimeLabel || health.realtimeModel || 'Legacy Realtime'
+  const visual = profile?.transportCapabilities?.imageInput === true
+    ? '已支持图片输入'
+    : '视觉输入：未支持'
+  return `Realtime：${label} · ${visual}`
+}
+
 export function audioModeForPlatform(
   platform = process.platform,
   requestedMode = 'half',
@@ -1132,7 +1141,8 @@ export async function runTui(options = parseArguments(process.argv.slice(2))) {
       } else {
         connectedOnce = true
         print(
-          `${style('qwen-audio-agent Voice TUI', 'bold')} · ${health.realtimeLabel} → ${health.backend.label}\n`
+          `${style('qwen-audio-agent Voice TUI', 'bold')} · ${health.realtimeLabel || health.realtimeModelProfile?.label || health.realtimeModel || 'Realtime'} → ${health.backend?.label || health.backend?.kind || 'Gateway'}\n`
+          + `${realtimeModelStatusText(health)}\n`
           + `会话：${options.sessionId}\n`
           + `音频：${audioMode.label}\n`
           + `${helpText(audioMode)}\n`,

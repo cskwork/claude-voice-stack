@@ -54,6 +54,11 @@ export function parseArguments(argv, env = process.env) {
   const first = args[0]
   const command = first && !first.startsWith('-') ? args.shift() : 'gateway'
   if (!COMMANDS.has(command)) throw new Error(`未知命令：${command}`)
+  const configAction = command === 'config' && args[0] && !args[0].startsWith('-')
+    ? args.shift() : ''
+  if (command === 'config' && configAction && !['show', 'set'].includes(configAction)) {
+    throw new Error(`未知 config 命令：${configAction}`)
+  }
   const gatewayAction = command === 'gateway'
     && args[0]
     && !args[0].startsWith('-')
@@ -70,6 +75,8 @@ export function parseArguments(argv, env = process.env) {
 
   const options = {
     command,
+    configAction,
+    realtimeModel: '',
     gatewayAction,
     url: env.QWEN_AUDIO_AGENT_URL || 'http://127.0.0.1:3101',
     sessionId: env.QWEN_AUDIO_AGENT_SESSION_ID || createVoiceSessionId(),
@@ -120,6 +127,8 @@ export function parseArguments(argv, env = process.env) {
       options.backendUrl = nextValue(args, index++, '--backend-url')
       options.backendUrlSpecified = true
       options.gatewayConfigurationSpecified = true
+    } else if (argument === '--realtime-model') {
+      options.realtimeModel = nextValue(args, index++, '--realtime-model')
     } else if (argument === '--session') {
       options.sessionId = nextValue(args, index++, '--session')
     } else if (argument === '--audio-mode') {
@@ -131,6 +140,13 @@ export function parseArguments(argv, env = process.env) {
     else if (argument === '--yes' || argument === '-y') options.yes = true
     else if (argument === '--help' || argument === '-h') options.help = true
     else throw new Error(`未知参数：${argument}`)
+  }
+
+  if ((command !== 'config' || configAction !== 'set') && options.realtimeModel) {
+    throw new Error('--realtime-model 只适用于 config set')
+  }
+  if (command === 'config' && configAction === 'set' && !options.realtimeModel) {
+    throw new Error('config set 需要 --realtime-model')
   }
 
   if (
@@ -239,6 +255,8 @@ export function helpText() {
     '  qwenaudio webui [选项]       打开现有 Gateway 的 WebUI',
     '  qwenaudio status [选项]      gateway status 的兼容别名',
     '  qwenaudio config             显示用户配置文件位置',
+    '  qwenaudio config show        显示有效 Realtime 模型（不含凭据）',
+    '  qwenaudio config set --realtime-model ID  更新 Realtime 模型',
     '  qwenaudio setup [选项]       只读检查后台 Agent 接入准备情况',
     '  qwenaudio install NAME        一键安装后台 Agent（含所需 ACP 适配器）',
     '',

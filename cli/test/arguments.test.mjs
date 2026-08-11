@@ -219,3 +219,19 @@ test('documents the service and client commands', () => {
   assert.match(text, /x\s+半双工模式下手动打断当前回复/)
   assert.doesNotMatch(text, /--mode/)
 })
+
+test('parses config show and exact realtime model set commands', () => {
+  assert.equal(parseArguments(['config', 'show'], {}).configAction, 'show')
+  assert.equal(parseArguments([
+    'config', 'set', '--realtime-model',
+    'qwen3.5-omni-plus-realtime-2026-03-15',
+  ], {}).configAction, 'set')
+  assert.equal(parseArguments([
+    'config', 'set', '--realtime-model',
+    'qwen3.5-omni-plus-realtime-2026-03-15',
+  ], {}).realtimeModel, 'qwen3.5-omni-plus-realtime-2026-03-15')
+  assert.throws(
+    () => parseArguments(['gateway', '--realtime-model', 'model'], {}),
+    /只适用于 config set/,
+  )
+})
