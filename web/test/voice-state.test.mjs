@@ -42,6 +42,16 @@ test('desktop microphone controls mute only input', () => {
   })
 })
 
+test('hidden desktop capture enters wake-word-only sleep instead of unmuting input', () => {
+  assert.deepEqual(microphoneControlEvent({
+    enabled: true,
+    inputOnlyMute: true,
+    wakeWordOnly: true,
+  }), {
+    type: 'sleep',
+  })
+})
+
 test('regular voice controls retain full mute behavior', () => {
   assert.deepEqual(microphoneControlEvent({ enabled: false }), {
     type: 'mute',

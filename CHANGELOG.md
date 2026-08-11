@@ -2,10 +2,20 @@
 
 ## Unreleased
 
-- 增加 Qwen3.5 Omni Flash/Plus Realtime 模型档案与 Gateway 统一模型配置；Desktop
-  可配置本地自有 Gateway，WebUI/TUI 只读展示当前模型，CLI 支持安全查看与原子更新。
-- 区分模型原生多模态能力与客户端已实现传输能力；本版本 Omni 仍只启用文本、音频
-  传输，图片观察帧和原生视频保持关闭。
+- DashScope Realtime 档案支持稳定的 Qwen3.5 Omni Plus/Flash 模型名；本次只接入模型、
+  Session 配置和现有 Function Calling 委派链路，不包含图片、视频或文字输入 UI。
+- 图片、视频帧、摄像头采集和文字交互入口将在 Issue #131 的独立 PR 中实现。
+
+## 1.8.3
+
+- 优化 Prompt，减少 Token 消耗，修复已知问题。
+
+## 1.8.2
+
+- 优化桌面设置页布局，支持配置 Qwen Audio 服务地址与前台模型。
+- 修复悬浮球隐藏后的静音与语音唤醒状态不同步。
+- 即时后台任务支持长时间运行进度播报，定时任务改为静默执行、完成后通知。
+- 修复 npm 包遗漏 TUI 音频模块的问题。
 
 ## 1.8.1
 

@@ -146,8 +146,10 @@ export function realtimeProviderForConnection(selected, healthValidated) {
 export function microphoneControlEvent({
   enabled,
   inputOnlyMute = false,
+  wakeWordOnly = false,
   takeover = false,
 } = {}) {
+  if (wakeWordOnly) return { type: GatewayClientEvent.SLEEP }
   if (inputOnlyMute) {
     return enabled
       ? { type: GatewayClientEvent.INPUT_UNMUTE, takeover }
@@ -164,6 +166,7 @@ export default function useRealtimeVoice({
   suspended = false,
   outputMuted = false,
   inputOnlyMute = false,
+  wakeWordOnly = false,
   clientType = 'web',
   clientLabel = 'WebUI',
   clientStates = [],
@@ -185,6 +188,7 @@ export default function useRealtimeVoice({
   })
   const eventRef = useRef(onEvent)
   const inputErrorRef = useRef(onInputError)
+  const wakeWordOnlyRef = useRef(wakeWordOnly)
   const socketRef = useRef(null)
   const audioRef = useRef(null)
   const levelElementRef = useRef(null)
@@ -210,6 +214,7 @@ export default function useRealtimeVoice({
   })
   eventRef.current = onEvent
   inputErrorRef.current = onInputError
+  wakeWordOnlyRef.current = wakeWordOnly
   enabledRef.current = enabled
   outputMutedRef.current = outputMuted
 
@@ -447,7 +452,7 @@ export default function useRealtimeVoice({
         const inputEnabled = shouldAdvertiseVoice(
           enabledRef.current,
           inputReadyRef.current,
-        )
+        ) && !wakeWordOnlyRef.current
         const outputEnabled = inputOnlyMute || inputEnabled
         socket.send(JSON.stringify({
           type: GatewayClientEvent.CONNECT,
@@ -456,6 +461,7 @@ export default function useRealtimeVoice({
           voiceEnabled: outputEnabled,
           inputEnabled,
           outputEnabled,
+          wakeWordOnly: wakeWordOnlyRef.current,
           clientType,
           clientLabel,
           clientStates: clientStatesSignature
@@ -600,6 +606,7 @@ export default function useRealtimeVoice({
       sendSocketEvent(microphoneControlEvent({
         enabled: false,
         inputOnlyMute,
+        wakeWordOnly: false,
       }))
       setAudioLevel(0)
       setInputActive(false)
@@ -622,6 +629,7 @@ export default function useRealtimeVoice({
       sendSocketEvent(microphoneControlEvent({
         enabled: false,
         inputOnlyMute,
+        wakeWordOnly: false,
       }))
       setAudioLevel(0)
       setInputActive(false)
@@ -675,6 +683,7 @@ export default function useRealtimeVoice({
         sendSocketEvent(microphoneControlEvent({
           enabled: true,
           inputOnlyMute,
+          wakeWordOnly,
           takeover,
         }))
         const samples = new Float32Array(analyser.fftSize)
@@ -718,6 +727,7 @@ export default function useRealtimeVoice({
     activateAudio,
     enabled,
     inputOnlyMute,
+    wakeWordOnly,
     sendSocketEvent,
     sessionId,
     setAudioLevel,

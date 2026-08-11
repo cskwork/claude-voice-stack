@@ -2,22 +2,19 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import {
-  parseSettings,
   normalizeSettings,
+  parseSettings,
   realtimeSettingsConfigured,
   updateSettingsContent,
 } from '../src/settings-config.mjs'
-import {
-  DASHSCOPE_OMNI_FLASH_REALTIME_MODEL,
-  DASHSCOPE_OMNI_PLUS_REALTIME_MODEL,
-  DEFAULT_DASHSCOPE_REALTIME_MODEL,
-} from '../../shared/realtime-provider-catalog.mjs'
 
 const REALTIME_DEFAULTS = {
   wakeShortcut: 'CommandOrControl+Shift+Space',
   wakeWordEnabled: false,
   realtimeProvider: 'dashscope',
+  realtimeBaseUrl: 'wss://dashscope.aliyuncs.com/api-ws/v1/realtime',
   realtimeModel: 'qwen-audio-3.0-realtime-plus',
+  realtimeVoice: 'longanqian',
   speechToSpeechRealtimeUrl: '',
   speechToSpeechAuthToken: '',
 }
@@ -36,21 +33,6 @@ test('reads desktop-owned settings with friendly defaults', () => {
   })
 })
 
-test('preserves every catalog model and falls back unknown ids to legacy', () => {
-  for (const model of [
-    DASHSCOPE_OMNI_FLASH_REALTIME_MODEL,
-    DASHSCOPE_OMNI_PLUS_REALTIME_MODEL,
-    DEFAULT_DASHSCOPE_REALTIME_MODEL,
-  ]) {
-    assert.equal(normalizeSettings({ realtimeModel: model }).realtimeModel, model)
-    assert.equal(parseSettings(`QWEN_AUDIO_REALTIME_MODEL=${model}\n`).realtimeModel, model)
-  }
-  assert.equal(
-    normalizeSettings({ realtimeModel: 'unknown-model' }).realtimeModel,
-    DEFAULT_DASHSCOPE_REALTIME_MODEL,
-  )
-})
-
 test('shows effective client settings when user config is empty', () => {
   assert.deepEqual(parseSettings('', {
     QWEN_AUDIO_AGENT_URL: 'http://127.0.0.1:3200',
@@ -67,6 +49,21 @@ test('shows effective client settings when user config is empty', () => {
     backendModel: '',
     nodePath: '',
   })
+})
+
+test('selects the model profile voice when Omni is configured without an override', () => {
+  const settings = parseSettings(
+    'QWEN_AUDIO_REALTIME_MODEL=qwen3.5-omni-plus-realtime\n',
+  )
+
+  assert.equal(settings.realtimeModel, 'qwen3.5-omni-plus-realtime')
+  assert.equal(settings.realtimeVoice, 'Ethan')
+  assert.equal(
+    normalizeSettings({
+      realtimeModel: 'qwen3.5-omni-flash-realtime',
+    }).realtimeVoice,
+    'Ethan',
+  )
 })
 
 test('updates client settings without changing Gateway-owned configuration', () => {
@@ -99,7 +96,7 @@ test('updates client settings without changing Gateway-owned configuration', () 
     dashscopeApiKey: 'secret',
     ...REALTIME_DEFAULTS,
     agentProtocol: 'qoder',
-    realtimeModel: 'qwen-audio-3.0-realtime-plus',
+    realtimeModel: 'realtime-model',
     backendModel: '',
     nodePath: '',
   })
@@ -250,21 +247,43 @@ test('reads and updates a supported desktop wake shortcut', () => {
   )
 })
 
-test('updates the realtime model and clears an explicit backend model', () => {
+test('updates the Qwen Audio endpoint, model, voice and clears a backend model', () => {
   const content = updateSettingsContent([
+    'QWEN_AUDIO_REALTIME_BASE_URL=wss://dashscope.aliyuncs.com/api-ws/v1/realtime',
     'QWEN_AUDIO_REALTIME_MODEL=qwen-audio-3.0-realtime-plus',
+    'QWEN_AUDIO_REALTIME_VOICE=longanqian',
     'QWEN_AUDIO_AGENT_BACKEND_MODEL=qwen3.7-max',
     '',
   ].join('\n'), {
-    realtimeModel: 'qwen3.5-omni-flash-realtime-2026-03-15',
+    realtimeBaseUrl: 'wss://voice.example.test/v1/realtime',
+    realtimeModel: 'compatible-audio-model',
+    realtimeVoice: 'custom-voice',
     backendModel: '',
   })
 
   assert.match(
     content,
-    /QWEN_AUDIO_REALTIME_MODEL=qwen3\.5-omni-flash-realtime-2026-03-15/,
+    /QWEN_AUDIO_REALTIME_BASE_URL=wss:\/\/voice\.example\.test\/v1\/realtime/,
   )
+  assert.match(content, /QWEN_AUDIO_REALTIME_MODEL=compatible-audio-model/)
+  assert.match(content, /QWEN_AUDIO_REALTIME_VOICE=custom-voice/)
   assert.match(content, /QWEN_AUDIO_AGENT_BACKEND_MODEL=\n?/)
+
+  const settings = parseSettings(content)
+  assert.equal(settings.realtimeBaseUrl, 'wss://voice.example.test/v1/realtime')
+  assert.equal(settings.realtimeModel, 'compatible-audio-model')
+  assert.equal(settings.realtimeVoice, 'custom-voice')
+})
+
+test('supports the legacy Qwen Audio realtime URL alias', () => {
+  const settings = parseSettings(
+    'QWEN_AUDIO_REALTIME_URL=wss://legacy.example.test/realtime\n',
+  )
+
+  assert.equal(
+    settings.realtimeBaseUrl,
+    'wss://legacy.example.test/realtime',
+  )
 })
 
 test('reads and updates the Speech-to-Speech desktop configuration', () => {
@@ -334,6 +353,11 @@ test('requires the selected realtime provider configuration', () => {
     dashscopeApiKey: 'sk-valid',
   }), true)
   assert.equal(realtimeSettingsConfigured({
+    realtimeProvider: 'dashscope',
+    dashscopeApiKey: 'sk-valid',
+    realtimeBaseUrl: 'https://voice.example.test/realtime',
+  }), false)
+  assert.equal(realtimeSettingsConfigured({
     realtimeProvider: 'speech-to-speech',
     speechToSpeechRealtimeUrl: 'not-a-websocket-url',
   }), false)
@@ -359,6 +383,12 @@ test('rejects invalid Speech-to-Speech service URLs', () => {
     realtimeProvider: 'speech-to-speech',
     speechToSpeechRealtimeUrl: 'https://voice.example.test/realtime',
   }), /只支持 WS 或 WSS/)
+})
+
+test('rejects invalid Qwen Audio service URLs', () => {
+  assert.throws(() => updateSettingsContent('', {
+    realtimeBaseUrl: 'https://voice.example.test/realtime',
+  }), /Qwen Audio 服务地址只支持 WS 或 WSS/)
 })
 
 test('rejects invalid Gateway URLs', () => {
@@ -388,12 +418,15 @@ test('desktop settings expose the embedded voice service without editing backend
   assert.match(html, /data-settings-tab="backend"/)
   assert.match(html, /data-settings-tab="app"/)
   assert.match(html, /role="tabpanel"/)
-  assert.match(html, /Qwen-Audio-Realtime/)
+  assert.match(html, /Qwen Audio/)
+  assert.match(html, /Realtime 兼容协议/)
   assert.match(html, /DashScope/)
   assert.match(html, /Speech-to-Speech/)
   assert.match(html, /Hugging Face/)
   assert.match(html, /id="get-api-key"/)
+  assert.match(html, /id="realtime-base-url"/)
   assert.match(html, /id="realtime-model"/)
+  assert.match(html, /id="realtime-voice"/)
   assert.match(html, /id="backend-model"/)
   assert.match(html, /id="auto-hide-seconds"/)
   assert.match(html, /id="wake-shortcut"/)
@@ -417,42 +450,9 @@ test('desktop settings expose the embedded voice service without editing backend
   assert.doesNotMatch(html, /<option value="kimi">/)
   for (const id of [
     'api-key',
-    'realtime-voice',
     'backend-permission-mode',
     'backend-url',
   ]) {
     assert.doesNotMatch(html, new RegExp(`id="${id}"`))
   }
-})
-
-test('opens DashScope provider docs through the Desktop external-link IPC', () => {
-  const html = readFileSync(
-    new URL('../src/settings.html', import.meta.url),
-    'utf8',
-  )
-  const script = readFileSync(
-    new URL('../src/settings.js', import.meta.url),
-    'utf8',
-  )
-
-  assert.match(html, /<button[^>]+id="provider-docs"[^>]+type="button"/)
-  assert.doesNotMatch(html, /href="https:\/\/help\.aliyun\.com\/zh\/model-studio\/omni\/"/)
-  assert.match(script, /providerDocs\.addEventListener\('click'/)
-  assert.match(script, /openExternal\(DASHSCOPE_REALTIME_DOCS_URL\)/)
-})
-
-test('wires remote model validation to a not-applied renderer outcome', () => {
-  const main = readFileSync(
-    new URL('../src/main.mjs', import.meta.url),
-    'utf8',
-  )
-  const renderer = readFileSync(
-    new URL('../src/settings.js', import.meta.url),
-    'utf8',
-  )
-
-  assert.match(main, /remoteRealtimeModelOutcome\(remoteRuntime, normalized\)/)
-  assert.match(main, /if \(modelOutcome\) \{\s+return \{/)
-  assert.match(renderer, /if \(result\.applied === false\)/)
-  assert.match(renderer, /showMessage\(result\.message, 'error'\)/)
 })

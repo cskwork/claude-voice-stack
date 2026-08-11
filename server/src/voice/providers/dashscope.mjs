@@ -46,8 +46,11 @@ export const dashscopeProvider = {
   outputSampleRate: 24000,
   protocol: openAiCompatibleProtocol,
 
-  capabilities: {
-    perResponseInstructions: true,
+  get capabilities() {
+    return {
+      perResponseInstructions: true,
+      conversationItemIdEcho: activeModelProfile().family !== 'omni',
+    }
   },
 
   model: () => config.audioModel,

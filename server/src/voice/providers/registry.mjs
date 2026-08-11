@@ -42,6 +42,7 @@ const CAPABILITY_FLAGS = [
   'singleResponseSlot',
   'responseMetadataCorrelation',
   'perResponseInstructions',
+  'conversationItemIdEcho',
 ]
 
 const MODEL_CAPABILITY_FLAGS = [

@@ -17,8 +17,8 @@ function realtimeProviderForConnection(...args) {
   return voice.realtimeProviderForConnection(...args)
 }
 
-const FLASH_ID = 'qwen3.5-omni-flash-realtime-2026-03-15'
-const PLUS_ID = 'qwen3.5-omni-plus-realtime-2026-03-15'
+const FLASH_ID = 'qwen3.5-omni-flash-realtime'
+const PLUS_ID = 'qwen3.5-omni-plus-realtime'
 const LEGACY_ID = 'qwen-audio-3.0-realtime-plus'
 
 function profile(id, label, {
@@ -48,11 +48,9 @@ function profile(id, label, {
 
 const flash = profile(FLASH_ID, 'Qwen3.5 Omni Flash Realtime', {
   imageInput: true,
-  videoInput: true,
 })
 const plus = profile(PLUS_ID, 'Qwen3.5 Omni Plus Realtime', {
   imageInput: true,
-  videoInput: true,
 })
 const legacy = profile(LEGACY_ID, 'Qwen Audio 3.0 Realtime Plus')
 const catalog = [flash, plus, legacy]
@@ -67,7 +65,7 @@ for (const activeProfile of [flash, plus]) {
 
     assert.equal(status.label, activeProfile.label)
     assert.equal(status.metadataStatus, 'current')
-    assert.deepEqual(status.modelInputModes, ['text', 'audio', 'image', 'video'])
+    assert.deepEqual(status.modelInputModes, ['text', 'audio', 'image'])
     assert.deepEqual(status.transportInputModes, ['text', 'audio'])
     assert.equal(status.imageInputEnabled, false)
   })
@@ -103,7 +101,6 @@ test('fails closed when model profile metadata is missing', () => {
 test('rejects stale profile capabilities when the active model changed', () => {
   const stalePlus = profile(PLUS_ID, plus.label, {
     imageInput: true,
-    videoInput: true,
     transportImageInput: true,
   })
   const status = realtimeModelStatus({

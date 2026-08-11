@@ -7,15 +7,15 @@ import {
   resolveDashScopeRealtimeModelProfile,
 } from '../shared/realtime-provider-catalog.mjs'
 
-const OMNI_FLASH_ID = 'qwen3.5-omni-flash-realtime-2026-03-15'
-const OMNI_PLUS_ID = 'qwen3.5-omni-plus-realtime-2026-03-15'
+const OMNI_FLASH_ID = 'qwen3.5-omni-flash-realtime'
+const OMNI_PLUS_ID = 'qwen3.5-omni-plus-realtime'
 const LEGACY_AUDIO_ID = 'qwen-audio-3.0-realtime-plus'
 
 const omniModelCapabilities = {
   textInput: true,
   audioInput: true,
   imageInput: true,
-  videoInput: true,
+  videoInput: false,
   textOutput: true,
   audioOutput: true,
   functionCalling: true,
@@ -88,7 +88,7 @@ test('resolves Flash, Plus, and legacy profiles by exact model id', () => {
   }
   assert.equal(
     resolveDashScopeRealtimeModelProfile(OMNI_PLUS_ID).modelCapabilities.videoInput,
-    true,
+    false,
   )
   assert.equal(
     resolveDashScopeRealtimeModelProfile(OMNI_PLUS_ID)

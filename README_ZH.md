@@ -20,6 +20,10 @@
 
 ## News
 
+- **2026-08-12 · [v1.8.3](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.8.3)**
+  ✨ 优化 Prompt；📉 减少 Token 消耗；🔧 修复已知问题。
+- **2026-08-11 · [v1.8.2](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.8.2)**
+  🖥️ 桌面设置页焕新，布局与视觉风格更加统一；🎙️ 语音唤醒更可靠；⏱️ 长任务会主动汇报进度。
 - **2026-08-11 · [v1.8.1](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.8.1)**
   🧠 人设与记忆边界更清晰；🔧 任务与提醒更可靠。
 - **2026-08-09 · [v1.8.0](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.8.0)**
@@ -130,8 +134,8 @@ QWEN_AUDIO_AGENT_BACKEND_MODEL=qwen3.7-max
 ```
 
 > 默认使用 DashScope 实时语音前台；也可切换为本地 [speech-to-speech 前台](docs/voice-frontends/speech-to-speech.zh.md)，无需云端 API Key。
-> `qwen3.5-omni-flash-realtime-2026-03-15` 与 `qwen3.5-omni-plus-realtime-2026-03-15`
-> 在模型层支持文本、音频、图片和视频输入。本版本客户端传输层仅启用文本和音频；
+> `qwen3.5-omni-flash-realtime` 与 `qwen3.5-omni-plus-realtime`
+> 在模型层支持文本、音频和图片输入。本版本客户端传输层仅启用文本和音频；
 > 图片/画面帧与原生视频传输仍保持关闭，待对应客户端和 Gateway 链路实现。
 
 桌面版或 `qwenaudio config set --realtime-model <id>` 配置 Gateway 统一使用的模型；

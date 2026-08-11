@@ -6,14 +6,14 @@ export const DEFAULT_DASHSCOPE_REALTIME_VOICE = 'longanqian'
 export const DEFAULT_DASHSCOPE_REALTIME_URL = 'wss://dashscope.aliyuncs.com/api-ws/v1/realtime'
 export const DEFAULT_SPEECH_TO_SPEECH_REALTIME_URL = 'ws://127.0.0.1:8765/v1/realtime'
 
-export const DASHSCOPE_OMNI_FLASH_REALTIME_MODEL = 'qwen3.5-omni-flash-realtime-2026-03-15'
-export const DASHSCOPE_OMNI_PLUS_REALTIME_MODEL = 'qwen3.5-omni-plus-realtime-2026-03-15'
+export const DASHSCOPE_OMNI_FLASH_REALTIME_MODEL = 'qwen3.5-omni-flash-realtime'
+export const DASHSCOPE_OMNI_PLUS_REALTIME_MODEL = 'qwen3.5-omni-plus-realtime'
 
 const OMNI_MODEL_CAPABILITIES = Object.freeze({
   textInput: true,
   audioInput: true,
   imageInput: true,
-  videoInput: true,
+  videoInput: false,
   textOutput: true,
   audioOutput: true,
   functionCalling: true,

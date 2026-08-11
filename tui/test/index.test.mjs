@@ -24,7 +24,7 @@ import {
 test('renders active realtime profile and truthful visual transport support', () => {
   assert.match(realtimeModelStatusText({
     realtimeModelProfile: {
-      id: 'qwen3.5-omni-plus-realtime-2026-03-15',
+      id: 'qwen3.5-omni-plus-realtime',
       label: 'Qwen3.5 Omni Plus Realtime',
       transportCapabilities: { imageInput: false, nativeVideoInput: false },
     },

@@ -595,7 +595,7 @@ Gateway 的模型，CLI 提供等价命令：
 
 ```bash
 qwenaudio config show
-qwenaudio config set --realtime-model qwen3.5-omni-flash-realtime-2026-03-15
+qwenaudio config set --realtime-model qwen3.5-omni-flash-realtime
 qwenaudio gateway restart
 ```
 
@@ -603,8 +603,8 @@ qwenaudio gateway restart
 
 | 模型 | 模型输入 | 模型输出 | 当前客户端传输 |
 | --- | --- | --- | --- |
-| `qwen3.5-omni-flash-realtime-2026-03-15` | 文本、音频、图片、视频 | 文本、音频 | 文本、音频 |
-| `qwen3.5-omni-plus-realtime-2026-03-15` | 文本、音频、图片、视频 | 文本、音频 | 文本、音频 |
+| `qwen3.5-omni-flash-realtime` | 文本、音频、图片 | 文本、音频 | 文本、音频 |
+| `qwen3.5-omni-plus-realtime` | 文本、音频、图片 | 文本、音频 | 文本、音频 |
 | `qwen-audio-3.0-realtime-plus`（默认） | 文本、音频 | 文本、音频 | 文本、音频 |
 
 三个档案都支持 Function Calling。模型能力不等于客户端已经实现的传输能力：本版本

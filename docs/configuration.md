@@ -666,7 +666,7 @@ for a locally owned Gateway, and the CLI provides the equivalent commands:
 
 ```bash
 qwenaudio config show
-qwenaudio config set --realtime-model qwen3.5-omni-flash-realtime-2026-03-15
+qwenaudio config set --realtime-model qwen3.5-omni-flash-realtime
 qwenaudio gateway restart
 ```
 
@@ -674,8 +674,8 @@ The exact supported IDs are:
 
 | Model | Model input | Model output | Current client transport |
 | --- | --- | --- | --- |
-| `qwen3.5-omni-flash-realtime-2026-03-15` | text, audio, image, video | text, audio | text, audio |
-| `qwen3.5-omni-plus-realtime-2026-03-15` | text, audio, image, video | text, audio | text, audio |
+| `qwen3.5-omni-flash-realtime` | text, audio, image | text, audio | text, audio |
+| `qwen3.5-omni-plus-realtime` | text, audio, image | text, audio | text, audio |
 | `qwen-audio-3.0-realtime-plus` (default) | text, audio | text, audio | text, audio |
 
 All three profiles support Function Calling. Model capability is not the same as an implemented

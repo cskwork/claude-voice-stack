@@ -297,6 +297,10 @@ test('resolves exact DashScope model profiles for sessions and responses', t => 
     assert.equal(profile.label, label)
     assert.equal(profile.family, family)
     assert.equal(profile.sessionDefaults.voice, voice)
+    assert.equal(
+      createQwenFrontend().capabilities.conversationItemIdEcho,
+      family !== 'omni',
+    )
     assert.equal(session.voice, voice)
     assert.deepEqual(profile.sessionDefaults.turnDetection, turnDetection)
     assert.deepEqual(session.turn_detection, turnDetection)
@@ -319,7 +323,7 @@ test('advertises Omni model vision without admitting unsupported visual transpor
   const frontend = createQwenFrontend()
 
   assert.equal(profile.modelCapabilities.imageInput, true)
-  assert.equal(profile.modelCapabilities.videoInput, true)
+  assert.equal(profile.modelCapabilities.videoInput, false)
   assert.equal(profile.transportCapabilities.imageInput, false)
   assert.equal(profile.transportCapabilities.observationInput, false)
   assert.equal(profile.transportCapabilities.nativeVideoInput, false)
@@ -598,7 +602,7 @@ test('isolates a provider with a different wire message shape', () => {
   assert.equal(events[1].type, 'response.done')
 })
 
-test('builds frontend identity, time, memory and reconnect context', () => {
+test('builds cache-friendly policy, identity, memory and reconnect context', () => {
   const prompt = buildFrontendInstructions({
     client: { timeZone: 'Asia/Shanghai', locale: 'zh-CN' },
     now: new Date('2026-07-23T04:00:00.000Z'),
@@ -616,9 +620,9 @@ test('builds frontend identity, time, memory and reconnect context', () => {
   assert.match(prompt, /与用户进行全双工语音交互的统一助手/)
   assert.match(prompt, /不要把自己描述成前台模型、后台模型/)
   assert.match(prompt, /Asia\/Shanghai/)
-  assert.match(prompt, /2026年7月23日/)
+  assert.doesNotMatch(prompt, /2026年7月23日|session_start_local/)
   assert.match(prompt, /<user_preferences>[\s\S]*用户希望被称为小明/)
-  assert.match(prompt, /我们刚才在讨论下载目录/)
+  assert.doesNotMatch(prompt, /我们刚才在讨论下载目录/)
   assert.match(prompt, /用户要求记住、修改或遗忘长期信息/)
   assert.match(prompt, /必须调用 `memory`/)
   assert.match(prompt, /不要只在当前对话中\s*临时遵从/)
@@ -627,15 +631,25 @@ test('builds frontend identity, time, memory and reconnect context', () => {
   assert.match(prompt, /“这次”、“今天”或“暂时”时才不保存/)
   assert.match(prompt, /清除冲突或归类错误的旧内容/)
   assert.match(prompt, /选择最直接且足够的处理方式/)
+  assert.match(prompt, /可通过已注册工具完成的事就是你的能力/)
+  assert.match(prompt, /不要先说自己不能做/)
   assert.match(prompt, /不要因一次工具\s*调用而忽略其余请求/)
   assert.match(prompt, /用户应当能够继续交谈/)
   assert.match(prompt, /避免空泛承接、重复用户要求/)
   assert.match(prompt, /# Instruction hierarchy/)
   assert.match(prompt, /<assistant_profile authority="persona_only">/)
-  assert.ok(
-    prompt.indexOf('<assistant_profile authority="persona_only">')
-      < prompt.indexOf('# Instruction hierarchy'),
+  assert.equal(prompt.startsWith('# Role'), true)
+  const assistantContextIndex = prompt.lastIndexOf(
+    '<assistant_profile authority="persona_only">',
   )
+  const userContextIndex = prompt.lastIndexOf('<user_preferences>')
+  const runtimeContextIndex = prompt.lastIndexOf('<runtime_context>')
+  assert.ok(
+    prompt.indexOf('# Instruction hierarchy')
+      < assistantContextIndex,
+  )
+  assert.ok(assistantContextIndex < userContextIndex)
+  assert.ok(userContextIndex < runtimeContextIndex)
   assert.match(prompt, /`<assistant_profile>` 只影响默认名称、人格、关系定位和表达风格/)
   assert.match(prompt, /`<user_preferences>` 中的长期个性化偏好/)
   assert.match(prompt, /助手在其面前的名称/)
@@ -643,13 +657,16 @@ test('builds frontend identity, time, memory and reconnect context', () => {
   assert.doesNotMatch(prompt, /ASSISTANT\.md|USER\.md|MEMORY\.md/)
   assert.match(prompt, /# Voice interaction/)
   assert.match(prompt, /没有新信息时不要说话/)
-  assert.match(prompt, /不要规定后台使用何种工具/)
+  assert.match(prompt, /不要规定用户未要求的具体工具/)
   assert.match(prompt, /\[COMPLETE\]/)
   assert.doesNotMatch(prompt, /get_agent_tasks|reply_agent_permission/)
   assert.match(prompt, /respond_agent_permission/)
-  assert.match(prompt, /存在待确认的 `authorization_id` 时/)
+  assert.match(prompt, /<backend_permission_request>/)
+  assert.match(prompt, /使用请求中的 `authorization_id`/)
   assert.match(prompt, /按\s*`respond_agent_permission` 的契约处理用户回答/)
   assert.match(prompt, /调用前不要\s*口头确认/)
+  assert.match(prompt, /不要仅凭对话历史推测当前状态/)
+  assert.doesNotMatch(prompt, /<active_work>/)
   const memory = REALTIME_PROVIDERS.qwen
     .buildSession({ configured: false })
     .tools.find(tool => tool.function.name === 'memory')
@@ -689,11 +706,18 @@ test('builds frontend identity, time, memory and reconnect context', () => {
     .buildSession({ configured: false })
     .tools.find(tool => tool.function.name === 'spawn_thinking')
   assert.match(delegate.function.description, /屏幕/)
+  assert.match(delegate.function.description, /图片生成/)
+  assert.match(delegate.function.description, /直接调用/)
+  assert.match(delegate.function.description, /不要先否认能力/)
   assert.match(delegate.function.description, /阶段结果/)
   assert.match(delegate.function.description, /get_agent_task_status/)
   assert.match(
     delegate.function.parameters.properties.objective.description,
-    /忠实保留对象、动作、约束和期望结果/,
+    /忠实保留用户要求的结果、约束、执行方式/,
+  )
+  assert.match(
+    delegate.function.parameters.properties.objective.description,
+    /本项工作与既有工作的关系/,
   )
   assert.match(
     delegate.function.parameters.properties.objective.description,
@@ -701,10 +725,9 @@ test('builds frontend identity, time, memory and reconnect context', () => {
   )
   assert.match(
     delegate.function.parameters.properties.objective.description,
-    /近期对话会另行提供给后台执行/,
+    /近期对话会随工作一并提供/,
   )
   assert.match(delegate.function.description, /继续、修改已有工作/)
-  assert.match(prompt, /不要仅凭猜测认为后台缺少能力而拒绝/)
   const status = REALTIME_PROVIDERS.qwen
     .buildSession({ configured: false })
     .tools.find(tool => tool.function.name === 'get_agent_task_status')
@@ -717,6 +740,7 @@ test('builds frontend identity, time, memory and reconnect context', () => {
     .buildSession({ configured: false })
     .tools.find(tool => tool.function.name === 'cancel_agent_task')
   assert.match(cancel.function.description, /定时任务或提醒/)
+  assert.match(cancel.function.description, /先调用 get_agent_task_status/)
   assert.match(cancel.function.parameters.properties.work_id.description, /reminder_id/)
   const permission = REALTIME_PROVIDERS.qwen.buildPermissionInjection({
     id: 'permission-one',
@@ -735,6 +759,7 @@ test('refreshes live session instructions after frontend context changes', async
     agentContext: {
       client: { timeZone: 'Asia/Shanghai', locale: 'zh-CN' },
       memories: [{ scope: 'profile', content: '用户希望被称为旧称呼' }],
+      recentMessages: [{ role: 'user', content: '只在恢复连接时注入的历史' }],
     },
   })
   const sent = []
@@ -750,6 +775,47 @@ test('refreshes live session instructions after frontend context changes', async
   assert.equal(sent[0].type, 'session.update')
   assert.match(sent[0].session.instructions, /<user_preferences>[\s\S]*用户希望被称为新称呼/)
   assert.doesNotMatch(sent[0].session.instructions, /旧称呼/)
+  assert.doesNotMatch(sent[0].session.instructions, /只在恢复连接时注入的历史/)
+})
+
+test('restores recent conversation once after configuring a fresh session', () => {
+  const frontend = createQwenFrontend({
+    agentContext: {
+      recentMessages: [{ role: 'user', content: '恢复用的近期对话' }],
+    },
+  })
+  const sent = []
+  frontend.send = payload => sent.push(payload)
+
+  frontend.handleProviderEvent({ type: 'session.created' })
+  assert.equal(sent[0].type, 'session.update')
+  assert.doesNotMatch(sent[0].session.instructions, /恢复用的近期对话/)
+
+  frontend.handleProviderEvent({ type: 'session.updated' })
+  assert.equal(sent[1].type, 'conversation.item.create')
+  assert.match(sent[1].item.content[0].text, /恢复用的近期对话/)
+  assert.match(sent[1].item.content[0].text, /不是用户的新请求/)
+
+  frontend.handleProviderEvent({ type: 'session.updated' })
+  assert.equal(sent.length, 2)
+})
+
+test('restores recent conversation through the shared GA session lifecycle', () => {
+  const frontend = createS2sFrontend({
+    agentContext: {
+      recentMessages: [{ role: 'assistant', content: '此前正在处理项目' }],
+    },
+  })
+  const sent = []
+  frontend.send = payload => sent.push(payload)
+
+  frontend.handleProviderEvent({ type: 'session.created' })
+
+  assert.equal(sent[0].type, 'session.update')
+  assert.doesNotMatch(sent[0].session.instructions, /此前正在处理项目/)
+  assert.equal(sent[1].type, 'conversation.item.create')
+  assert.match(sent[1].item.id, /^msg_[0-9a-f]{32}$/)
+  assert.match(sent[1].item.content[0].text, /此前正在处理项目/)
 })
 
 test('can close a stale function call without creating a new model response', async () => {
@@ -774,6 +840,34 @@ test('can close a stale function call without creating a new model response', as
     item: { id: sent[0].item.id, type: 'function_call_output' },
   })
   await outcome
+})
+
+test('accepts an Omni conversation item receipt with a provider-assigned id', async () => {
+  const frontend = createQwenFrontend({
+    provider: {
+      ...REALTIME_PROVIDERS.qwen,
+      capabilities: {
+        ...REALTIME_PROVIDERS.qwen.capabilities,
+        conversationItemIdEcho: false,
+      },
+    },
+  })
+  const sent = []
+  frontend.ready = true
+  frontend.send = event => sent.push(event)
+
+  const created = frontend.createConversationItem({
+    type: 'message',
+    role: 'user',
+    content: [{ type: 'input_text', text: 'hi' }],
+  })
+  frontend.handleLifecycle({
+    type: 'conversation.item.created',
+    item: { id: 'item_provider_assigned', type: 'message', role: 'user' },
+  })
+
+  assert.equal((await created).id, 'item_provider_assigned')
+  assert.notEqual(sent[0].item.id, 'item_provider_assigned')
 })
 
 test('can give the model contextual guidance after an accepted tool call', async () => {
@@ -1349,6 +1443,7 @@ test('the Qwen provider exposes its supported realtime capabilities', () => {
     singleResponseSlot: false,
     responseMetadataCorrelation: false,
     perResponseInstructions: true,
+    conversationItemIdEcho: true,
   })
 })
 

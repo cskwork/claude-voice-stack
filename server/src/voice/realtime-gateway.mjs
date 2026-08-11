@@ -181,6 +181,7 @@ export function attachRealtimeGateway(server, {
     let realtimeBlockedError = ''
     let sleeping = false
     let waking = false
+    let explicitSleepRequested = false
     let wakeDetector = null
     let wakeDetectorPromise = null
     let sleepController
@@ -194,26 +195,11 @@ export function attachRealtimeGateway(server, {
     const transcripts = new TurnTranscripts()
     const announcedPermissions = new Set()
     let permissionRetryTimer = null
-    const activeTaskContext = () => taskManager.list({
+    const activeSessionTasks = () => taskManager.list({
       ownerId,
       sessionId,
       active: true,
-    }).slice(0, 5)
-    const activeTaskSignature = tasks => JSON.stringify(tasks.map(task => [
-      task.id,
-      task.status,
-      task.authorization?.id || null,
-      task.authorization?.status || null,
-    ]))
-    let lastActiveTaskSignature = ''
-    const refreshActiveTaskContext = () => {
-      if (!frontend?.ready) return
-      const activeTasks = activeTaskContext()
-      const signature = activeTaskSignature(activeTasks)
-      if (signature === lastActiveTaskSignature) return
-      lastActiveTaskSignature = signature
-      frontend.updateAgentContext({ activeTasks })
-    }
+    })
     const schedulePermissionRetry = () => {
       if (permissionRetryTimer || !outputEnabled || !frontend?.ready) return
       permissionRetryTimer = setTimeout(() => {
@@ -240,7 +226,7 @@ export function attachRealtimeGateway(server, {
         taskId: task.id,
         authorizationId: permission.id,
       }, {
-        shouldSpeak: () => activeTaskContext().some(activeTask => (
+        shouldSpeak: () => activeSessionTasks().some(activeTask => (
           activeTask.authorization?.id === permission.id
           && activeTask.authorization.status === 'pending'
         )),
@@ -258,7 +244,7 @@ export function attachRealtimeGateway(server, {
       })
     }
     const announcePendingPermissions = () => {
-      const activeTasks = activeTaskContext()
+      const activeTasks = activeSessionTasks()
       const pendingIds = new Set(activeTasks
         .filter(task => task.authorization?.status === 'pending')
         .map(task => task.authorization.id))
@@ -476,7 +462,7 @@ export function attachRealtimeGateway(server, {
     }
     const ensurePermissionResponseFor = context => {
       clearTimeout(permissionResponseTimer)
-      const hasPendingPermission = () => activeTaskContext().some(task => (
+      const hasPendingPermission = () => activeSessionTasks().some(task => (
         task.authorization?.status === 'pending'
       ))
       if (!hasPendingPermission()) return
@@ -844,7 +830,6 @@ export function attachRealtimeGateway(server, {
         ...(event.permission ? { permission: event.permission } : {}),
       })
       if (event.type === 'task.permission.requested') {
-        refreshActiveTaskContext()
         if (sleeping) {
           wakeFromSleep()
           return
@@ -871,7 +856,6 @@ export function attachRealtimeGateway(server, {
             }
           }
         }
-        refreshActiveTaskContext()
       }
       if (event.type === 'task.delegated') {
         const presentation = task.delegation?.presentation
@@ -922,20 +906,6 @@ export function attachRealtimeGateway(server, {
           })
         }
         claimPendingNotifications([task.id])
-      }
-      if ([
-        'task.running',
-        'task.delegated',
-        'task.finalizing',
-        'task.cancelling',
-        'task.progress',
-        'task.completed',
-        'task.failed',
-        'task.cancelled',
-        'task.permission.requested',
-        'task.permission.resolved',
-      ].includes(event.type)) {
-        refreshActiveTaskContext()
       }
     })
 
@@ -1403,8 +1373,6 @@ export function attachRealtimeGateway(server, {
       connectionLogger.info('realtime.connecting', {
         provider: sessionProvider,
       })
-      const activeTasks = activeTaskContext()
-      lastActiveTaskSignature = activeTaskSignature(activeTasks)
       let createdFrontend
       createdFrontend = createRealtimeFrontend({
         providerName: sessionProvider,
@@ -1413,7 +1381,6 @@ export function attachRealtimeGateway(server, {
           textOnly: textOnlySession,
           memories: memoryService?.list(ownerId, { limit: 64 }) || [],
           recentMessages: conversationSync.frontendContext({ ownerId, sessionId }),
-          activeTasks,
         },
         onEvent: handleEvent,
         onError: error => {
@@ -1488,7 +1455,6 @@ export function attachRealtimeGateway(server, {
             state: 'connected',
             provider: createdFrontend.provider.key,
           })
-          refreshActiveTaskContext()
           announcePendingPermissions()
           pendingAudio.forEach(audio => createdFrontend.appendAudio(audio))
           pendingAudio = []
@@ -1555,7 +1521,7 @@ export function attachRealtimeGateway(server, {
     }
 
     const enterSleep = () => {
-      if (sleeping || !frontend?.ready) return
+      if (sleeping) return
       sleeping = true
       waking = false
       pendingAudio = []
@@ -1624,6 +1590,26 @@ export function attachRealtimeGateway(server, {
       })
     }
 
+    // The desktop window and the realtime provider must enter sleep as one
+    // state transition. Waiting for the independent inactivity timer lets a
+    // hidden, muted orb continue forwarding wake-word audio to the realtime
+    // model, which can produce replies while no orb is visible.
+    const requestExplicitSleep = () => {
+      if (!config.wakeWordEnabled || textOnlySession) return false
+      explicitSleepRequested = true
+      inputEnabled = false
+      pendingAudio = []
+      prepareSleepMode()
+      const finish = () => {
+        if (!explicitSleepRequested || !wakeDetector) return false
+        enterSleep()
+        return sleeping
+      }
+      if (wakeDetector) return finish()
+      wakeDetectorPromise?.then(finish).catch(() => {})
+      return true
+    }
+
     const WAKE_CONNECT_MAX_ATTEMPTS = 3
     const WAKE_CONNECT_RETRY_BACKOFF_MS = 350
 
@@ -1670,6 +1656,7 @@ export function attachRealtimeGateway(server, {
 
     const wakeFromSleep = () => {
       if (!sleeping || waking) return
+      explicitSleepRequested = false
       sleeping = false
       waking = true
       sleepController.wake()
@@ -1790,11 +1777,14 @@ export function attachRealtimeGateway(server, {
           waking = true
           sleepController.wake()
         }
-        if (inputEnabled || outputEnabled) {
+        prepareSleepMode()
+        if (event.wakeWordOnly === true) {
+          requestExplicitSleep()
+        } else if (inputEnabled || outputEnabled) {
           ensureFrontend().catch(reportFrontendError)
         }
-        prepareSleepMode()
       } else if (event.type === GatewayClientEvent.UNMUTE) {
+        explicitSleepRequested = false
         if (textOnlySession) {
           inputEnabled = false
           outputEnabled = true
@@ -1811,6 +1801,7 @@ export function attachRealtimeGateway(server, {
           })
           .catch(reportFrontendError)
       } else if (event.type === GatewayClientEvent.INPUT_UNMUTE) {
+        explicitSleepRequested = false
         if (textOnlySession) return
         if (activeVoiceClients.isActive(ownerId, voiceClient)) {
           inputEnabled = true
@@ -1918,6 +1909,7 @@ export function attachRealtimeGateway(server, {
           })
         }
       } else if (event.type === GatewayClientEvent.MUTE) {
+        explicitSleepRequested = false
         releaseVoiceClient()
         sleeping = false
         waking = false
@@ -1931,9 +1923,12 @@ export function attachRealtimeGateway(server, {
       } else if (event.type === GatewayClientEvent.INPUT_MUTE) {
         inputEnabled = false
         pendingAudio = []
+      } else if (event.type === GatewayClientEvent.SLEEP) {
+        requestExplicitSleep()
       } else if (event.type === GatewayClientEvent.WAKE) {
         // 桌面快捷键/托盘唤起只恢复窗口可见性，休眠中的前台连接靠这个事件
         // 恢复，复用唤醒词检测之后同一套重连与退避路径。
+        explicitSleepRequested = false
         if (sleeping) wakeFromSleep()
         else sleepController.recordActivity()
       }

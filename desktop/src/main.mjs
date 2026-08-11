@@ -560,13 +560,20 @@ function createWindow() {
 }
 
 function createSettingsWindow() {
+  const { height: workAreaHeight } = screen
+    .getDisplayNearestPoint(screen.getCursorScreenPoint())
+    .workAreaSize
+  const settingsWindowHeight = Math.max(
+    600,
+    Math.min(800, workAreaHeight - 48),
+  )
   const window = new BrowserWindow({
     width: 520,
-    height: 720,
+    height: settingsWindowHeight,
     minWidth: 460,
     minHeight: 600,
     title: '设置',
-    backgroundColor: '#f5f6f7',
+    backgroundColor: '#f4f5f6',
     autoHideMenuBar: true,
     show: false,
     webPreferences: {
@@ -1034,11 +1041,15 @@ ipcMain.handle('qwen-audio-agent:settings-save', async (event, settings) => {
   }
   const gatewayChanged = nextOrigin !== configuredGatewayOrigin
   const apiKeyChanged = previous.dashscopeApiKey !== normalized.dashscopeApiKey
+  const realtimeBaseUrlChanged = (
+    previous.realtimeBaseUrl !== normalized.realtimeBaseUrl
+  )
   const realtimeProviderChanged = (
     previous.realtimeProvider !== normalized.realtimeProvider
   )
   const backendChanged = previous.agentProtocol !== normalized.agentProtocol
   const realtimeModelChanged = previous.realtimeModel !== normalized.realtimeModel
+  const realtimeVoiceChanged = previous.realtimeVoice !== normalized.realtimeVoice
   const speechToSpeechChanged = (
     previous.speechToSpeechRealtimeUrl
       !== normalized.speechToSpeechRealtimeUrl
@@ -1057,9 +1068,11 @@ ipcMain.handle('qwen-audio-agent:settings-save', async (event, settings) => {
   const gatewayRuntimeChanged = (
     gatewayChanged
     || apiKeyChanged
+    || realtimeBaseUrlChanged
     || realtimeProviderChanged
     || backendChanged
     || realtimeModelChanged
+    || realtimeVoiceChanged
     || speechToSpeechChanged
     || backendModelChanged
     || wakeWordChanged

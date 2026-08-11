@@ -1,7 +1,7 @@
 {
   "name": "qwen-audio-agent",
   "desktopName": "qwen-audio-agent.desktop",
-  "version": "1.8.1",
+  "version": "1.8.3",
   "description": "A realtime voice frontend for mainstream AI agents.",
   "author": "qwen-audio-agent contributors",
   "license": "Apache-2.0",
@@ -66,6 +66,7 @@
     "tui/native/",
     "tui/src/index.mjs",
     "tui/src/macos-voice-io.mjs",
+    "tui/src/pcm-audio.mjs",
     "tui/src/portaudio-voice-io.mjs",
     "tui/package.json",
     "web/dist/",

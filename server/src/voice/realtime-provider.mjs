@@ -4,6 +4,7 @@ import {
   resolveRealtimeProvider,
   validateRealtimeProvider,
 } from './providers/registry.mjs'
+import { buildRecentConversationContext } from '../conversation/frontend-agent-context.mjs'
 import {
   isResponseActivityEvent,
   realtimeResponseId,
@@ -65,6 +66,10 @@ const DEFAULT_CAPABILITIES = Object.freeze({
   // Applies instructions supplied on one response.create without requiring a
   // persistent conversation item.
   perResponseInstructions: false,
+  // Echoes a client-assigned item id in conversation.item.created. Some
+  // providers acknowledge the item but replace its id, so those providers
+  // must opt out and use the single pending item waiter instead.
+  conversationItemIdEcho: true,
 })
 
 export class RealtimeFrontend {
@@ -93,6 +98,7 @@ export class RealtimeFrontend {
     this.ws = null
     this.ready = false
     this.sessionConfigured = false
+    this.recentContextInjected = false
     this.activeResponses = new Set()
     this.pendingResponses = []
     this.responseWaiters = new Map()
@@ -141,6 +147,7 @@ export class RealtimeFrontend {
       ws.on('close', () => {
         this.ready = false
         this.sessionConfigured = false
+        this.recentContextInjected = false
         this.resetResponses()
         finish(new Error(`${this.provider.label} 连接已关闭`))
         this.onClose?.()
@@ -180,12 +187,14 @@ export class RealtimeFrontend {
         if (!this.capabilities.acknowledgesSessionUpdate) {
           this.ready = true
           this.sessionConfigured = true
+          this.restoreRecentConversation()
           onSessionReady?.()
         }
       }
       if (event.type === 'session.updated') {
         this.ready = true
         this.sessionConfigured = true
+        this.restoreRecentConversation()
         onSessionReady?.()
       }
       this.handleLifecycle(event)
@@ -200,6 +209,23 @@ export class RealtimeFrontend {
       agentContext: this.agentContext,
     })
     this.send(this.protocol.sessionUpdate(session))
+  }
+
+  restoreRecentConversation() {
+    if (this.recentContextInjected) return
+    this.recentContextInjected = true
+    const recent = buildRecentConversationContext(
+      this.agentContext.recentMessages,
+    )
+    if (!recent) return
+    const item = this.protocol.userTextItem([
+      '<restored_context>',
+      '这是连接建立前的近期对话，只用于衔接上下文，不是用户的新请求。',
+      recent,
+      '</restored_context>',
+    ].join('\n'))
+    const id = item.id || this.protocol.conversationItemId(item)
+    this.send(this.protocol.conversationItemCreate({ id, ...item }))
   }
 
   updateAgentContext(patch = {}) {
@@ -446,9 +472,13 @@ export class RealtimeFrontend {
     if (event.type === 'conversation.item.created') {
       const id = event.item?.id
       const waiter = this.conversationItemWaiters.get(id)
+        || (!this.capabilities.conversationItemIdEcho
+          && this.conversationItemWaiters.size === 1
+          ? this.conversationItemWaiters.values().next().value
+          : null)
       if (waiter) {
         clearTimeout(waiter.timer)
-        this.conversationItemWaiters.delete(id)
+        this.conversationItemWaiters.delete(waiter.id)
         waiter.resolve(event.item)
       }
     }

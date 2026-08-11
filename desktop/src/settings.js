@@ -4,17 +4,10 @@ import {
 } from './backend-options.mjs'
 import {
   realtimeConnectionStatus,
-  realtimeModelPresentation,
-  realtimeModelRuntimeStatus,
+  realtimeModelStatusLabel,
   realtimeStatusLabel,
 } from './realtime-status.mjs'
 import { updaterButtonState, updaterStatusText } from './update-status.mjs'
-import {
-  DASHSCOPE_OMNI_FLASH_REALTIME_MODEL,
-  DASHSCOPE_OMNI_PLUS_REALTIME_MODEL,
-  listDashScopeRealtimeModelProfiles,
-  resolveDashScopeRealtimeModelProfile,
-} from '../../shared/realtime-provider-catalog.mjs'
 
 const form = document.querySelector('#settings-form')
 const gatewayUrl = document.querySelector('#gateway-url')
@@ -27,6 +20,8 @@ const recordWakeShortcut = document.querySelector('#record-wake-shortcut')
 const resetWakeShortcut = document.querySelector('#reset-wake-shortcut')
 const wakeWordEnabled = document.querySelector('#wake-word-enabled')
 const dashscopeApiKey = document.querySelector('#dashscope-api-key')
+const realtimeBaseUrl = document.querySelector('#realtime-base-url')
+const realtimeVoice = document.querySelector('#realtime-voice')
 const realtimeProviderInputs = [
   ...document.querySelectorAll('input[name="realtime-provider"]'),
 ]
@@ -42,8 +37,6 @@ const speechToSpeechAuthToken = document.querySelector(
 const backendList = document.querySelector('#backend-list')
 const refreshBackends = document.querySelector('#refresh-backends')
 const realtimeModel = document.querySelector('#realtime-model')
-const realtimeModelHint = document.querySelector('#realtime-model-hint')
-const providerDocs = document.querySelector('#provider-docs')
 const backendModel = document.querySelector('#backend-model')
 const nodePathInput = document.querySelector('#node-path')
 const applyNodePath = document.querySelector('#apply-node-path')
@@ -52,40 +45,6 @@ const getApiKey = document.querySelector('#get-api-key')
 const message = document.querySelector('#message')
 const currentRealtime = document.querySelector('#current-realtime')
 const currentGateway = document.querySelector('#current-gateway')
-
-function populateRealtimeModels() {
-  if (!realtimeModel) return
-  const groups = new Map([
-    [DASHSCOPE_OMNI_FLASH_REALTIME_MODEL, 'Omni Flash'],
-    [DASHSCOPE_OMNI_PLUS_REALTIME_MODEL, 'Omni Plus'],
-  ])
-  const elements = []
-  for (const profile of listDashScopeRealtimeModelProfiles()) {
-    const groupLabel = groups.get(profile.id) || 'Legacy Audio'
-    let group = elements.find(element => element.label === groupLabel)
-    if (!group) {
-      group = document.createElement('optgroup')
-      group.label = groupLabel
-      elements.push(group)
-    }
-    const option = document.createElement('option')
-    const presentation = realtimeModelPresentation(profile)
-    option.value = profile.id
-    option.textContent = `${profile.label} · ${presentation.optionHint}`
-    option.title = 'Provider 文档：DashScope Realtime'
-    group.append(option)
-  }
-  realtimeModel.replaceChildren(...elements)
-}
-
-function renderRealtimeModelHint() {
-  const profile = resolveDashScopeRealtimeModelProfile(realtimeModel?.value)
-  if (realtimeModelHint) {
-    realtimeModelHint.textContent = realtimeModelPresentation(profile).selectedHint
-  }
-}
-
-populateRealtimeModels()
 const currentBackend = document.querySelector('#current-backend')
 const updaterStatus = document.querySelector('#updater-status')
 const checkUpdates = document.querySelector('#check-updates')
@@ -105,6 +64,7 @@ let updaterState = null
 let startupError = null
 let recordingWakeShortcut = false
 const defaultWakeShortcut = 'CommandOrControl+Shift+Space'
+const defaultRealtimeBaseUrl = 'wss://dashscope.aliyuncs.com/api-ws/v1/realtime'
 const macPlatform = /Mac|iPhone|iPad/.test(navigator.platform)
 
 function selectSettingsTab(value, { focus = false } = {}) {
@@ -145,21 +105,20 @@ function renderWakeShortcutStatus(registered) {
 }
 
 function wakeShortcutLabel(value) {
-  if (macPlatform && value === defaultWakeShortcut) return '⇧  ⌘  Space'
   const labels = {
-    CommandOrControl: macPlatform ? '⌘' : 'Ctrl',
-    Alt: macPlatform ? '⌥' : 'Alt',
-    Shift: '⇧',
+    CommandOrControl: macPlatform ? 'Command' : 'Ctrl',
+    Alt: macPlatform ? 'Option' : 'Alt',
+    Shift: 'Shift',
     Space: 'Space',
-    Up: '↑',
-    Down: '↓',
-    Left: '←',
-    Right: '→',
+    Up: 'Arrow Up',
+    Down: 'Arrow Down',
+    Left: 'Arrow Left',
+    Right: 'Arrow Right',
   }
   return String(value || defaultWakeShortcut)
     .split('+')
     .map(part => labels[part] || part)
-    .join('  ')
+    .join(' + ')
 }
 
 function renderWakeShortcut() {
@@ -249,7 +208,7 @@ window.addEventListener('keydown', event => {
   if (['Meta', 'Control', 'Alt', 'Shift'].includes(event.key)) return
   const shortcut = capturedWakeShortcut(event)
   if (!shortcut) {
-    showMessage('请使用 ⌘/Ctrl 或 Alt 组合键，也可以直接使用 F1–F24。', 'error')
+    showMessage('请使用 Command/Ctrl 或 Alt 组合键，也可以直接使用 F1–F24。', 'error')
     return
   }
   wakeShortcut.value = shortcut
@@ -443,7 +402,7 @@ function showNodejsInstallGuidance(text, backendId) {
   const link = document.createElement('button')
   link.type = 'button'
   link.className = 'message-link'
-  link.textContent = '下载 Node.js ↗'
+  link.textContent = '下载 Node.js'
   link.addEventListener('click', () => {
     window.qwenAudioAgentDesktop.openExternal('https://nodejs.org/')
   })
@@ -583,10 +542,12 @@ function renderRealtimeProvider(value, { populateDefault = false } = {}) {
   ) {
     speechToSpeechRealtimeUrl.value = 'ws://127.0.0.1:8765/v1/realtime'
   }
+  if (populateDefault && provider === 'dashscope' && !realtimeBaseUrl.value.trim()) {
+    realtimeBaseUrl.value = defaultRealtimeBaseUrl
+  }
 }
 
 const BAILIAN_API_KEY_URL = 'https://bailian.console.aliyun.com/?tab=model#/api-key'
-const DASHSCOPE_REALTIME_DOCS_URL = 'https://help.aliyun.com/zh/model-studio/omni/'
 
 function formSettings() {
   return {
@@ -596,9 +557,11 @@ function formSettings() {
     wakeShortcut: wakeShortcut.value,
     wakeWordEnabled: wakeWordEnabled.checked,
     dashscopeApiKey: dashscopeApiKey.value,
+    realtimeBaseUrl: realtimeBaseUrl.value,
     realtimeProvider: selectedRealtimeProvider(),
     agentProtocol: selectedBackend(),
     realtimeModel: realtimeModel.value,
+    realtimeVoice: realtimeVoice.value,
     speechToSpeechRealtimeUrl: speechToSpeechRealtimeUrl.value,
     speechToSpeechAuthToken: speechToSpeechAuthToken.value,
     backendModel: backendModel.value,
@@ -614,9 +577,11 @@ function fingerprint(value) {
     wakeShortcut: value.wakeShortcut,
     wakeWordEnabled: value.wakeWordEnabled,
     dashscopeApiKey: value.dashscopeApiKey,
+    realtimeBaseUrl: value.realtimeBaseUrl,
     realtimeProvider: value.realtimeProvider,
     agentProtocol: value.agentProtocol,
     realtimeModel: value.realtimeModel,
+    realtimeVoice: value.realtimeVoice,
     speechToSpeechRealtimeUrl: value.speechToSpeechRealtimeUrl,
     speechToSpeechAuthToken: value.speechToSpeechAuthToken,
     backendModel: value.backendModel,
@@ -656,18 +621,9 @@ function renderRuntime() {
   currentGateway.textContent = '已连接'
   currentGateway.className = 'connection-status connected'
   const realtimeLabel = realtimeStatusLabel(runtime.realtimeProvider)
-  const modelRuntime = realtimeModelRuntimeStatus(
-    runtime,
-    settings.realtimeModel,
-  )
-  const realtimeModelLabel = modelRuntime.label
-  const modelMismatchLabel = modelRuntime.mismatch ? '模型不一致' : ''
+  const realtimeModelLabel = realtimeModelStatusLabel(runtime.realtimeModel)
   if (!runtime.voiceConfigured) {
-    setRealtimeStatus(
-      [realtimeLabel, realtimeModelLabel, modelMismatchLabel, '配置不完整']
-        .filter(Boolean).join(' · '),
-      'disconnected',
-    )
+    setRealtimeStatus(`${realtimeLabel} · 配置不完整`, 'disconnected')
   } else {
     const state = realtimeConnectionStatus(
       runtime.realtimeConnection?.byProvider?.[runtime.realtimeProvider],
@@ -683,7 +639,6 @@ function renderRuntime() {
       [
         realtimeLabel,
         realtimeModelLabel,
-        modelMismatchLabel,
         stateLabel,
         state === 'unavailable'
           ? truncate(
@@ -822,10 +777,11 @@ function render() {
   recordingWakeShortcut = false
   renderWakeShortcut()
   dashscopeApiKey.value = settings.dashscopeApiKey || ''
+  realtimeBaseUrl.value = settings.realtimeBaseUrl || defaultRealtimeBaseUrl
   renderBackendOptions(settings.agentProtocol || 'none')
   realtimeModel.value = settings.realtimeModel
     || 'qwen-audio-3.0-realtime-plus'
-  renderRealtimeModelHint()
+  realtimeVoice.value = settings.realtimeVoice || 'longanqian'
   speechToSpeechRealtimeUrl.value = settings.speechToSpeechRealtimeUrl || ''
   speechToSpeechAuthToken.value = settings.speechToSpeechAuthToken || ''
   renderRealtimeProvider(settings.realtimeProvider)
@@ -841,9 +797,11 @@ for (const control of [
   orbSkinSelect,
   autoHideSeconds,
   dashscopeApiKey,
+  realtimeBaseUrl,
   speechToSpeechRealtimeUrl,
   speechToSpeechAuthToken,
   realtimeModel,
+  realtimeVoice,
   backendModel,
   nodePathInput,
   ...realtimeProviderInputs,
@@ -858,17 +816,12 @@ for (const control of [
     if (realtimeProviderInputs.includes(control)) {
       renderRealtimeProvider(control.value, { populateDefault: true })
     }
-    if (control === realtimeModel) renderRealtimeModelHint()
     updateApplyState()
   })
 }
 
 getApiKey.addEventListener('click', () => {
   window.qwenAudioAgentDesktop.openExternal(BAILIAN_API_KEY_URL)
-})
-
-providerDocs.addEventListener('click', () => {
-  window.qwenAudioAgentDesktop.openExternal(DASHSCOPE_REALTIME_DOCS_URL)
 })
 
 orbSkinSelect.addEventListener('change', updateRemoveSkinState)
@@ -954,9 +907,7 @@ form.addEventListener('submit', async event => {
     runtime = result.runtime
     renderWakeShortcutStatus(result.wakeShortcutRegistered)
     render()
-    if (result.applied === false) {
-      showMessage(result.message, 'error')
-    } else if (!runtime.gatewayConnected) {
+    if (!runtime.gatewayConnected) {
       showMessage('配置已保存，Gateway 正在启动…', 'notice')
     } else if (runtime.backend && !runtime.backend.connected) {
       showMessage('Gateway 已启动，后台 Agent 正在连接…', 'notice')

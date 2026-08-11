@@ -12,7 +12,7 @@ test('PORT=0 binds a random port and reports the origin to the parent host', asy
     'wss://gateway.example/realtime?token=health-secret-signed-token'
   )
   process.env.QWEN_AUDIO_REALTIME_MODEL = (
-    'qwen3.5-omni-flash-realtime-2026-03-15'
+    'qwen3.5-omni-flash-realtime'
   )
   const reported = new Promise((resolvePromise, rejectPromise) => {
     const timer = setTimeout(() => {
@@ -42,7 +42,7 @@ test('PORT=0 binds a random port and reports the origin to the parent host', asy
     const health = await response.json()
     assert.equal(
       health.realtimeModelProfile.id,
-      'qwen3.5-omni-flash-realtime-2026-03-15',
+      'qwen3.5-omni-flash-realtime',
     )
     assert.equal(health.realtimeModelProfile.family, 'omni')
     assert.equal(health.realtimeModelProfile.modelCapabilities.imageInput, true)
@@ -50,8 +50,8 @@ test('PORT=0 binds a random port and reports the origin to the parent host', asy
     assert.deepEqual(
       health.realtimeModelCatalog.map(profile => profile.id),
       [
-        'qwen3.5-omni-flash-realtime-2026-03-15',
-        'qwen3.5-omni-plus-realtime-2026-03-15',
+        'qwen3.5-omni-flash-realtime',
+        'qwen3.5-omni-plus-realtime',
         'qwen-audio-3.0-realtime-plus',
       ],
     )

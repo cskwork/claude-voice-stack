@@ -26,6 +26,10 @@ tells you:
 
 ## News
 
+- **2026-08-12 · [v1.8.3](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.8.3)**
+  ✨ Refined prompts; 📉 reduced token usage; 🔧 fixed known issues.
+- **2026-08-11 · [v1.8.2](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.8.2)**
+  🖥️ Refreshed desktop settings with a more consistent visual experience; 🎙️ more reliable voice wake; ⏱️ long-running tasks now report progress automatically.
 - **2026-08-11 · [v1.8.1](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.8.1)**
   🧠 Cleaner persona and memory boundaries; 🔧 more reliable tasks and reminders.
 - **2026-08-09 · [v1.8.0](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.8.0)**
@@ -139,8 +143,8 @@ QWEN_AUDIO_AGENT_BACKEND_MODEL=qwen3.7-max
 ```
 
 > Uses DashScope realtime voice frontend by default; alternatively, switch to a local [speech-to-speech frontend](docs/voice-frontends/speech-to-speech.md), no cloud API Key needed.
-> `qwen3.5-omni-flash-realtime-2026-03-15` and `qwen3.5-omni-plus-realtime-2026-03-15`
-> accept text, audio, image, and video at the model level. This release transports text and
+> `qwen3.5-omni-flash-realtime` and `qwen3.5-omni-plus-realtime`
+> accept text, audio, and image at the model level. This release transports text and
 > audio only; image/frame and native-video transport remain disabled until their client and
 > Gateway paths are implemented.
 

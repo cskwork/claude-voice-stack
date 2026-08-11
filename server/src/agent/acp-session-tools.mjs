@@ -37,7 +37,6 @@ function registerTools(server, context) {
       description: 'List existing project Sessions. Use this to find the exact Session when the user asks to continue previous work.',
       inputSchema: {
         query: z.string().optional(),
-        directory: z.string().optional(),
         limit: z.number().int().min(1).max(100).optional(),
       },
       annotations: {
@@ -57,10 +56,9 @@ function registerTools(server, context) {
     'qwen_audio_agent_session_start',
     {
       title: 'Start Agent Session',
-      description: 'Start a new project Session asynchronously. Send only the natural task text and an absolute project directory.',
+      description: 'Start a new Session asynchronously in the same project as the coordinator Session. Call it directly without creating or choosing a directory. Send only the natural task text.',
       inputSchema: {
         prompt: z.string().min(1),
-        directory: z.string().min(1),
         title: z.string().optional(),
       },
     },
@@ -76,11 +74,10 @@ function registerTools(server, context) {
     'qwen_audio_agent_session_send',
     {
       title: 'Continue Agent Session',
-      description: 'Continue an existing project Session asynchronously. Use the exact session_id and absolute project directory returned by the Session list.',
+      description: 'Continue an existing project Session asynchronously. Use the exact session_id returned by the Session list; the Gateway restores its original project directory.',
       inputSchema: {
         session_id: z.string().min(1),
         prompt: z.string().min(1),
-        directory: z.string().min(1),
       },
     },
     async input => {

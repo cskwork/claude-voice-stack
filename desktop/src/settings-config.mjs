@@ -9,10 +9,12 @@ import {
 } from '../../shared/orb-skin-catalog.mjs'
 import {
   DEFAULT_DASHSCOPE_REALTIME_MODEL,
+  DEFAULT_DASHSCOPE_REALTIME_URL,
+  DEFAULT_DASHSCOPE_REALTIME_VOICE,
   DEFAULT_REALTIME_PROVIDER,
   DEFAULT_SPEECH_TO_SPEECH_REALTIME_URL,
-  resolveDashScopeRealtimeModelProfile,
   normalizeRealtimeProvider,
+  resolveDashScopeRealtimeModelProfile,
 } from '../../shared/realtime-provider-catalog.mjs'
 
 const DEFAULTS = {
@@ -23,9 +25,11 @@ const DEFAULTS = {
   wakeShortcut: 'CommandOrControl+Shift+Space',
   wakeWordEnabled: false,
   dashscopeApiKey: '',
+  realtimeBaseUrl: DEFAULT_DASHSCOPE_REALTIME_URL,
   realtimeProvider: DEFAULT_REALTIME_PROVIDER,
   agentProtocol: 'none',
   realtimeModel: DEFAULT_DASHSCOPE_REALTIME_MODEL,
+  realtimeVoice: DEFAULT_DASHSCOPE_REALTIME_VOICE,
   speechToSpeechRealtimeUrl: '',
   speechToSpeechAuthToken: '',
   backendModel: '',
@@ -40,22 +44,24 @@ const SETTING_KEYS = {
   wakeShortcut: 'QWEN_AUDIO_DESKTOP_WAKE_SHORTCUT',
   wakeWordEnabled: 'QWEN_AUDIO_WAKE_WORD_ENABLED',
   dashscopeApiKey: 'DASHSCOPE_API_KEY',
+  realtimeBaseUrl: 'QWEN_AUDIO_REALTIME_BASE_URL',
   realtimeProvider: 'QWEN_AUDIO_REALTIME_PROVIDER',
   agentProtocol: 'AGENT_PROTOCOL',
   realtimeModel: 'QWEN_AUDIO_REALTIME_MODEL',
+  realtimeVoice: 'QWEN_AUDIO_REALTIME_VOICE',
   speechToSpeechRealtimeUrl: 'SPEECH_TO_SPEECH_REALTIME_URL',
   speechToSpeechAuthToken: 'SPEECH_TO_SPEECH_AUTH_TOKEN',
   backendModel: 'QWEN_AUDIO_AGENT_BACKEND_MODEL',
   nodePath: 'QWEN_AUDIO_AGENT_NODE_PATH',
 }
 
-function normalizeRealtimeModel(value) {
-  const profile = resolveDashScopeRealtimeModelProfile(value)
-  return profile.family === 'unknown' ? DEFAULTS.realtimeModel : profile.id
-}
-
 function configured(values, key, fallback) {
   return Object.hasOwn(values, key) ? values[key] : fallback
+}
+
+function defaultRealtimeVoice(model) {
+  return resolveDashScopeRealtimeModelProfile(model).sessionDefaults.voice
+    || DEFAULT_DASHSCOPE_REALTIME_VOICE
 }
 
 function cleanUrl(value, fallback, label = '地址') {
@@ -67,11 +73,11 @@ function cleanUrl(value, fallback, label = '地址') {
   return url.origin
 }
 
-function cleanRealtimeUrl(value, fallback) {
+function cleanRealtimeUrl(value, fallback, label = '服务地址') {
   const text = String(value || fallback).trim()
   const url = new URL(text)
   if (!['ws:', 'wss:'].includes(url.protocol)) {
-    throw new Error('Speech-to-Speech 服务地址只支持 WS 或 WSS')
+    throw new Error(`${label}只支持 WS 或 WSS`)
   }
   return text.replace(/\/+$/, '')
 }
@@ -150,6 +156,19 @@ export function parseSettings(content = '', fallback = {}) {
       || DEFAULTS.dashscopeApiKey,
     ),
   )
+  const configuredRealtimeBaseUrl = configured(
+    values,
+    'QWEN_AUDIO_REALTIME_BASE_URL',
+    configured(
+      values,
+      'QWEN_AUDIO_REALTIME_URL',
+      fallback.QWEN_AUDIO_REALTIME_BASE_URL
+      || fallback.QWEN_AUDIO_REALTIME_URL
+      || (fallback.DASHSCOPE_WORKSPACE_ID
+        ? `wss://${fallback.DASHSCOPE_WORKSPACE_ID}.cn-beijing.maas.aliyuncs.com/api-ws/v1/realtime`
+        : DEFAULTS.realtimeBaseUrl),
+    ),
+  )
   const configuredOrbStyle = configured(
     values,
     'QWEN_AUDIO_ORB_STYLE',
@@ -182,6 +201,16 @@ export function parseSettings(content = '', fallback = {}) {
       || DEFAULTS.speechToSpeechAuthToken,
     ),
   )
+  const realtimeModel = String(configured(
+    values,
+    'QWEN_AUDIO_REALTIME_MODEL',
+    fallback.QWEN_AUDIO_REALTIME_MODEL || DEFAULTS.realtimeModel,
+  ) || DEFAULTS.realtimeModel).trim()
+  const realtimeVoice = String(configured(
+    values,
+    'QWEN_AUDIO_REALTIME_VOICE',
+    fallback.QWEN_AUDIO_REALTIME_VOICE || defaultRealtimeVoice(realtimeModel),
+  ) || defaultRealtimeVoice(realtimeModel)).trim()
   return {
     gatewayUrl: configured(
       values,
@@ -220,17 +249,16 @@ export function parseSettings(content = '', fallback = {}) {
       ),
     ).toLowerCase() === 'true',
     dashscopeApiKey: String(configuredApiKey || '').trim(),
+    realtimeBaseUrl: String(configuredRealtimeBaseUrl || '').trim()
+      || DEFAULTS.realtimeBaseUrl,
     realtimeProvider,
     agentProtocol: cleanAgentProtocol(configured(
       values,
       'AGENT_PROTOCOL',
       fallback.AGENT_PROTOCOL || DEFAULTS.agentProtocol,
     )),
-    realtimeModel: normalizeRealtimeModel(String(configured(
-      values,
-      'QWEN_AUDIO_REALTIME_MODEL',
-      fallback.QWEN_AUDIO_REALTIME_MODEL || DEFAULTS.realtimeModel,
-    ) || DEFAULTS.realtimeModel).trim()),
+    realtimeModel,
+    realtimeVoice,
     speechToSpeechRealtimeUrl: String(
       configuredS2sUrl
       || (realtimeProvider === 'speech-to-speech'
@@ -259,6 +287,12 @@ export function normalizeSettings(settings = {}) {
     settings.speechToSpeechRealtimeUrl
     ?? DEFAULTS.speechToSpeechRealtimeUrl,
   ).trim()
+  const realtimeModel = String(
+    settings.realtimeModel || DEFAULTS.realtimeModel,
+  ).trim() || DEFAULTS.realtimeModel
+  const realtimeVoice = String(
+    settings.realtimeVoice || defaultRealtimeVoice(realtimeModel),
+  ).trim() || defaultRealtimeVoice(realtimeModel)
   return {
     gatewayUrl: cleanUrl(
       settings.gatewayUrl,
@@ -281,11 +315,17 @@ export function normalizeSettings(settings = {}) {
     dashscopeApiKey: String(
       settings.dashscopeApiKey ?? DEFAULTS.dashscopeApiKey,
     ).trim(),
+    realtimeBaseUrl: cleanRealtimeUrl(
+      settings.realtimeBaseUrl,
+      DEFAULTS.realtimeBaseUrl,
+      'Qwen Audio 服务地址',
+    ),
     realtimeProvider,
     agentProtocol: cleanAgentProtocol(
       settings.agentProtocol ?? DEFAULTS.agentProtocol,
     ),
-    realtimeModel: normalizeRealtimeModel(String(settings.realtimeModel || '').trim()),
+    realtimeModel,
+    realtimeVoice,
     speechToSpeechRealtimeUrl: requestedS2sUrl
       ? cleanRealtimeUrl(requestedS2sUrl, '')
       : realtimeProvider === 'speech-to-speech'
@@ -309,7 +349,16 @@ export function realtimeSettingsConfigured(settings = {}) {
     settings.realtimeProvider ?? DEFAULTS.realtimeProvider,
   )
   if (provider === 'dashscope') {
-    return Boolean(String(settings.dashscopeApiKey || '').trim())
+    try {
+      cleanRealtimeUrl(
+        settings.realtimeBaseUrl,
+        DEFAULTS.realtimeBaseUrl,
+        'Qwen Audio 服务地址',
+      )
+      return Boolean(String(settings.dashscopeApiKey || '').trim())
+    } catch {
+      return false
+    }
   }
   try {
     return Boolean(cleanRealtimeUrl(

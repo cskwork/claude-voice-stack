@@ -223,7 +223,7 @@ export function buildCoordinatorPrompt({
     '返回一个 JSON 对象：',
     '{"work_id":"request_id","state":"completed","mode":"respond","presentation":{"speech":"适合语音表达的最终结果","inline":null}}',
     'work_id 对应 request_id。presentation 是本轮用户要求的最终结果；inline 可承载适合屏幕查看的 Markdown、代码或链接。',
-    '用户明确要求“独立任务”或“后台处理”时，必须使用当前后端提供的第三层 Session 委派工具，不得在协调 Session 中直接执行该任务。',
+    '以 final_asr 为主要依据，结合 objective 判断本项工作与既有工作的关系。用户要求创建新的独立工作时，在协调 Session 所属项目中使用第三层 Session 创建工具；要求继续以前的项目或工作时，定位并续接对应的既有 Session，由系统恢复其原项目目录；其余任务在协调 Session 中执行。判断应基于用户表达的完整语义，不依赖固定关键词。独立工作表示新建 Session，不表示新建项目目录；Session 路由过程中不要创建、选择或准备目录，目录由系统管理，文件组织由实际执行任务的 Session 处理。需要委派时不得在协调 Session 中重复执行。',
     '调用 session_start 或 session_send 并得到 started 后，可以根据用户原话、目标项目和工具返回，自行组织一次自然、有信息量的创建或提交成功说明，然后返回 state=delegated、mode=delegate、准确的 delegation_id、target_session_id 和 presentation。presentation.speech 就是要立刻告诉用户的说明；可以解释已经开始推进什么以及准备怎么做，但不要把尚未完成的工作说成已经完成。此后结束本轮，不要查询状态或自行重复执行；系统会等待目标 Session 完成。',
     'session_status 只用于查询既有第三层任务状态。如果它调用失败，只能如实说明暂时无法取得状态；禁止改用 bash、read、glob、grep 或其他工具扫描目标项目，也禁止凭协调会话记忆代替目标 Session 回答原任务。',
     '这里只接受最终完成结果。不要返回 active、进度、受理确认、未来计划或“正在处理/稍等”；如果工作尚未完成，请继续处理，完成后再返回。',

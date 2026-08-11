@@ -445,8 +445,9 @@ export const config = {
     1_800_000,
     { min: 60_000 },
   ),
-  scheduledTaskProgressCheckMs: numberSetting(
-    process.env.QWEN_AUDIO_AGENT_SCHEDULED_TASK_PROGRESS_CHECK_MS,
+  backgroundTaskProgressCheckMs: numberSetting(
+    process.env.QWEN_AUDIO_AGENT_BACKGROUND_TASK_PROGRESS_CHECK_MS
+      || process.env.QWEN_AUDIO_AGENT_SCHEDULED_TASK_PROGRESS_CHECK_MS,
     300_000,
     { min: 30_000 },
   ),

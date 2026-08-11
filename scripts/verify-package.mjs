@@ -132,6 +132,9 @@ if (isMain) {
     'server/src/index.mjs',
     'shared/runtime-environment.mjs',
     'tui/src/index.mjs',
+    'tui/src/macos-voice-io.mjs',
+    'tui/src/pcm-audio.mjs',
+    'tui/src/portaudio-voice-io.mjs',
     'web/dist/index.html',
   ]
   const missing = required.filter(file => !files.has(file))

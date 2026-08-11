@@ -774,9 +774,8 @@ export class AcpBackendAdapter {
     })
   }
 
-  async listProjectSessions({ query, directory, limit } = {}) {
+  async listProjectSessions({ query, limit } = {}) {
     const sessions = await this.client.listSessions({
-      cwd: clean(directory) || undefined,
       limit: limit || 20,
     })
     this.registry.setProjects(sessions
@@ -879,8 +878,8 @@ export class AcpBackendAdapter {
     return record
   }
 
-  async startProjectSession(run, { prompt, directory, title }) {
-    const cwd = clean(directory)
+  async startProjectSession(run, { prompt, title }) {
+    const cwd = clean(run.cwd) || this.directory
     const session = await this.client.newSession({
       cwd,
       mcpServers: this.builtinMcp,
@@ -910,17 +909,15 @@ export class AcpBackendAdapter {
 
   async continueProjectSession(
     run,
-    { session_id: sessionId, prompt, directory },
+    { session_id: sessionId, prompt },
   ) {
-    const requestedDirectory = clean(directory)
     const active = this.findDelegation({ session_id: sessionId })
     const remembered = this.registry.getProject(
       projectSessionKey(this.protocol, sessionId),
     )
     let existing = null
     let cwd = clean(
-      requestedDirectory
-      || active?.directory
+      active?.directory
       || remembered?.cwd,
     )
     if (!cwd) {
@@ -1105,6 +1102,7 @@ export class AcpBackendAdapter {
     const session = await this.ensureCoordinatorSession(ownerId, mcpServers)
     const permissionScopeId = `prompt_${randomUUID()}`
     run.sessionId = session.sessionId
+    run.cwd = clean(session.cwd) || this.directory
     session.ownerId = clean(ownerId)
     session.coordinationRunId = clean(coordinationRunId)
     session.onEvent = onEvent
