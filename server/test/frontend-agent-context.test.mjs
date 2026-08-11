@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   buildFrontendContext,
+  buildRecentConversationContext,
   currentTimeSnapshot,
   loadFrontendPrompt,
   loadAssistantProfile,
@@ -43,6 +44,28 @@ test('distinguishes the TUI working directory from the backend workspace', () =>
   assert.match(context, /snake-game/)
 })
 
+test('keeps exact clock values out of the persistent runtime context', () => {
+  const context = buildFrontendContext({
+    client: { timeZone: 'Asia/Shanghai', locale: 'zh-CN' },
+    now: new Date('2026-07-23T04:00:00.000Z'),
+  })
+
+  assert.match(context, /time_zone="Asia\/Shanghai"/)
+  assert.match(context, /locale="zh-CN"/)
+  assert.doesNotMatch(context, /session_start_local|2026年|12:00:00/)
+})
+
+test('builds bounded recent conversation separately from system instructions', () => {
+  const recent = buildRecentConversationContext([
+    { role: 'user', content: '继续刚才的项目' },
+    { role: 'assistant', content: '正在继续处理' },
+  ])
+
+  assert.match(recent, /<recent_conversation>/)
+  assert.match(recent, /用户: 继续刚才的项目/)
+  assert.match(recent, /助手: 正在继续处理/)
+})
+
 test('keeps client capabilities out of the runtime prose context', () => {
   const desktop = buildFrontendContext({
     client: { states: ['sleeping'] },
@@ -67,7 +90,7 @@ test('loads one canonical frontend policy separately from runtime context', () =
   assert.match(context, /<runtime_context>/)
 })
 
-test('injects only bounded active task state as runtime context', () => {
+test('keeps mutable task state out of persistent frontend instructions', () => {
   const context = buildFrontendContext({
     activeTasks: [
       {
@@ -98,14 +121,9 @@ test('injects only bounded active task state as runtime context', () => {
     ],
   })
 
-  assert.match(context, /<active_work>/)
-  assert.match(context, /work_id=job_active/)
-  assert.match(context, /work_id=job_queued/)
-  assert.match(context, /work_id=job_delegated/)
-  assert.match(context, /authorization_id=auth_one/)
-  assert.match(context, /authorization_operation=运行命令：npm test/)
-  assert.doesNotMatch(context, /delivery=/)
-  assert.doesNotMatch(context, /job_done/)
+  assert.doesNotMatch(context, /<active_work>/)
+  assert.doesNotMatch(context, /job_active|job_queued|job_delegated|job_done/)
+  assert.doesNotMatch(context, /authorization_id|authorization_operation/)
 })
 
 test('canonicalizes legacy profile content into user preferences', () => {

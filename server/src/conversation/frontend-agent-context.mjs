@@ -9,7 +9,6 @@ const MAX_PROMPT_CHARS = 16000
 const MAX_ASSISTANT_CHARS = 4000
 const MAX_RECENT_MESSAGES = 10
 const MAX_RECENT_CHARS = 3500
-const MAX_ACTIVE_TASKS = 5
 
 function clean(value) {
   return String(value || '').replace(/\s+/g, ' ').trim()
@@ -111,7 +110,7 @@ function memorySection(memories = []) {
   ].join('\n')
 }
 
-function recentSection(messages = []) {
+export function buildRecentConversationContext(messages = []) {
   const candidates = messages.slice(-MAX_RECENT_MESSAGES)
   const selected = []
   let used = 0
@@ -131,58 +130,24 @@ function recentSection(messages = []) {
   ].join('\n')
 }
 
-function activeRunSection(tasks = []) {
-  const active = tasks
-    .filter(task => [
-      'queued',
-      'running',
-      'delegated',
-      'finalizing',
-      'cancelling',
-    ].includes(task?.status))
-    .slice(0, MAX_ACTIVE_TASKS)
-  if (!active.length) return ''
-  return [
-    '<active_work>',
-    ...active.map(task => [
-      `work_id=${clean(task.id)}`,
-      `status=${clean(task.status)}`,
-      `objective=${clean(task.objective).slice(0, 300) || '未命名执行'}`,
-      task.authorization?.status === 'pending'
-        ? `authorization_id=${clean(task.authorization.id)}`
-        : '',
-      task.authorization?.status === 'pending'
-        ? `authorization_operation=${clean(task.authorization.summary).slice(0, 500)}`
-        : '',
-    ].filter(Boolean).join(' | ')),
-    '</active_work>',
-  ].join('\n')
-}
-
 export function buildFrontendContext({
   client = {},
   memories = [],
-  recentMessages = [],
-  activeTasks = [],
-  now = new Date(),
 } = {}) {
-  const time = currentTimeSnapshot({ ...client, now })
+  const normalizedClient = normalizeClientContext(client)
   const runtimeContext = [
     '<runtime_context>',
     'channel=full_duplex_voice',
-    `session_start_local=${JSON.stringify(time.local_time)}`,
-    `time_zone=${JSON.stringify(time.time_zone)}`,
-    `locale=${JSON.stringify(time.locale)}`,
-    ...(client.workingDirectory
-      ? [`client_working_directory=${JSON.stringify(client.workingDirectory)}`]
+    `time_zone=${JSON.stringify(normalizedClient.timeZone)}`,
+    `locale=${JSON.stringify(normalizedClient.locale)}`,
+    ...(normalizedClient.workingDirectory
+      ? [`client_working_directory=${JSON.stringify(normalizedClient.workingDirectory)}`]
       : []),
     '</runtime_context>',
   ].join('\n')
   return [
     userPreferencesSection(memories),
     memorySection(memories),
-    recentSection(recentMessages),
-    activeRunSection(activeTasks),
     runtimeContext,
   ].filter(Boolean).join('\n\n')
 }

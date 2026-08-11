@@ -75,7 +75,6 @@ function fakeToolServer() {
 function fakeAcpClient({
   action = 'start',
   holdTarget = false,
-  sendDirectory = '/previous',
   scopeListsByCwd = false,
 } = {}) {
   const calls = []
@@ -193,11 +192,9 @@ function fakeAcpClient({
         ? await toolServer.context.sendSession({
             session_id: 'previous-session',
             prompt: 'continue previous work',
-            ...(sendDirectory ? { directory: sendDirectory } : {}),
           })
         : await toolServer.context.startSession({
             prompt: 'build project',
-            directory: '/project',
             title: 'Project',
           })
       return {
@@ -433,10 +430,9 @@ test('rejects repeated empty ACP coordinator responses', async () => {
   await adapter.close()
 })
 
-test('continues a remembered project Session when session_send omits directory', async () => {
+test('continues a remembered project Session using only its Session ID', async () => {
   const client = fakeAcpClient({
     action: 'send',
-    sendDirectory: '',
     scopeListsByCwd: true,
   })
   const tools = fakeToolServer()
@@ -466,6 +462,54 @@ test('continues a remembered project Session when session_send omits directory',
     && call[2].cwd === '/previous'
   )))
   assert.equal(client.calls.some(call => call[0] === 'list'), false)
+  await adapter.close()
+})
+
+test('starts a new Session in the coordinator project by default', async () => {
+  const client = fakeAcpClient()
+  const tools = fakeToolServer()
+  client.bind(tools)
+  const adapter = new AcpBackendAdapter({
+    protocol: 'qoder',
+    directory: '/coordinator-project',
+    client,
+    sessionToolServer: tools,
+  })
+
+  await adapter.runCoordinator('delegate', {
+    ownerId: 'owner-one',
+    coordinationRunId: 'work-one',
+  })
+
+  const projectSession = client.calls.find(call => (
+    call[0] === 'new' && call[1].role === 'project'
+  ))?.[1]
+  assert.equal(projectSession.cwd, '/coordinator-project')
+  await adapter.close()
+})
+
+test('recovers the original project before continuing an unremembered Session', async () => {
+  const client = fakeAcpClient({ action: 'send' })
+  const tools = fakeToolServer()
+  client.bind(tools)
+  const adapter = new AcpBackendAdapter({
+    protocol: 'qoder',
+    directory: '/coordinator-project',
+    client,
+    sessionToolServer: tools,
+  })
+
+  await adapter.runCoordinator('delegate', {
+    ownerId: 'owner-one',
+    coordinationRunId: 'work-one',
+  })
+
+  assert.ok(client.calls.some(call => call[0] === 'list'))
+  assert.ok(client.calls.some(call => (
+    call[0] === 'resume'
+    && call[1] === 'previous-session'
+    && call[2].cwd === '/previous'
+  )))
   await adapter.close()
 })
 
@@ -850,7 +894,6 @@ test('keeps a cached coordinator MCP connection valid across turns', async () =>
         ))
         await cached.call('startSession', {
           prompt: 'inspect the project',
-          directory: '/project',
         })
       }
       return {
@@ -925,11 +968,9 @@ test('isolates coordinator MCP registrations by owner and releases them', async 
   })
   await tools.registrations[0].call('startSession', {
     prompt: 'owner one project',
-    directory: '/project-one',
   })
   await tools.registrations[1].call('startSession', {
     prompt: 'owner two project',
-    directory: '/project-two',
   })
 
   assert.equal(tools.registerCalls, 2)
@@ -944,6 +985,14 @@ test('isolates coordinator MCP registrations by owner and releases them', async 
   assert.equal(
     adapter.delegatedWorkRuns.get('work-owner-two').delegation.ownerId,
     'owner-two',
+  )
+  assert.equal(
+    adapter.delegatedWorkRuns.get('work-owner-one').delegation.directory,
+    '/coordinator',
+  )
+  assert.equal(
+    adapter.delegatedWorkRuns.get('work-owner-two').delegation.directory,
+    '/coordinator',
   )
   await Promise.all([
     adapter.delegatedWorkRuns.get('work-owner-one').delegation.promise,
@@ -1859,7 +1908,6 @@ test('injects builtin MCP servers into coordinator and project sessions', async 
         prompted = true
         await tools.registrations[0].call('startSession', {
           prompt: 'inspect the project',
-          directory: '/project',
         })
       }
       return {
