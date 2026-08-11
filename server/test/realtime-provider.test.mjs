@@ -259,36 +259,47 @@ test('configures Qwen Audio Realtime with Smart Turn only', () => {
 
 test('resolves exact DashScope model profiles for sessions and responses', t => {
   const originalModel = config.audioModel
+  const originalVoice = config.audioVoice
   t.after(() => {
     config.audioModel = originalModel
+    config.audioVoice = originalVoice
   })
 
-  for (const [model, label, family] of [
+  for (const [model, label, family, voice, turnDetection] of [
     [
       DASHSCOPE_OMNI_FLASH_REALTIME_MODEL,
       'Qwen3.5 Omni Flash Realtime',
       'omni',
+      'Ethan',
+      { type: 'semantic_vad' },
     ],
     [
       DASHSCOPE_OMNI_PLUS_REALTIME_MODEL,
       'Qwen3.5 Omni Plus Realtime',
       'omni',
+      'Ethan',
+      { type: 'semantic_vad' },
     ],
     [
       DEFAULT_DASHSCOPE_REALTIME_MODEL,
       'Qwen Audio 3.0 Realtime Plus',
       'audio',
+      'longanqian',
+      { type: 'smart_turn' },
     ],
   ]) {
     config.audioModel = model
+    config.audioVoice = voice
     const profile = REALTIME_PROVIDERS.qwen.modelProfile()
     const session = REALTIME_PROVIDERS.qwen.buildSession({ configured: false })
 
     assert.equal(profile.id, model)
     assert.equal(profile.label, label)
     assert.equal(profile.family, family)
-    assert.equal(profile.sessionDefaults.voice, 'longanqian')
-    assert.deepEqual(session.turn_detection, profile.sessionDefaults.turnDetection)
+    assert.equal(profile.sessionDefaults.voice, voice)
+    assert.equal(session.voice, voice)
+    assert.deepEqual(profile.sessionDefaults.turnDetection, turnDetection)
+    assert.deepEqual(session.turn_detection, turnDetection)
     assert.deepEqual(session.modalities, ['text', 'audio'])
     assert.deepEqual(
       REALTIME_PROVIDERS.qwen.buildSpeakResponse('完成').modalities,

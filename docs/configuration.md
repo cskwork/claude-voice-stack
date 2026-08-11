@@ -701,7 +701,7 @@ them to the configuration file:
 | `QWEN_AUDIO_AGENT_BACKEND_PERMISSION_MODE` | `native` |
 | `QWEN_AUDIO_REALTIME_MODEL` | `qwen-audio-3.0-realtime-plus` |
 | `QWEN_AUDIO_REALTIME_PROVIDER` | `dashscope` |
-| `QWEN_AUDIO_REALTIME_VOICE` | `longanqian` |
+| `QWEN_AUDIO_REALTIME_VOICE` | Model profile default: `Ethan` for Omni, `longanqian` for legacy Audio |
 | `SPEECH_TO_SPEECH_REALTIME_URL` | `ws://127.0.0.1:8765/v1/realtime` |
 | `SPEECH_TO_SPEECH_AUTH_TOKEN` | Empty; only for proxies with Bearer authentication |
 | `QWEN_AUDIO_AGENT_IDENTITY_MODE` | `personal` |

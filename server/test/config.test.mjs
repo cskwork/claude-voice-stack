@@ -180,3 +180,23 @@ test('changes the realtime configuration signature when only the model changes',
 
   assert.notEqual(first.signature, second.signature)
 })
+
+test('selects the DashScope default voice from the active model profile', () => {
+  const legacy = resolveRealtimeFrontendConfiguration({
+    DASHSCOPE_API_KEY: 'same-key',
+    QWEN_AUDIO_REALTIME_MODEL: 'qwen-audio-3.0-realtime-plus',
+  })
+  const omni = resolveRealtimeFrontendConfiguration({
+    DASHSCOPE_API_KEY: 'same-key',
+    QWEN_AUDIO_REALTIME_MODEL: 'qwen3.5-omni-plus-realtime-2026-03-15',
+  })
+  const overridden = resolveRealtimeFrontendConfiguration({
+    DASHSCOPE_API_KEY: 'same-key',
+    QWEN_AUDIO_REALTIME_MODEL: 'qwen3.5-omni-plus-realtime-2026-03-15',
+    QWEN_AUDIO_REALTIME_VOICE: 'Cherry',
+  })
+
+  assert.equal(legacy.dashscopeVoice, 'longanqian')
+  assert.equal(omni.dashscopeVoice, 'Ethan')
+  assert.equal(overridden.dashscopeVoice, 'Cherry')
+})

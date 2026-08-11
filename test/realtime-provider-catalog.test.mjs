@@ -29,7 +29,12 @@ const omniTransportCapabilities = {
   nativeVideoInput: false,
 }
 
-const sessionDefaults = {
+const omniSessionDefaults = {
+  voice: 'Ethan',
+  turnDetection: { type: 'semantic_vad' },
+}
+
+const legacySessionDefaults = {
   voice: 'longanqian',
   turnDetection: { type: 'smart_turn' },
 }
@@ -40,7 +45,7 @@ test('lists the exact DashScope realtime model catalog in product order', () => 
       id: OMNI_FLASH_ID,
       label: 'Qwen3.5 Omni Flash Realtime',
       family: 'omni',
-      sessionDefaults,
+      sessionDefaults: omniSessionDefaults,
       modelCapabilities: omniModelCapabilities,
       transportCapabilities: omniTransportCapabilities,
     },
@@ -48,7 +53,7 @@ test('lists the exact DashScope realtime model catalog in product order', () => 
       id: OMNI_PLUS_ID,
       label: 'Qwen3.5 Omni Plus Realtime',
       family: 'omni',
-      sessionDefaults,
+      sessionDefaults: omniSessionDefaults,
       modelCapabilities: omniModelCapabilities,
       transportCapabilities: omniTransportCapabilities,
     },
@@ -56,7 +61,7 @@ test('lists the exact DashScope realtime model catalog in product order', () => 
       id: LEGACY_AUDIO_ID,
       label: 'Qwen Audio 3.0 Realtime Plus',
       family: 'audio',
-      sessionDefaults,
+      sessionDefaults: legacySessionDefaults,
       modelCapabilities: {
         textInput: true,
         audioInput: true,

@@ -63,7 +63,12 @@ const UNKNOWN_TRANSPORT_CAPABILITIES = Object.freeze({
   nativeVideoInput: false,
 })
 
-const DASHSCOPE_REALTIME_SESSION_DEFAULTS = Object.freeze({
+const DASHSCOPE_OMNI_REALTIME_SESSION_DEFAULTS = Object.freeze({
+  voice: 'Ethan',
+  turnDetection: Object.freeze({ type: 'semantic_vad' }),
+})
+
+const DASHSCOPE_AUDIO_REALTIME_SESSION_DEFAULTS = Object.freeze({
   voice: DEFAULT_DASHSCOPE_REALTIME_VOICE,
   turnDetection: Object.freeze({ type: 'smart_turn' }),
 })
@@ -78,7 +83,7 @@ export const DASHSCOPE_REALTIME_MODEL_PROFILES = Object.freeze([
     id: DASHSCOPE_OMNI_FLASH_REALTIME_MODEL,
     label: 'Qwen3.5 Omni Flash Realtime',
     family: 'omni',
-    sessionDefaults: DASHSCOPE_REALTIME_SESSION_DEFAULTS,
+    sessionDefaults: DASHSCOPE_OMNI_REALTIME_SESSION_DEFAULTS,
     modelCapabilities: OMNI_MODEL_CAPABILITIES,
     transportCapabilities: OMNI_TRANSPORT_CAPABILITIES,
   }),
@@ -86,7 +91,7 @@ export const DASHSCOPE_REALTIME_MODEL_PROFILES = Object.freeze([
     id: DASHSCOPE_OMNI_PLUS_REALTIME_MODEL,
     label: 'Qwen3.5 Omni Plus Realtime',
     family: 'omni',
-    sessionDefaults: DASHSCOPE_REALTIME_SESSION_DEFAULTS,
+    sessionDefaults: DASHSCOPE_OMNI_REALTIME_SESSION_DEFAULTS,
     modelCapabilities: OMNI_MODEL_CAPABILITIES,
     transportCapabilities: OMNI_TRANSPORT_CAPABILITIES,
   }),
@@ -94,7 +99,7 @@ export const DASHSCOPE_REALTIME_MODEL_PROFILES = Object.freeze([
     id: DEFAULT_DASHSCOPE_REALTIME_MODEL,
     label: 'Qwen Audio 3.0 Realtime Plus',
     family: 'audio',
-    sessionDefaults: DASHSCOPE_REALTIME_SESSION_DEFAULTS,
+    sessionDefaults: DASHSCOPE_AUDIO_REALTIME_SESSION_DEFAULTS,
     modelCapabilities: LEGACY_MODEL_CAPABILITIES,
     transportCapabilities: LEGACY_TRANSPORT_CAPABILITIES,
   }),
@@ -194,7 +199,11 @@ export function resolveRealtimeFrontendConfiguration(env = process.env) {
   )
   const dashscopeModel = clean(env.QWEN_AUDIO_REALTIME_MODEL)
     || DEFAULT_DASHSCOPE_REALTIME_MODEL
+  const dashscopeModelProfile = resolveDashScopeRealtimeModelProfile(
+    dashscopeModel,
+  )
   const dashscopeVoice = clean(env.QWEN_AUDIO_REALTIME_VOICE)
+    || dashscopeModelProfile.sessionDefaults.voice
     || DEFAULT_DASHSCOPE_REALTIME_VOICE
   const speechToSpeechRealtimeUrl = withoutTrailing(
     env.SPEECH_TO_SPEECH_REALTIME_URL
