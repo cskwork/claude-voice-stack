@@ -20,13 +20,13 @@ const delegateTool = {
   type: 'function',
   function: {
     name: DELEGATE_TOOL_NAME,
-    description: '提交需要当前信息、搜索、检查、工具、文件、屏幕、应用、代码、创作，或继续、修改已有工作的后台任务。询问此前工作的状态、进度或阶段结果时改用 get_agent_task_status。返回 accepted 只表示已受理，不表示已完成。',
+    description: '执行需要当前信息、搜索、检查、工具、文件、屏幕、应用、代码、图片生成、创作，或继续、修改已有工作的请求。这是你向用户提供的执行能力；请求明确时直接调用，不要先否认能力或说需要转交。询问此前工作的状态、进度或阶段结果时改用 get_agent_task_status。返回 accepted 只表示已受理，不表示已完成。',
     parameters: {
       type: 'object',
       properties: {
         objective: {
           type: 'string',
-          description: '可直接执行的目标，忠实保留对象、动作、约束和期望结果。可以根据当前对话消解明确指代，不要猜测、补造事实或提交占位目标；近期对话会另行提供给后台执行。',
+          description: '可直接执行的目标，忠实保留用户要求的结果、约束、执行方式，以及本项工作与既有工作的关系。可以根据当前对话消解明确指代，但不得遗漏、推断或改变这些语义，也不要提交占位目标；近期对话会随工作一并提供。',
         },
       },
       required: ['objective'],
@@ -39,7 +39,7 @@ const cancelAgentTaskTool = {
   type: 'function',
   function: {
     name: CANCEL_AGENT_TASK_TOOL_NAME,
-    description: '取消用户此前创建、目前仍可取消的后台工作、定时任务或提醒。用户明确要求取消或停止时必须调用，不要只口头答应。可以传入已知 ID；明确指向最近一项时可省略。',
+    description: '取消用户此前创建、目前仍可取消的后台工作、定时任务或提醒。用户明确要求取消或停止时必须调用，不要只口头答应。可以传入已知 ID；明确指向最近一项时可省略。同时存在多项且目标不能可靠确定时，先调用 get_agent_task_status 列出工作，再用返回的准确 work_id 取消。',
     parameters: {
       type: 'object',
       properties: {
@@ -63,7 +63,7 @@ const getAgentTaskStatusTool = {
       properties: {
         work_id: {
           type: 'string',
-          description: '要查询的 work_id。仅在运行上下文已明确给出时填写，不得猜造；省略时查询当前语音会话最近的工作。',
+          description: '要查询的 work_id。仅在当前对话或先前工具结果已明确给出时填写，不得猜造；省略时查询当前语音会话最近的工作。',
         },
         question: {
           type: 'string',
@@ -160,7 +160,7 @@ const respondAgentPermissionTool = {
       properties: {
         authorization_id: {
           type: 'string',
-          description: '待确认请求的 authorization_id，必须来自当前运行上下文，不得猜造。',
+          description: '待确认请求的 authorization_id，必须来自当前对话中的后台权限请求，不得猜造。',
         },
         decision: {
           type: 'string',
@@ -263,11 +263,11 @@ export const permissionResponseInstructions = [
 
 export function buildFrontendInstructions(agentContext = {}) {
   return [
+    loadFrontendPrompt(),
     '# Assistant Profile',
     '<assistant_profile authority="persona_only">',
     loadAssistantProfile(),
     '</assistant_profile>',
     buildFrontendContext(agentContext),
-    loadFrontendPrompt(),
   ].join('\n\n')
 }

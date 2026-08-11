@@ -18,7 +18,10 @@ test('serves the shared Session tools over authenticated stateless MCP', async (
       calls.push(['list', input])
       return { sessions: [{ session_id: 'one' }] }
     },
-    startSession: async input => ({ status: 'started', ...input }),
+    startSession: async input => {
+      calls.push(['start', input])
+      return { status: 'started', ...input }
+    },
     sendSession: async input => ({ status: 'started', ...input }),
     sessionStatus: async input => ({ status: 'running', ...input }),
     cancelSession: async input => ({ status: 'cancelled', ...input }),
@@ -44,6 +47,19 @@ test('serves the shared Session tools over authenticated stateless MCP', async (
     listed.tools.map(tool => tool.name).sort(),
     [...ACP_SESSION_TOOL_NAMES].sort(),
   )
+  const schemas = Object.fromEntries(listed.tools.map(tool => [
+    tool.name,
+    Object.keys(tool.inputSchema.properties || {}).sort(),
+  ]))
+  assert.deepEqual(schemas.qwen_audio_agent_sessions_list, ['limit', 'query'])
+  assert.deepEqual(
+    schemas.qwen_audio_agent_session_start,
+    ['prompt', 'title'],
+  )
+  assert.deepEqual(
+    schemas.qwen_audio_agent_session_send,
+    ['prompt', 'session_id'],
+  )
   const result = await client.callTool({
     name: 'qwen_audio_agent_sessions_list',
     arguments: { query: 'project' },
@@ -53,6 +69,12 @@ test('serves the shared Session tools over authenticated stateless MCP', async (
     JSON.parse(result.content[0].text).sessions[0].session_id,
     'one',
   )
+  const started = await client.callTool({
+    name: 'qwen_audio_agent_session_start',
+    arguments: { prompt: 'build project' },
+  })
+  assert.deepEqual(calls.at(-1), ['start', { prompt: 'build project' }])
+  assert.equal(JSON.parse(started.content[0].text).status, 'started')
   assert.equal(registration.update({
     listSessions: async input => {
       calls.push(['updated-list', input])

@@ -26,6 +26,8 @@ tells you:
 
 ## News
 
+- **2026-08-12 · [v1.8.3](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.8.3)**
+  ✨ Refined prompts; 📉 reduced token usage; 🔧 fixed known issues.
 - **2026-08-11 · [v1.8.2](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.8.2)**
   🖥️ Refreshed desktop settings with a more consistent visual experience; 🎙️ more reliable voice wake; ⏱️ long-running tasks now report progress automatically.
 - **2026-08-11 · [v1.8.1](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.8.1)**

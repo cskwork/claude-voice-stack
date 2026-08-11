@@ -20,6 +20,8 @@
 
 ## News
 
+- **2026-08-12 · [v1.8.3](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.8.3)**
+  ✨ 优化 Prompt；📉 减少 Token 消耗；🔧 修复已知问题。
 - **2026-08-11 · [v1.8.2](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.8.2)**
   🖥️ 桌面设置页焕新，布局与视觉风格更加统一；🎙️ 语音唤醒更可靠；⏱️ 长任务会主动汇报进度。
 - **2026-08-11 · [v1.8.1](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.8.1)**

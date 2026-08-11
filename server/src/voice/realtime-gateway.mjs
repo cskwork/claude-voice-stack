@@ -195,26 +195,11 @@ export function attachRealtimeGateway(server, {
     const transcripts = new TurnTranscripts()
     const announcedPermissions = new Set()
     let permissionRetryTimer = null
-    const activeTaskContext = () => taskManager.list({
+    const activeSessionTasks = () => taskManager.list({
       ownerId,
       sessionId,
       active: true,
-    }).slice(0, 5)
-    const activeTaskSignature = tasks => JSON.stringify(tasks.map(task => [
-      task.id,
-      task.status,
-      task.authorization?.id || null,
-      task.authorization?.status || null,
-    ]))
-    let lastActiveTaskSignature = ''
-    const refreshActiveTaskContext = () => {
-      if (!frontend?.ready) return
-      const activeTasks = activeTaskContext()
-      const signature = activeTaskSignature(activeTasks)
-      if (signature === lastActiveTaskSignature) return
-      lastActiveTaskSignature = signature
-      frontend.updateAgentContext({ activeTasks })
-    }
+    })
     const schedulePermissionRetry = () => {
       if (permissionRetryTimer || !outputEnabled || !frontend?.ready) return
       permissionRetryTimer = setTimeout(() => {
@@ -241,7 +226,7 @@ export function attachRealtimeGateway(server, {
         taskId: task.id,
         authorizationId: permission.id,
       }, {
-        shouldSpeak: () => activeTaskContext().some(activeTask => (
+        shouldSpeak: () => activeSessionTasks().some(activeTask => (
           activeTask.authorization?.id === permission.id
           && activeTask.authorization.status === 'pending'
         )),
@@ -259,7 +244,7 @@ export function attachRealtimeGateway(server, {
       })
     }
     const announcePendingPermissions = () => {
-      const activeTasks = activeTaskContext()
+      const activeTasks = activeSessionTasks()
       const pendingIds = new Set(activeTasks
         .filter(task => task.authorization?.status === 'pending')
         .map(task => task.authorization.id))
@@ -477,7 +462,7 @@ export function attachRealtimeGateway(server, {
     }
     const ensurePermissionResponseFor = context => {
       clearTimeout(permissionResponseTimer)
-      const hasPendingPermission = () => activeTaskContext().some(task => (
+      const hasPendingPermission = () => activeSessionTasks().some(task => (
         task.authorization?.status === 'pending'
       ))
       if (!hasPendingPermission()) return
@@ -845,7 +830,6 @@ export function attachRealtimeGateway(server, {
         ...(event.permission ? { permission: event.permission } : {}),
       })
       if (event.type === 'task.permission.requested') {
-        refreshActiveTaskContext()
         if (sleeping) {
           wakeFromSleep()
           return
@@ -872,7 +856,6 @@ export function attachRealtimeGateway(server, {
             }
           }
         }
-        refreshActiveTaskContext()
       }
       if (event.type === 'task.delegated') {
         const presentation = task.delegation?.presentation
@@ -923,20 +906,6 @@ export function attachRealtimeGateway(server, {
           })
         }
         claimPendingNotifications([task.id])
-      }
-      if ([
-        'task.running',
-        'task.delegated',
-        'task.finalizing',
-        'task.cancelling',
-        'task.progress',
-        'task.completed',
-        'task.failed',
-        'task.cancelled',
-        'task.permission.requested',
-        'task.permission.resolved',
-      ].includes(event.type)) {
-        refreshActiveTaskContext()
       }
     })
 
@@ -1404,8 +1373,6 @@ export function attachRealtimeGateway(server, {
       connectionLogger.info('realtime.connecting', {
         provider: sessionProvider,
       })
-      const activeTasks = activeTaskContext()
-      lastActiveTaskSignature = activeTaskSignature(activeTasks)
       let createdFrontend
       createdFrontend = createRealtimeFrontend({
         providerName: sessionProvider,
@@ -1414,7 +1381,6 @@ export function attachRealtimeGateway(server, {
           textOnly: textOnlySession,
           memories: memoryService?.list(ownerId, { limit: 64 }) || [],
           recentMessages: conversationSync.frontendContext({ ownerId, sessionId }),
-          activeTasks,
         },
         onEvent: handleEvent,
         onError: error => {
@@ -1489,7 +1455,6 @@ export function attachRealtimeGateway(server, {
             state: 'connected',
             provider: createdFrontend.provider.key,
           })
-          refreshActiveTaskContext()
           announcePendingPermissions()
           pendingAudio.forEach(audio => createdFrontend.appendAudio(audio))
           pendingAudio = []
