@@ -59,9 +59,19 @@ select:focus-visible {
 }
 
 main {
+  display: flex;
   width: min(100%, 600px);
+  min-height: 100vh;
+  flex-direction: column;
   margin: 0 auto;
   padding: 24px;
+}
+
+#settings-form {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
 }
 
 header {
@@ -706,7 +716,8 @@ footer {
   min-height: 64px;
   align-items: center;
   gap: 16px;
-  margin-top: 16px;
+  margin-top: auto;
+  padding-top: 16px;
 }
 
 #message {
