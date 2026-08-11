@@ -1020,11 +1020,15 @@ ipcMain.handle('qwen-audio-agent:settings-save', async (event, settings) => {
   }
   const gatewayChanged = nextOrigin !== configuredGatewayOrigin
   const apiKeyChanged = previous.dashscopeApiKey !== normalized.dashscopeApiKey
+  const realtimeBaseUrlChanged = (
+    previous.realtimeBaseUrl !== normalized.realtimeBaseUrl
+  )
   const realtimeProviderChanged = (
     previous.realtimeProvider !== normalized.realtimeProvider
   )
   const backendChanged = previous.agentProtocol !== normalized.agentProtocol
   const realtimeModelChanged = previous.realtimeModel !== normalized.realtimeModel
+  const realtimeVoiceChanged = previous.realtimeVoice !== normalized.realtimeVoice
   const speechToSpeechChanged = (
     previous.speechToSpeechRealtimeUrl
       !== normalized.speechToSpeechRealtimeUrl
@@ -1043,9 +1047,11 @@ ipcMain.handle('qwen-audio-agent:settings-save', async (event, settings) => {
   const gatewayRuntimeChanged = (
     gatewayChanged
     || apiKeyChanged
+    || realtimeBaseUrlChanged
     || realtimeProviderChanged
     || backendChanged
     || realtimeModelChanged
+    || realtimeVoiceChanged
     || speechToSpeechChanged
     || backendModelChanged
     || wakeWordChanged

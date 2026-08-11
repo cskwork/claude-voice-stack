@@ -20,6 +20,8 @@ const recordWakeShortcut = document.querySelector('#record-wake-shortcut')
 const resetWakeShortcut = document.querySelector('#reset-wake-shortcut')
 const wakeWordEnabled = document.querySelector('#wake-word-enabled')
 const dashscopeApiKey = document.querySelector('#dashscope-api-key')
+const realtimeBaseUrl = document.querySelector('#realtime-base-url')
+const realtimeVoice = document.querySelector('#realtime-voice')
 const realtimeProviderInputs = [
   ...document.querySelectorAll('input[name="realtime-provider"]'),
 ]
@@ -62,6 +64,7 @@ let updaterState = null
 let startupError = null
 let recordingWakeShortcut = false
 const defaultWakeShortcut = 'CommandOrControl+Shift+Space'
+const defaultRealtimeBaseUrl = 'wss://dashscope.aliyuncs.com/api-ws/v1/realtime'
 const macPlatform = /Mac|iPhone|iPad/.test(navigator.platform)
 
 function selectSettingsTab(value, { focus = false } = {}) {
@@ -539,6 +542,9 @@ function renderRealtimeProvider(value, { populateDefault = false } = {}) {
   ) {
     speechToSpeechRealtimeUrl.value = 'ws://127.0.0.1:8765/v1/realtime'
   }
+  if (populateDefault && provider === 'dashscope' && !realtimeBaseUrl.value.trim()) {
+    realtimeBaseUrl.value = defaultRealtimeBaseUrl
+  }
 }
 
 const BAILIAN_API_KEY_URL = 'https://bailian.console.aliyun.com/?tab=model#/api-key'
@@ -551,9 +557,11 @@ function formSettings() {
     wakeShortcut: wakeShortcut.value,
     wakeWordEnabled: wakeWordEnabled.checked,
     dashscopeApiKey: dashscopeApiKey.value,
+    realtimeBaseUrl: realtimeBaseUrl.value,
     realtimeProvider: selectedRealtimeProvider(),
     agentProtocol: selectedBackend(),
     realtimeModel: realtimeModel.value,
+    realtimeVoice: realtimeVoice.value,
     speechToSpeechRealtimeUrl: speechToSpeechRealtimeUrl.value,
     speechToSpeechAuthToken: speechToSpeechAuthToken.value,
     backendModel: backendModel.value,
@@ -569,9 +577,11 @@ function fingerprint(value) {
     wakeShortcut: value.wakeShortcut,
     wakeWordEnabled: value.wakeWordEnabled,
     dashscopeApiKey: value.dashscopeApiKey,
+    realtimeBaseUrl: value.realtimeBaseUrl,
     realtimeProvider: value.realtimeProvider,
     agentProtocol: value.agentProtocol,
     realtimeModel: value.realtimeModel,
+    realtimeVoice: value.realtimeVoice,
     speechToSpeechRealtimeUrl: value.speechToSpeechRealtimeUrl,
     speechToSpeechAuthToken: value.speechToSpeechAuthToken,
     backendModel: value.backendModel,
@@ -767,9 +777,11 @@ function render() {
   recordingWakeShortcut = false
   renderWakeShortcut()
   dashscopeApiKey.value = settings.dashscopeApiKey || ''
+  realtimeBaseUrl.value = settings.realtimeBaseUrl || defaultRealtimeBaseUrl
   renderBackendOptions(settings.agentProtocol || 'none')
   realtimeModel.value = settings.realtimeModel
     || 'qwen-audio-3.0-realtime-plus'
+  realtimeVoice.value = settings.realtimeVoice || 'longanqian'
   speechToSpeechRealtimeUrl.value = settings.speechToSpeechRealtimeUrl || ''
   speechToSpeechAuthToken.value = settings.speechToSpeechAuthToken || ''
   renderRealtimeProvider(settings.realtimeProvider)
@@ -785,9 +797,11 @@ for (const control of [
   orbSkinSelect,
   autoHideSeconds,
   dashscopeApiKey,
+  realtimeBaseUrl,
   speechToSpeechRealtimeUrl,
   speechToSpeechAuthToken,
   realtimeModel,
+  realtimeVoice,
   backendModel,
   nodePathInput,
   ...realtimeProviderInputs,

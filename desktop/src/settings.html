@@ -112,6 +112,17 @@
             </div>
             <div class="settings-card">
               <div class="provider-panel" data-provider-panel="dashscope">
+                <div class="setting-row service-url-row">
+                  <label for="realtime-base-url">服务地址</label>
+                  <input
+                    id="realtime-base-url"
+                    type="url"
+                    autocomplete="off"
+                    spellcheck="false"
+                    placeholder="wss://dashscope.aliyuncs.com/api-ws/v1/realtime"
+                  />
+                </div>
+
                 <div class="setting-row api-key-row">
                   <label for="dashscope-api-key">API Key</label>
                   <div class="field-with-action">
@@ -130,17 +141,42 @@
                 </div>
 
                 <div class="setting-row">
-                  <label for="realtime-model">前台模型</label>
-                  <select id="realtime-model">
-                    <option value="qwen-audio-3.0-realtime-plus">
-                      qwen-audio-3.0-realtime-plus
-                    </option>
-                    <option value="qwen-audio-3.0-realtime-flash">
-                      qwen-audio-3.0-realtime-flash
-                    </option>
-                  </select>
+                  <label for="realtime-model">模型名称</label>
+                  <input
+                    id="realtime-model"
+                    type="text"
+                    list="realtime-model-options"
+                    autocomplete="off"
+                    spellcheck="false"
+                    placeholder="qwen-audio-3.0-realtime-plus"
+                  />
+                  <datalist id="realtime-model-options">
+                    <option value="qwen-audio-3.0-realtime-plus"></option>
+                    <option value="qwen-audio-3.0-realtime-flash"></option>
+                  </datalist>
                 </div>
-                <p class="provider-attribution">Qwen-Audio-Realtime · DashScope</p>
+
+                <div class="setting-row">
+                  <label for="realtime-voice">音色</label>
+                  <input
+                    id="realtime-voice"
+                    type="text"
+                    list="realtime-voice-options"
+                    autocomplete="off"
+                    spellcheck="false"
+                    placeholder="longanqian"
+                  />
+                  <datalist id="realtime-voice-options">
+                    <option value="longanqian"></option>
+                    <option value="longanlingxin"></option>
+                    <option value="longanlingxi"></option>
+                    <option value="longanxiaoxin"></option>
+                    <option value="longanlufeng"></option>
+                  </datalist>
+                </div>
+                <p class="provider-attribution">
+                  Qwen Audio · DashScope 与 Realtime 兼容协议
+                </p>
               </div>
 
               <div
