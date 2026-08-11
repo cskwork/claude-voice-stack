@@ -25,49 +25,35 @@ function blockingRunner() {
   return runner
 }
 
-function createScheduledTask(manager, opts = {}) {
+function createWorkTask(manager, opts = {}) {
   const {
-    at,
     objective = 'test',
     ownerId = 'owner',
-    type = 'task',
     runner = null,
-    progressCheckMs = 30,
-    timeoutMs = 5_000,
   } = opts
-  return manager.createScheduled({
+  return manager.create({
     objective,
     ownerId,
     sessionId: 'voice',
     turnId: 'turn-1',
-    schedule: { at, recurrence: 'once' },
-    type,
     runner: runner || blockingRunner(),
-    progressCheckMs,
-    timeoutMs,
   })
 }
 
 test('progress check timer emits task.progress.check with activity-based message', async () => {
-  const manager = new TaskManager()
+  const manager = new TaskManager({ progressCheckMs: 30 })
   const progressEvents = []
   manager.subscribe(event => {
     if (event.type === 'task.progress.check') progressEvents.push(event)
   })
 
   const runner = blockingRunner()
-  const now = Date.now()
-  const task = createScheduledTask(manager, {
-    at: now - 1000,
+  const task = createWorkTask(manager, {
     objective: '测试进度任务',
-    progressCheckMs: 30,
     runner,
   })
 
   const internal = manager.tasks.get(task.id)
-  internal.status = 'queued'
-  manager.drain()
-
   await new Promise(resolve => setImmediate(resolve))
   assert.equal(manager.get(task.id).status, 'running')
 
@@ -86,13 +72,12 @@ test('progress check timer emits task.progress.check with activity-based message
 
   // Clean up
   runner.resolve({ content: 'done' })
-  if (internal.timeoutTimer) clearTimeout(internal.timeoutTimer)
   if (internal.progressCheckTimer) clearInterval(internal.progressCheckTimer)
   if (internal.progressTimer) clearInterval(internal.progressTimer)
 })
 
 test('progress check handles no activity gracefully', async () => {
-  const manager = new TaskManager()
+  const manager = new TaskManager({ progressCheckMs: 30 })
   const progressEvents = []
   manager.subscribe(event => {
     if (event.type === 'task.progress.check') progressEvents.push(event)
@@ -102,18 +87,12 @@ test('progress check handles no activity gracefully', async () => {
   let resolveRunner
   const noActivityRunner = async () => new Promise(r => { resolveRunner = r })
 
-  const now = Date.now()
-  const task = createScheduledTask(manager, {
-    at: now - 1000,
+  const task = createWorkTask(manager, {
     objective: '无活动任务',
-    progressCheckMs: 30,
     runner: noActivityRunner,
   })
 
   const internal = manager.tasks.get(task.id)
-  internal.status = 'queued'
-  manager.drain()
-
   await new Promise(resolve => setImmediate(resolve))
   assert.equal(manager.get(task.id).status, 'running')
   assert.equal(internal.activity.length, 0)
@@ -125,13 +104,12 @@ test('progress check handles no activity gracefully', async () => {
   assert.ok(event.message.includes('正在处理中'))
 
   resolveRunner({ content: 'done' })
-  if (internal.timeoutTimer) clearTimeout(internal.timeoutTimer)
   if (internal.progressCheckTimer) clearInterval(internal.progressCheckTimer)
   if (internal.progressTimer) clearInterval(internal.progressTimer)
 })
 
 test('delegated task progress check queries coordinator', async () => {
-  const manager = new TaskManager()
+  const manager = new TaskManager({ progressCheckMs: 30 })
   let queryCalled = false
   manager.configureCoordinatorQuery((_workId, _question, _options) => {
     queryCalled = true
@@ -147,18 +125,12 @@ test('delegated task progress check queries coordinator', async () => {
   let resolveRunner
   const blockingRunner = async () => new Promise(r => { resolveRunner = r })
 
-  const now = Date.now()
-  const task = createScheduledTask(manager, {
-    at: now - 1000,
+  const task = createWorkTask(manager, {
     objective: '委托任务',
-    progressCheckMs: 30,
     runner: blockingRunner,
   })
 
   const internal = manager.tasks.get(task.id)
-  internal.status = 'queued'
-  manager.drain()
-
   await new Promise(resolve => setImmediate(resolve))
   assert.equal(manager.get(task.id).status, 'running')
 
@@ -180,33 +152,26 @@ test('delegated task progress check queries coordinator', async () => {
   assert.ok(event.message.includes('第三层'))
 
   resolveRunner({ content: 'done' })
-  if (internal.timeoutTimer) clearTimeout(internal.timeoutTimer)
   if (internal.progressCheckTimer) clearInterval(internal.progressCheckTimer)
   if (internal.progressTimer) clearInterval(internal.progressTimer)
 })
 
 test('progress check timer stops after task completes', async () => {
-  const manager = new TaskManager()
+  const manager = new TaskManager({ progressCheckMs: 30 })
   const progressEvents = []
   manager.subscribe(event => {
     if (event.type === 'task.progress.check') progressEvents.push(event)
   })
 
   let resolveRunner
-  const now = Date.now()
-  const task = createScheduledTask(manager, {
-    at: now - 1000,
+  const task = createWorkTask(manager, {
     objective: '完成后停止进度检查',
     runner: () => new Promise(resolve => {
       resolveRunner = resolve
     }),
-    progressCheckMs: 30,
   })
 
   const internal = manager.tasks.get(task.id)
-  internal.status = 'queued'
-  manager.drain()
-
   await new Promise(resolve => setImmediate(resolve))
   assert.equal(manager.get(task.id).status, 'running')
 
@@ -223,6 +188,39 @@ test('progress check timer stops after task completes', async () => {
   await new Promise(resolve => setTimeout(resolve, 80))
   assert.equal(progressEvents.length, countBefore)
 
+  if (internal.progressTimer) clearInterval(internal.progressTimer)
+})
+
+test('scheduled tasks stay quiet while they run', async () => {
+  const manager = new TaskManager({ progressCheckMs: 30 })
+  const progressEvents = []
+  manager.subscribe(event => {
+    if (event.type === 'task.progress.check') progressEvents.push(event)
+  })
+
+  const runner = blockingRunner()
+  const task = manager.createScheduled({
+    objective: '安静执行的定时任务',
+    ownerId: 'owner',
+    sessionId: 'voice',
+    turnId: 'turn-1',
+    schedule: { at: Date.now() - 1000, recurrence: 'once' },
+    type: 'task',
+    runner,
+  })
+  const internal = manager.tasks.get(task.id)
+  internal.status = 'queued'
+  manager.drain()
+
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(manager.get(task.id).status, 'running')
+  assert.equal(manager.get(task.id).progressCheckMs, null)
+
+  await new Promise(resolve => setTimeout(resolve, 60))
+  assert.equal(progressEvents.length, 0)
+  assert.equal(internal.progressCheckTimer, null)
+
+  runner.resolve({ content: 'done' })
   if (internal.timeoutTimer) clearTimeout(internal.timeoutTimer)
   if (internal.progressTimer) clearInterval(internal.progressTimer)
 })
