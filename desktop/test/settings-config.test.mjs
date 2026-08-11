@@ -11,7 +11,9 @@ const REALTIME_DEFAULTS = {
   wakeShortcut: 'CommandOrControl+Shift+Space',
   wakeWordEnabled: false,
   realtimeProvider: 'dashscope',
+  realtimeBaseUrl: 'wss://dashscope.aliyuncs.com/api-ws/v1/realtime',
   realtimeModel: 'qwen-audio-3.0-realtime-plus',
+  realtimeVoice: 'longanqian',
   speechToSpeechRealtimeUrl: '',
   speechToSpeechAuthToken: '',
 }
@@ -229,21 +231,43 @@ test('reads and updates a supported desktop wake shortcut', () => {
   )
 })
 
-test('updates the realtime model and clears an explicit backend model', () => {
+test('updates the Qwen Audio endpoint, model, voice and clears a backend model', () => {
   const content = updateSettingsContent([
+    'QWEN_AUDIO_REALTIME_BASE_URL=wss://dashscope.aliyuncs.com/api-ws/v1/realtime',
     'QWEN_AUDIO_REALTIME_MODEL=qwen-audio-3.0-realtime-plus',
+    'QWEN_AUDIO_REALTIME_VOICE=longanqian',
     'QWEN_AUDIO_AGENT_BACKEND_MODEL=qwen3.7-max',
     '',
   ].join('\n'), {
-    realtimeModel: 'qwen-audio-3.0-realtime-flash',
+    realtimeBaseUrl: 'wss://voice.example.test/v1/realtime',
+    realtimeModel: 'compatible-audio-model',
+    realtimeVoice: 'custom-voice',
     backendModel: '',
   })
 
   assert.match(
     content,
-    /QWEN_AUDIO_REALTIME_MODEL=qwen-audio-3\.0-realtime-flash/,
+    /QWEN_AUDIO_REALTIME_BASE_URL=wss:\/\/voice\.example\.test\/v1\/realtime/,
   )
+  assert.match(content, /QWEN_AUDIO_REALTIME_MODEL=compatible-audio-model/)
+  assert.match(content, /QWEN_AUDIO_REALTIME_VOICE=custom-voice/)
   assert.match(content, /QWEN_AUDIO_AGENT_BACKEND_MODEL=\n?/)
+
+  const settings = parseSettings(content)
+  assert.equal(settings.realtimeBaseUrl, 'wss://voice.example.test/v1/realtime')
+  assert.equal(settings.realtimeModel, 'compatible-audio-model')
+  assert.equal(settings.realtimeVoice, 'custom-voice')
+})
+
+test('supports the legacy Qwen Audio realtime URL alias', () => {
+  const settings = parseSettings(
+    'QWEN_AUDIO_REALTIME_URL=wss://legacy.example.test/realtime\n',
+  )
+
+  assert.equal(
+    settings.realtimeBaseUrl,
+    'wss://legacy.example.test/realtime',
+  )
 })
 
 test('reads and updates the Speech-to-Speech desktop configuration', () => {
@@ -313,6 +337,11 @@ test('requires the selected realtime provider configuration', () => {
     dashscopeApiKey: 'sk-valid',
   }), true)
   assert.equal(realtimeSettingsConfigured({
+    realtimeProvider: 'dashscope',
+    dashscopeApiKey: 'sk-valid',
+    realtimeBaseUrl: 'https://voice.example.test/realtime',
+  }), false)
+  assert.equal(realtimeSettingsConfigured({
     realtimeProvider: 'speech-to-speech',
     speechToSpeechRealtimeUrl: 'not-a-websocket-url',
   }), false)
@@ -338,6 +367,12 @@ test('rejects invalid Speech-to-Speech service URLs', () => {
     realtimeProvider: 'speech-to-speech',
     speechToSpeechRealtimeUrl: 'https://voice.example.test/realtime',
   }), /只支持 WS 或 WSS/)
+})
+
+test('rejects invalid Qwen Audio service URLs', () => {
+  assert.throws(() => updateSettingsContent('', {
+    realtimeBaseUrl: 'https://voice.example.test/realtime',
+  }), /Qwen Audio 服务地址只支持 WS 或 WSS/)
 })
 
 test('rejects invalid Gateway URLs', () => {
@@ -367,12 +402,15 @@ test('desktop settings expose the embedded voice service without editing backend
   assert.match(html, /data-settings-tab="backend"/)
   assert.match(html, /data-settings-tab="app"/)
   assert.match(html, /role="tabpanel"/)
-  assert.match(html, /Qwen-Audio-Realtime/)
+  assert.match(html, /Qwen Audio/)
+  assert.match(html, /Realtime 兼容协议/)
   assert.match(html, /DashScope/)
   assert.match(html, /Speech-to-Speech/)
   assert.match(html, /Hugging Face/)
   assert.match(html, /id="get-api-key"/)
+  assert.match(html, /id="realtime-base-url"/)
   assert.match(html, /id="realtime-model"/)
+  assert.match(html, /id="realtime-voice"/)
   assert.match(html, /id="backend-model"/)
   assert.match(html, /id="auto-hide-seconds"/)
   assert.match(html, /id="wake-shortcut"/)
@@ -396,7 +434,6 @@ test('desktop settings expose the embedded voice service without editing backend
   assert.doesNotMatch(html, /<option value="kimi">/)
   for (const id of [
     'api-key',
-    'realtime-voice',
     'backend-permission-mode',
     'backend-url',
   ]) {
