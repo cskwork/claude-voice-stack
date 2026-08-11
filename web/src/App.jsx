@@ -674,6 +674,7 @@ export default function App() {
     suspended: desktopOrbMode && desktopLifecycle === 'hidden' && !wakeWordEnabled,
     outputMuted: false,
     inputOnlyMute: desktopOrbMode,
+    wakeWordOnly: voiceEnabledForWakeWord,
     clientType: desktopOrbMode ? 'desktop' : 'web',
     clientLabel: desktopOrbMode ? t('桌面端') : 'WebUI',
     clientStates: desktopOrbMode ? ['sleeping'] : [],

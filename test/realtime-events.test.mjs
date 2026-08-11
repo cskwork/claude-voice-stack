@@ -36,13 +36,15 @@ test('defines the shared playback acknowledgement lifecycle', () => {
   ])
 })
 
-// 桌面快捷键/托盘唤起靠 wake 事件恢复休眠中的前台连接，
-// 服务端用 voice.sleep 回报唤醒进展。
+// 桌面隐藏用 sleep 显式进入仅唤醒词监听；快捷键/托盘唤起靠 wake
+// 恢复前台连接，服务端用 voice.sleep 回报唤醒进展。
 test('defines the shared sleep wake lifecycle', () => {
   assert.deepEqual([
+    GatewayClientEvent.SLEEP,
     GatewayClientEvent.WAKE,
     GatewayServerEvent.VOICE_SLEEP,
   ], [
+    'sleep',
     'wake',
     'voice.sleep',
   ])
