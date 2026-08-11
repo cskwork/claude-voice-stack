@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'none'; script-src 'self'; style-src 'self'"
+      content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'"
     />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>设置</title>
@@ -13,10 +13,15 @@
   <body>
     <main>
       <header>
-        <div class="brand-mark" aria-hidden="true">
-          <span></span>
+        <div class="page-title">
+          <span class="brand-mark" aria-hidden="true">
+            <img src="./assets/icons/设置.svg" alt="" />
+          </span>
+          <div>
+            <h1>设置</h1>
+            <p>管理语音、后台 Agent 与桌面应用</p>
+          </div>
         </div>
-        <h1>设置</h1>
         <div class="app-meta">
           <span id="updater-status"></span>
           <button id="check-updates" class="text-button" type="button">检查更新</button>
@@ -118,8 +123,8 @@
                       placeholder="sk-…"
                     />
                     <button id="get-api-key" class="link-button" type="button">
+                      <img src="./assets/icons/链接.svg" alt="" />
                       获取 API Key
-                      <span aria-hidden="true">↗</span>
                     </button>
                   </div>
                 </div>
@@ -194,7 +199,7 @@
                     class="link-button"
                     type="button"
                     title="重新检测本机已安装的后台 Agent"
-                  >刷新</button>
+                  ><img src="./assets/icons/重试.svg" alt="" />刷新</button>
                 </div>
               </div>
 
@@ -251,8 +256,8 @@
                 <div class="setting-inline">
                   <select id="orb-style"></select>
                   <div class="manage-buttons" role="group" aria-label="管理皮肤">
-                    <button type="button" id="import-skin" title="导入皮肤…" aria-label="导入皮肤">＋</button>
-                    <button type="button" id="remove-skin" title="删除所选皮肤" aria-label="删除所选皮肤" disabled>－</button>
+                    <button type="button" id="import-skin" title="导入皮肤…" aria-label="导入皮肤"><img src="./assets/icons/添加.svg" alt="" /></button>
+                    <button type="button" id="remove-skin" title="删除所选皮肤" aria-label="删除所选皮肤" disabled><img src="./assets/icons/删除.svg" alt="" /></button>
                   </div>
                 </div>
               </div>
@@ -291,22 +296,22 @@
                     class="shortcut-recorder"
                     type="button"
                     title="点击后按下新的快捷键"
-                  >⇧ ⌘ Space</button>
+                  >Command + Shift + Space</button>
                   <button
                     id="reset-wake-shortcut"
                     class="shortcut-reset"
                     type="button"
                     aria-label="恢复默认快捷键"
                     title="恢复默认快捷键"
-                  >↺</button>
+                  ><img src="./assets/icons/重试.svg" alt="" /></button>
                 </div>
               </div>
 
               <div class="setting-row">
                 <span class="setting-label">日志</span>
                 <button id="open-logs" class="row-link" type="button">
+                  <img src="./assets/icons/本地文件.svg" alt="" />
                   在 Finder 中显示
-                  <span aria-hidden="true">›</span>
                 </button>
               </div>
             </div>

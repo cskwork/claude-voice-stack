@@ -102,21 +102,20 @@ function renderWakeShortcutStatus(registered) {
 }
 
 function wakeShortcutLabel(value) {
-  if (macPlatform && value === defaultWakeShortcut) return '⇧  ⌘  Space'
   const labels = {
-    CommandOrControl: macPlatform ? '⌘' : 'Ctrl',
-    Alt: macPlatform ? '⌥' : 'Alt',
-    Shift: '⇧',
+    CommandOrControl: macPlatform ? 'Command' : 'Ctrl',
+    Alt: macPlatform ? 'Option' : 'Alt',
+    Shift: 'Shift',
     Space: 'Space',
-    Up: '↑',
-    Down: '↓',
-    Left: '←',
-    Right: '→',
+    Up: 'Arrow Up',
+    Down: 'Arrow Down',
+    Left: 'Arrow Left',
+    Right: 'Arrow Right',
   }
   return String(value || defaultWakeShortcut)
     .split('+')
     .map(part => labels[part] || part)
-    .join('  ')
+    .join(' + ')
 }
 
 function renderWakeShortcut() {
@@ -206,7 +205,7 @@ window.addEventListener('keydown', event => {
   if (['Meta', 'Control', 'Alt', 'Shift'].includes(event.key)) return
   const shortcut = capturedWakeShortcut(event)
   if (!shortcut) {
-    showMessage('请使用 ⌘/Ctrl 或 Alt 组合键，也可以直接使用 F1–F24。', 'error')
+    showMessage('请使用 Command/Ctrl 或 Alt 组合键，也可以直接使用 F1–F24。', 'error')
     return
   }
   wakeShortcut.value = shortcut
@@ -400,7 +399,7 @@ function showNodejsInstallGuidance(text, backendId) {
   const link = document.createElement('button')
   link.type = 'button'
   link.className = 'message-link'
-  link.textContent = '下载 Node.js ↗'
+  link.textContent = '下载 Node.js'
   link.addEventListener('click', () => {
     window.qwenAudioAgentDesktop.openExternal('https://nodejs.org/')
   })

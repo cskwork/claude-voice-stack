@@ -563,7 +563,7 @@ function createSettingsWindow() {
     minWidth: 460,
     minHeight: 600,
     title: '设置',
-    backgroundColor: '#f5f6f7',
+    backgroundColor: '#f4f5f6',
     autoHideMenuBar: true,
     show: false,
     webPreferences: {
