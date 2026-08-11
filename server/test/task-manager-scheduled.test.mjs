@@ -62,7 +62,7 @@ test('createScheduled creates a task with status scheduled and correct kind', ()
   assert.equal(reminder.reused, false)
 })
 
-test('createScheduled with type=task sets timeoutMs and progressCheckMs', () => {
+test('createScheduled with type=task sets timeout without progress checks', () => {
   const manager = new TaskManager()
   const future = Date.now() + 60_000
 
@@ -79,7 +79,7 @@ test('createScheduled with type=task sets timeoutMs and progressCheckMs', () => 
   assert.equal(task.status, 'scheduled')
   assert.equal(task.kind, 'scheduled_task')
   assert.ok(task.timeoutMs > 0)
-  assert.ok(task.progressCheckMs > 0)
+  assert.equal(task.progressCheckMs, null)
 })
 
 test('createScheduled emits task.scheduled event', () => {

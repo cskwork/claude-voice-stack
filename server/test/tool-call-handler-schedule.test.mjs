@@ -102,7 +102,7 @@ test('handleScheduleReminder with type=task creates scheduled_task kind', async 
   const task = manager.get(output.reminder_id, { ownerId: 'owner' })
   assert.equal(task.kind, 'scheduled_task')
   assert.ok(task.timeoutMs > 0)
-  assert.ok(task.progressCheckMs > 0)
+  assert.equal(task.progressCheckMs, null)
 })
 
 test('handleScheduleReminder defaults type to reminder when not specified', async () => {

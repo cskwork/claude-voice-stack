@@ -95,6 +95,7 @@ export class TaskManager {
     pendingNotificationTtlMs = 604_800_000,
     notificationClaimTtlMs = 60_000,
     maxTerminalTasksPerOwner = 100,
+    progressCheckMs = config.backgroundTaskProgressCheckMs,
     logger: taskLogger = null,
   } = {}) {
     this.runner = runner
@@ -107,6 +108,7 @@ export class TaskManager {
     this.pendingNotificationTtlMs = pendingNotificationTtlMs
     this.notificationClaimTtlMs = notificationClaimTtlMs
     this.maxTerminalTasksPerOwner = maxTerminalTasksPerOwner
+    this.progressCheckMs = Math.max(0, Number(progressCheckMs) || 0)
     this.logger = taskLogger
     this.tasks = new Map()
     this.listeners = new Set()
@@ -370,6 +372,9 @@ export class TaskManager {
       terminalHandled: false,
       abortController: null,
       schedulerHeld: false,
+      progressCheckMs: String(kind || 'work') === 'work'
+        ? this.progressCheckMs
+        : null,
     }
     task.promise = new Promise(resolve => {
       task.resolve = resolve
@@ -388,7 +393,6 @@ export class TaskManager {
     schedule: { at, recurrence = 'once' } = {},
     type = 'reminder',
     timeoutMs = null,
-    progressCheckMs = null,
     runner = null,
   }) {
     const kind = type === 'task' ? 'scheduled_task' : 'reminder'
@@ -406,9 +410,7 @@ export class TaskManager {
       timeoutMs: type === 'task'
         ? Number(timeoutMs) || config.scheduledTaskTimeoutMs
         : null,
-      progressCheckMs: type === 'task'
-        ? Number(progressCheckMs) || config.scheduledTaskProgressCheckMs
-        : null,
+      progressCheckMs: null,
       createdAt: Date.now(),
       startedAt: null,
       completedAt: null,
@@ -560,9 +562,9 @@ export class TaskManager {
       }, task.timeoutMs)
       task.timeoutTimer.unref?.()
     }
-    // Progress check timer: periodically read real ACP activity data and
-    // emit task.progress.check so the voice gateway can announce it.
-    if (task.kind === 'scheduled_task' && task.progressCheckMs) {
+    // Interactive background work reports long-running progress. Scheduled
+    // work stays quiet until it completes, fails, or needs permission.
+    if (task.kind === 'work' && task.progressCheckMs) {
       task.progressCheckTimer = setInterval(() => {
         if (!ACTIVE.has(task.status)) {
           clearInterval(task.progressCheckTimer)
