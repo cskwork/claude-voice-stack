@@ -20,6 +20,8 @@
 
 ## News
 
+- **2026-08-11 · [v1.8.2](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.8.2)**
+  🖥️ 桌面设置页焕新，布局与视觉风格更加统一；🎙️ 语音唤醒更可靠；⏱️ 长任务会主动汇报进度。
 - **2026-08-11 · [v1.8.1](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.8.1)**
   🧠 人设与记忆边界更清晰；🔧 任务与提醒更可靠。
 - **2026-08-09 · [v1.8.0](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.8.0)**
