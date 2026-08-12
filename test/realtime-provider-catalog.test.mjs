@@ -3,9 +3,9 @@ import test from 'node:test'
 import {
   DASHSCOPE_REALTIME_MODEL_PROFILES,
   DEFAULT_DASHSCOPE_REALTIME_MODEL,
+  resolveDashScopeRealtimeVoiceOverride,
   listDashScopeRealtimeModelProfiles,
   resolveDashScopeRealtimeModelProfile,
-  voiceForDashScopeRealtimeModelSwitch,
 } from '../shared/realtime-provider-catalog.mjs'
 
 const OMNI_FLASH_ID = 'qwen3.5-omni-flash-realtime'
@@ -134,26 +134,19 @@ test('keeps the legacy model as the default', () => {
   )
 })
 
-test('moves model defaults while preserving custom voices', () => {
-  assert.equal(voiceForDashScopeRealtimeModelSwitch({
-    previousModel: AUDIO_PLUS_ID,
-    nextModel: OMNI_PLUS_ID,
-  }), 'Ethan')
-  assert.equal(voiceForDashScopeRealtimeModelSwitch({
-    previousModel: AUDIO_FLASH_ID,
-    nextModel: OMNI_FLASH_ID,
-    currentVoice: 'longanqian',
-  }), 'Ethan')
-  assert.equal(voiceForDashScopeRealtimeModelSwitch({
-    previousModel: OMNI_PLUS_ID,
-    nextModel: AUDIO_PLUS_ID,
-    currentVoice: 'Ethan',
-  }), 'longanqian')
-  assert.equal(voiceForDashScopeRealtimeModelSwitch({
-    previousModel: AUDIO_PLUS_ID,
-    nextModel: OMNI_PLUS_ID,
-    currentVoice: 'custom-voice',
-  }), 'custom-voice')
+test('selects only the explicit voice override for the active model family', () => {
+  const env = {
+    QWEN_AUDIO_REALTIME_VOICE: 'custom-audio',
+    QWEN_OMNI_REALTIME_VOICE: 'custom-omni',
+  }
+
+  assert.equal(resolveDashScopeRealtimeVoiceOverride(AUDIO_PLUS_ID, env), 'custom-audio')
+  assert.equal(resolveDashScopeRealtimeVoiceOverride(AUDIO_FLASH_ID, env), 'custom-audio')
+  assert.equal(resolveDashScopeRealtimeVoiceOverride(OMNI_PLUS_ID, env), 'custom-omni')
+  assert.equal(resolveDashScopeRealtimeVoiceOverride(OMNI_FLASH_ID, env), 'custom-omni')
+  assert.equal(resolveDashScopeRealtimeVoiceOverride(AUDIO_PLUS_ID, {}), '')
+  assert.equal(resolveDashScopeRealtimeVoiceOverride(OMNI_PLUS_ID, {}), '')
+  assert.equal(resolveDashScopeRealtimeVoiceOverride('future-model', env), '')
 })
 
 test('exposes immutable catalog profiles and nested capabilities', () => {

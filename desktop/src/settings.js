@@ -8,6 +8,7 @@ import {
   realtimeStatusLabel,
 } from './realtime-status.mjs'
 import { updaterButtonState, updaterStatusText } from './update-status.mjs'
+import { createRealtimeVoiceDrafts } from './realtime-voice-settings.mjs'
 
 const form = document.querySelector('#settings-form')
 const gatewayUrl = document.querySelector('#gateway-url')
@@ -63,6 +64,7 @@ let refreshingRuntime = false
 let updaterState = null
 let startupError = null
 let recordingWakeShortcut = false
+let realtimeVoiceDrafts = createRealtimeVoiceDrafts()
 const defaultWakeShortcut = 'CommandOrControl+Shift+Space'
 const defaultRealtimeBaseUrl = 'wss://dashscope.aliyuncs.com/api-ws/v1/realtime'
 const macPlatform = /Mac|iPhone|iPad/.test(navigator.platform)
@@ -525,6 +527,12 @@ function selectedRealtimeProvider() {
     || 'dashscope'
 }
 
+function renderRealtimeVoice() {
+  const voice = realtimeVoiceDrafts.selectModel(realtimeModel.value)
+  realtimeVoice.value = voice.value
+  realtimeVoice.placeholder = voice.placeholder
+}
+
 function renderRealtimeProvider(value, { populateDefault = false } = {}) {
   const provider = value === 'speech-to-speech'
     ? 'speech-to-speech'
@@ -561,7 +569,7 @@ function formSettings() {
     realtimeProvider: selectedRealtimeProvider(),
     agentProtocol: selectedBackend(),
     realtimeModel: realtimeModel.value,
-    realtimeVoice: realtimeVoice.value,
+    ...realtimeVoiceDrafts.settings(),
     speechToSpeechRealtimeUrl: speechToSpeechRealtimeUrl.value,
     speechToSpeechAuthToken: speechToSpeechAuthToken.value,
     backendModel: backendModel.value,
@@ -581,7 +589,8 @@ function fingerprint(value) {
     realtimeProvider: value.realtimeProvider,
     agentProtocol: value.agentProtocol,
     realtimeModel: value.realtimeModel,
-    realtimeVoice: value.realtimeVoice,
+    audioRealtimeVoice: value.audioRealtimeVoice,
+    omniRealtimeVoice: value.omniRealtimeVoice,
     speechToSpeechRealtimeUrl: value.speechToSpeechRealtimeUrl,
     speechToSpeechAuthToken: value.speechToSpeechAuthToken,
     backendModel: value.backendModel,
@@ -781,7 +790,8 @@ function render() {
   renderBackendOptions(settings.agentProtocol || 'none')
   realtimeModel.value = settings.realtimeModel
     || 'qwen-audio-3.0-realtime-plus'
-  realtimeVoice.value = settings.realtimeVoice || 'longanqian'
+  realtimeVoiceDrafts = createRealtimeVoiceDrafts(settings)
+  renderRealtimeVoice()
   speechToSpeechRealtimeUrl.value = settings.speechToSpeechRealtimeUrl || ''
   speechToSpeechAuthToken.value = settings.speechToSpeechAuthToken || ''
   renderRealtimeProvider(settings.realtimeProvider)
@@ -809,12 +819,16 @@ for (const control of [
 ]) {
   control.addEventListener('input', () => {
     showMessage('')
+    if (control === realtimeVoice) realtimeVoiceDrafts.update(realtimeVoice.value)
     updateApplyState()
   })
   control.addEventListener('change', () => {
     showMessage('')
     if (realtimeProviderInputs.includes(control)) {
       renderRealtimeProvider(control.value, { populateDefault: true })
+    }
+    if (control === realtimeModel) {
+      renderRealtimeVoice()
     }
     updateApplyState()
   })

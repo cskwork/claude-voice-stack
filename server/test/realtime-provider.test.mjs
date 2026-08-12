@@ -365,7 +365,7 @@ test('resolves exact DashScope model profiles for sessions and responses', t => 
     ],
   ]) {
     config.audioModel = model
-    config.audioVoice = voice
+    config.audioVoice = ''
     const profile = REALTIME_PROVIDERS.qwen.modelProfile()
     const session = REALTIME_PROVIDERS.qwen.buildSession({ configured: false })
 
@@ -386,6 +386,22 @@ test('resolves exact DashScope model profiles for sessions and responses', t => 
       ['text', 'audio'],
     )
   }
+})
+
+test('prefers the selected DashScope family voice override over the profile default', t => {
+  const originalModel = config.audioModel
+  const originalVoice = config.audioVoice
+  t.after(() => {
+    config.audioModel = originalModel
+    config.audioVoice = originalVoice
+  })
+
+  config.audioModel = DASHSCOPE_OMNI_PLUS_REALTIME_MODEL
+  config.audioVoice = 'custom-omni'
+  assert.equal(
+    REALTIME_PROVIDERS.qwen.buildSession({ configured: false }).voice,
+    'custom-omni',
+  )
 })
 
 test('advertises Omni model vision without admitting unsupported visual transport', t => {

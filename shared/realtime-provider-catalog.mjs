@@ -168,20 +168,14 @@ export function resolveDashScopeRealtimeModelProfile(
   })
 }
 
-export function voiceForDashScopeRealtimeModelSwitch({
-  previousModel = DEFAULT_DASHSCOPE_REALTIME_MODEL,
-  nextModel = DEFAULT_DASHSCOPE_REALTIME_MODEL,
-  currentVoice = '',
-} = {}) {
-  const voice = clean(currentVoice)
-  const previousDefault = resolveDashScopeRealtimeModelProfile(previousModel)
-    .sessionDefaults.voice
-  const nextDefault = resolveDashScopeRealtimeModelProfile(nextModel)
-    .sessionDefaults.voice || DEFAULT_DASHSCOPE_REALTIME_VOICE
-  if (!voice || (previousDefault && voice === previousDefault)) {
-    return nextDefault
-  }
-  return voice
+export function resolveDashScopeRealtimeVoiceOverride(
+  model = DEFAULT_DASHSCOPE_REALTIME_MODEL,
+  env = process.env,
+) {
+  const family = resolveDashScopeRealtimeModelProfile(model).family
+  if (family === 'audio') return clean(env.QWEN_AUDIO_REALTIME_VOICE)
+  if (family === 'omni') return clean(env.QWEN_OMNI_REALTIME_VOICE)
+  return ''
 }
 
 export function realtimeProviderNames() {
@@ -224,12 +218,10 @@ export function resolveRealtimeFrontendConfiguration(env = process.env) {
   )
   const dashscopeModel = clean(env.QWEN_AUDIO_REALTIME_MODEL)
     || DEFAULT_DASHSCOPE_REALTIME_MODEL
-  const dashscopeModelProfile = resolveDashScopeRealtimeModelProfile(
+  const dashscopeVoice = resolveDashScopeRealtimeVoiceOverride(
     dashscopeModel,
+    env,
   )
-  const dashscopeVoice = clean(env.QWEN_AUDIO_REALTIME_VOICE)
-    || dashscopeModelProfile.sessionDefaults.voice
-    || DEFAULT_DASHSCOPE_REALTIME_VOICE
   const speechToSpeechRealtimeUrl = withoutTrailing(
     env.SPEECH_TO_SPEECH_REALTIME_URL
     || env.S2S_REALTIME_URL

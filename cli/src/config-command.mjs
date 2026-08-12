@@ -5,7 +5,6 @@ import {
   DEFAULT_DASHSCOPE_REALTIME_MODEL,
   listDashScopeRealtimeModelProfiles,
   resolveDashScopeRealtimeModelProfile,
-  voiceForDashScopeRealtimeModelSwitch,
 } from '../../shared/realtime-provider-catalog.mjs'
 
 export const GATEWAY_RESTART_FOLLOW_UP = '配置已更新；请执行 qwenaudio gateway restart 使 Gateway 使用新模型'
@@ -22,11 +21,6 @@ export function resolveConfigModel(env = {}, content = '') {
   return String(env.QWEN_AUDIO_REALTIME_MODEL || match?.[1] || DEFAULT_DASHSCOPE_REALTIME_MODEL).trim()
 }
 
-function configValue(content, key) {
-  const match = content.match(new RegExp(`^\\s*${key}\\s*=\\s*(.*?)\\s*$`, 'm'))
-  return String(match?.[1] || '').trim()
-}
-
 export function assertKnownRealtimeModel(model) {
   const profile = resolveDashScopeRealtimeModelProfile(model)
   if (!listDashScopeRealtimeModelProfiles().some(item => item.id === model)) {
@@ -40,15 +34,8 @@ export function updateRealtimeModelConfig(configPath, model, {
 } = {}) {
   assertKnownRealtimeModel(model)
   const existing = configText(configPath)
-  const previousModel = resolveConfigModel({}, existing)
-  const voice = voiceForDashScopeRealtimeModelSwitch({
-    previousModel,
-    nextModel: model,
-    currentVoice: configValue(existing, 'QWEN_AUDIO_REALTIME_VOICE'),
-  })
   const assignments = new Map([
     ['QWEN_AUDIO_REALTIME_MODEL', model],
-    ['QWEN_AUDIO_REALTIME_VOICE', voice],
   ])
   const newline = existing.includes('\r\n') ? '\r\n' : '\n'
   const lines = existing ? existing.split(/\r?\n/) : []
@@ -56,7 +43,7 @@ export function updateRealtimeModelConfig(configPath, model, {
   const replaced = new Set()
   const normalized = []
   for (const current of lines) {
-    const match = current.match(/^\s*(QWEN_AUDIO_REALTIME_(?:MODEL|VOICE))\s*=.*$/)
+    const match = current.match(/^\s*(QWEN_AUDIO_REALTIME_MODEL)\s*=.*$/)
     const key = match?.[1]
     if (!key) {
       normalized.push(current)
@@ -89,7 +76,6 @@ export function updateRealtimeModelConfig(configPath, model, {
   }
   return {
     model,
-    voice,
     profile: resolveDashScopeRealtimeModelProfile(model),
     configPath,
   }

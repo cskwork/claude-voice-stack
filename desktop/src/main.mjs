@@ -1049,7 +1049,10 @@ ipcMain.handle('qwen-audio-agent:settings-save', async (event, settings) => {
   )
   const backendChanged = previous.agentProtocol !== normalized.agentProtocol
   const realtimeModelChanged = previous.realtimeModel !== normalized.realtimeModel
-  const realtimeVoiceChanged = previous.realtimeVoice !== normalized.realtimeVoice
+  const realtimeVoiceChanged = (
+    previous.audioRealtimeVoice !== normalized.audioRealtimeVoice
+    || previous.omniRealtimeVoice !== normalized.omniRealtimeVoice
+  )
   const speechToSpeechChanged = (
     previous.speechToSpeechRealtimeUrl
       !== normalized.speechToSpeechRealtimeUrl
