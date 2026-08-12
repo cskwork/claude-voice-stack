@@ -1383,6 +1383,10 @@ export function attachRealtimeGateway(server, {
           recentMessages: conversationSync.frontendContext({ ownerId, sessionId }),
         },
         onEvent: handleEvent,
+        onDiagnostic: diagnostic => {
+          const { event, ...fields } = diagnostic
+          connectionLogger.warn(event, fields)
+        },
         onError: error => {
           const classification = createdFrontend.provider.classifyError(error.message)
           if (classification !== 'inactivity') {
