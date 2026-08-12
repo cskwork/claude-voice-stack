@@ -66,6 +66,31 @@ test('selects the model profile voice when Omni is configured without an overrid
   )
 })
 
+test('moves model default voices while preserving desktop custom voices', () => {
+  const audio = [
+    'QWEN_AUDIO_REALTIME_MODEL=qwen-audio-3.0-realtime-flash',
+    'QWEN_AUDIO_REALTIME_VOICE=longanqian',
+    '',
+  ].join('\n')
+  const omni = updateSettingsContent(audio, {
+    realtimeModel: 'qwen3.5-omni-plus-realtime',
+    realtimeVoice: 'longanqian',
+  })
+  assert.match(omni, /QWEN_AUDIO_REALTIME_VOICE=Ethan/)
+
+  const backToAudio = updateSettingsContent(omni, {
+    realtimeModel: 'qwen-audio-3.0-realtime-plus',
+    realtimeVoice: 'Ethan',
+  })
+  assert.match(backToAudio, /QWEN_AUDIO_REALTIME_VOICE=longanqian/)
+
+  const custom = updateSettingsContent(audio, {
+    realtimeModel: 'qwen3.5-omni-flash-realtime',
+    realtimeVoice: 'custom-voice',
+  })
+  assert.match(custom, /QWEN_AUDIO_REALTIME_VOICE=custom-voice/)
+})
+
 test('updates client settings without changing Gateway-owned configuration', () => {
   const content = updateSettingsContent([
     '# local settings',
@@ -426,6 +451,7 @@ test('desktop settings expose the embedded voice service without editing backend
   assert.match(html, /id="get-api-key"/)
   assert.match(html, /id="realtime-base-url"/)
   assert.match(html, /id="realtime-model"/)
+  assert.match(html, /value="qwen-audio-3\.0-realtime-flash"/)
   assert.match(html, /id="realtime-voice"/)
   assert.match(html, /id="backend-model"/)
   assert.match(html, /id="auto-hide-seconds"/)

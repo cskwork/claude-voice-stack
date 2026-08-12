@@ -125,7 +125,7 @@ qwenaudio config
 
 ```dotenv
 DASHSCOPE_API_KEY=your-key
-# 语音前台模型：Omni Flash、Omni Plus 或旧版 Audio Plus（默认）
+# 语音前台模型：Omni Flash/Plus 或 Audio Flash/Plus（Plus 默认）
 QWEN_AUDIO_REALTIME_MODEL=qwen-audio-3.0-realtime-plus
 # 后台Agent：可选，不设置或设置为 none 时，启动仅前台模式
 AGENT_PROTOCOL=openclaw

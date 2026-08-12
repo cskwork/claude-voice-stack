@@ -134,7 +134,7 @@ qwenaudio config
 
 ```dotenv
 DASHSCOPE_API_KEY=your-key
-# Voice frontend model: Omni Flash, Omni Plus, or legacy Audio Plus (default)
+# Voice frontend model: Omni Flash/Plus or Audio Flash/Plus (Plus is default)
 QWEN_AUDIO_REALTIME_MODEL=qwen-audio-3.0-realtime-plus
 # Backend Agent: optional, leave empty or set to none for frontend-only mode
 AGENT_PROTOCOL=openclaw

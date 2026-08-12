@@ -5,11 +5,13 @@ import {
   DEFAULT_DASHSCOPE_REALTIME_MODEL,
   listDashScopeRealtimeModelProfiles,
   resolveDashScopeRealtimeModelProfile,
+  voiceForDashScopeRealtimeModelSwitch,
 } from '../shared/realtime-provider-catalog.mjs'
 
 const OMNI_FLASH_ID = 'qwen3.5-omni-flash-realtime'
 const OMNI_PLUS_ID = 'qwen3.5-omni-plus-realtime'
-const LEGACY_AUDIO_ID = 'qwen-audio-3.0-realtime-plus'
+const AUDIO_PLUS_ID = 'qwen-audio-3.0-realtime-plus'
+const AUDIO_FLASH_ID = 'qwen-audio-3.0-realtime-flash'
 
 const omniModelCapabilities = {
   textInput: true,
@@ -58,8 +60,30 @@ test('lists the exact DashScope realtime model catalog in product order', () => 
       transportCapabilities: omniTransportCapabilities,
     },
     {
-      id: LEGACY_AUDIO_ID,
+      id: AUDIO_PLUS_ID,
       label: 'Qwen Audio 3.0 Realtime Plus',
+      family: 'audio',
+      sessionDefaults: legacySessionDefaults,
+      modelCapabilities: {
+        textInput: true,
+        audioInput: true,
+        imageInput: false,
+        videoInput: false,
+        textOutput: true,
+        audioOutput: true,
+        functionCalling: true,
+      },
+      transportCapabilities: {
+        textInput: true,
+        audioInput: true,
+        imageInput: false,
+        observationInput: false,
+        nativeVideoInput: false,
+      },
+    },
+    {
+      id: AUDIO_FLASH_ID,
+      label: 'Qwen Audio 3.0 Realtime Flash',
       family: 'audio',
       sessionDefaults: legacySessionDefaults,
       modelCapabilities: {
@@ -82,8 +106,13 @@ test('lists the exact DashScope realtime model catalog in product order', () => 
   ])
 })
 
-test('resolves Flash, Plus, and legacy profiles by exact model id', () => {
-  for (const modelId of [OMNI_FLASH_ID, OMNI_PLUS_ID, LEGACY_AUDIO_ID]) {
+test('resolves Omni and Audio Flash and Plus profiles by exact model id', () => {
+  for (const modelId of [
+    OMNI_FLASH_ID,
+    OMNI_PLUS_ID,
+    AUDIO_PLUS_ID,
+    AUDIO_FLASH_ID,
+  ]) {
     assert.equal(resolveDashScopeRealtimeModelProfile(modelId).id, modelId)
   }
   assert.equal(
@@ -98,11 +127,33 @@ test('resolves Flash, Plus, and legacy profiles by exact model id', () => {
 })
 
 test('keeps the legacy model as the default', () => {
-  assert.equal(DEFAULT_DASHSCOPE_REALTIME_MODEL, LEGACY_AUDIO_ID)
+  assert.equal(DEFAULT_DASHSCOPE_REALTIME_MODEL, AUDIO_PLUS_ID)
   assert.equal(
     resolveDashScopeRealtimeModelProfile().id,
     DEFAULT_DASHSCOPE_REALTIME_MODEL,
   )
+})
+
+test('moves model defaults while preserving custom voices', () => {
+  assert.equal(voiceForDashScopeRealtimeModelSwitch({
+    previousModel: AUDIO_PLUS_ID,
+    nextModel: OMNI_PLUS_ID,
+  }), 'Ethan')
+  assert.equal(voiceForDashScopeRealtimeModelSwitch({
+    previousModel: AUDIO_FLASH_ID,
+    nextModel: OMNI_FLASH_ID,
+    currentVoice: 'longanqian',
+  }), 'Ethan')
+  assert.equal(voiceForDashScopeRealtimeModelSwitch({
+    previousModel: OMNI_PLUS_ID,
+    nextModel: AUDIO_PLUS_ID,
+    currentVoice: 'Ethan',
+  }), 'longanqian')
+  assert.equal(voiceForDashScopeRealtimeModelSwitch({
+    previousModel: AUDIO_PLUS_ID,
+    nextModel: OMNI_PLUS_ID,
+    currentVoice: 'custom-voice',
+  }), 'custom-voice')
 })
 
 test('exposes immutable catalog profiles and nested capabilities', () => {
@@ -150,10 +201,10 @@ test('fails closed for unknown model ids without name-based capability inference
   assert.equal(Object.isFrozen(profile.transportCapabilities), true)
   assert.notEqual(
     profile.modelCapabilities,
-    resolveDashScopeRealtimeModelProfile(LEGACY_AUDIO_ID).modelCapabilities,
+    resolveDashScopeRealtimeModelProfile(AUDIO_PLUS_ID).modelCapabilities,
   )
   assert.notEqual(
     profile.transportCapabilities,
-    resolveDashScopeRealtimeModelProfile(LEGACY_AUDIO_ID).transportCapabilities,
+    resolveDashScopeRealtimeModelProfile(AUDIO_PLUS_ID).transportCapabilities,
   )
 })

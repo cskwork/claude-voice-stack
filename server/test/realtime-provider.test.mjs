@@ -11,6 +11,7 @@ import {
 } from '../src/voice/realtime-provider.mjs'
 import { validateRealtimeProvider } from '../src/voice/providers/registry.mjs'
 import {
+  DASHSCOPE_AUDIO_FLASH_REALTIME_MODEL,
   DASHSCOPE_OMNI_FLASH_REALTIME_MODEL,
   DASHSCOPE_OMNI_PLUS_REALTIME_MODEL,
   DEFAULT_DASHSCOPE_REALTIME_MODEL,
@@ -521,6 +522,7 @@ test('publishes the active DashScope profile without assigning one to s2s', t =>
       DASHSCOPE_OMNI_FLASH_REALTIME_MODEL,
       DASHSCOPE_OMNI_PLUS_REALTIME_MODEL,
       DEFAULT_DASHSCOPE_REALTIME_MODEL,
+      DASHSCOPE_AUDIO_FLASH_REALTIME_MODEL,
     ],
   )
   assert.equal(REALTIME_PROVIDERS['speech-to-speech'].modelProfile, undefined)

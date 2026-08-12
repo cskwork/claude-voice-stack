@@ -436,7 +436,30 @@ test('atomically preserves config comments and unknown keys', () => {
   assert.match(content, /DASHSCOPE_API_KEY=secret/)
   assert.match(content, /UNKNOWN_KEY=value/)
   assert.match(content, /QWEN_AUDIO_REALTIME_MODEL=qwen3\.5-omni-flash-realtime/)
-  assert.equal(statSync(path).mode & 0o777, 0o600)
+  assert.match(content, /QWEN_AUDIO_REALTIME_VOICE=Ethan/)
+  if (process.platform !== 'win32') {
+    assert.equal(statSync(path).mode & 0o777, 0o600)
+  }
+})
+
+test('moves default voices across model families and preserves custom voices', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'qwaudio-config-voice-'))
+  const path = join(directory, 'config.env')
+  writeFileSync(path, [
+    'QWEN_AUDIO_REALTIME_MODEL=qwen-audio-3.0-realtime-flash',
+    'QWEN_AUDIO_REALTIME_VOICE=longanqian',
+    '',
+  ].join('\n'))
+  updateRealtimeModelConfig(path, 'qwen3.5-omni-plus-realtime')
+  assert.match(readFileSync(path, 'utf8'), /QWEN_AUDIO_REALTIME_VOICE=Ethan/)
+
+  writeFileSync(path, [
+    'QWEN_AUDIO_REALTIME_MODEL=qwen3.5-omni-plus-realtime',
+    'QWEN_AUDIO_REALTIME_VOICE=custom-voice',
+    '',
+  ].join('\n'))
+  updateRealtimeModelConfig(path, 'qwen-audio-3.0-realtime-plus')
+  assert.match(readFileSync(path, 'utf8'), /QWEN_AUDIO_REALTIME_VOICE=custom-voice/)
 })
 
 test('normalizes duplicate realtime model assignments to one effective value', () => {
@@ -466,6 +489,7 @@ test('rejects unknown models and config show redacts credentials', () => {
   const output = showConfig({ configPath: path, env: { DASHSCOPE_API_KEY: 'secret' } })
   assert.doesNotMatch(output, /secret|DASHSCOPE_API_KEY/)
   assert.match(output, /qwen-audio-3\.0-realtime-plus/)
+  assert.match(output, /qwen-audio-3\.0-realtime-flash/)
   assert.match(showConfig({
     configPath: path,
     env: { QWEN_AUDIO_REALTIME_MODEL: 'qwen3.5-omni-plus-realtime' },

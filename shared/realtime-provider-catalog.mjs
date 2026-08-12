@@ -6,6 +6,7 @@ export const DEFAULT_DASHSCOPE_REALTIME_VOICE = 'longanqian'
 export const DEFAULT_DASHSCOPE_REALTIME_URL = 'wss://dashscope.aliyuncs.com/api-ws/v1/realtime'
 export const DEFAULT_SPEECH_TO_SPEECH_REALTIME_URL = 'ws://127.0.0.1:8765/v1/realtime'
 
+export const DASHSCOPE_AUDIO_FLASH_REALTIME_MODEL = 'qwen-audio-3.0-realtime-flash'
 export const DASHSCOPE_OMNI_FLASH_REALTIME_MODEL = 'qwen3.5-omni-flash-realtime'
 export const DASHSCOPE_OMNI_PLUS_REALTIME_MODEL = 'qwen3.5-omni-plus-realtime'
 
@@ -103,6 +104,14 @@ export const DASHSCOPE_REALTIME_MODEL_PROFILES = Object.freeze([
     modelCapabilities: LEGACY_MODEL_CAPABILITIES,
     transportCapabilities: LEGACY_TRANSPORT_CAPABILITIES,
   }),
+  Object.freeze({
+    id: DASHSCOPE_AUDIO_FLASH_REALTIME_MODEL,
+    label: 'Qwen Audio 3.0 Realtime Flash',
+    family: 'audio',
+    sessionDefaults: DASHSCOPE_AUDIO_REALTIME_SESSION_DEFAULTS,
+    modelCapabilities: LEGACY_MODEL_CAPABILITIES,
+    transportCapabilities: LEGACY_TRANSPORT_CAPABILITIES,
+  }),
 ])
 
 const DASHSCOPE_REALTIME_MODEL_PROFILE_BY_ID = new Map(
@@ -157,6 +166,22 @@ export function resolveDashScopeRealtimeModelProfile(
     modelCapabilities: UNKNOWN_MODEL_CAPABILITIES,
     transportCapabilities: UNKNOWN_TRANSPORT_CAPABILITIES,
   })
+}
+
+export function voiceForDashScopeRealtimeModelSwitch({
+  previousModel = DEFAULT_DASHSCOPE_REALTIME_MODEL,
+  nextModel = DEFAULT_DASHSCOPE_REALTIME_MODEL,
+  currentVoice = '',
+} = {}) {
+  const voice = clean(currentVoice)
+  const previousDefault = resolveDashScopeRealtimeModelProfile(previousModel)
+    .sessionDefaults.voice
+  const nextDefault = resolveDashScopeRealtimeModelProfile(nextModel)
+    .sessionDefaults.voice || DEFAULT_DASHSCOPE_REALTIME_VOICE
+  if (!voice || (previousDefault && voice === previousDefault)) {
+    return nextDefault
+  }
+  return voice
 }
 
 export function realtimeProviderNames() {

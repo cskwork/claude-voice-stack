@@ -15,6 +15,7 @@ import {
   DEFAULT_SPEECH_TO_SPEECH_REALTIME_URL,
   normalizeRealtimeProvider,
   resolveDashScopeRealtimeModelProfile,
+  voiceForDashScopeRealtimeModelSwitch,
 } from '../../shared/realtime-provider-catalog.mjs'
 
 const DEFAULTS = {
@@ -371,10 +372,27 @@ export function realtimeSettingsConfigured(settings = {}) {
 }
 
 export function updateSettingsContent(content = '', settings = {}) {
-  const normalized = normalizeSettings(settings)
+  const previous = parseSettings(content)
+  const nextModel = String(
+    settings.realtimeModel ?? previous.realtimeModel,
+  ).trim() || DEFAULTS.realtimeModel
+  const effectiveSettings = (
+    settings.realtimeModel !== undefined
+    && nextModel !== previous.realtimeModel
+  )
+    ? {
+        ...settings,
+        realtimeVoice: voiceForDashScopeRealtimeModelSwitch({
+          previousModel: previous.realtimeModel,
+          nextModel,
+          currentVoice: settings.realtimeVoice ?? previous.realtimeVoice,
+        }),
+      }
+    : settings
+  const normalized = normalizeSettings(effectiveSettings)
   const values = Object.fromEntries(
     Object.entries(SETTING_KEYS)
-      .filter(([field]) => settings[field] !== undefined)
+      .filter(([field]) => effectiveSettings[field] !== undefined)
       .map(([field, key]) => [
         key,
         encoded(normalized[field]),

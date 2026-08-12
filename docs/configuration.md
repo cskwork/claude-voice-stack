@@ -677,8 +677,9 @@ The exact supported IDs are:
 | `qwen3.5-omni-flash-realtime` | text, audio, image | text, audio | text, audio |
 | `qwen3.5-omni-plus-realtime` | text, audio, image | text, audio | text, audio |
 | `qwen-audio-3.0-realtime-plus` (default) | text, audio | text, audio | text, audio |
+| `qwen-audio-3.0-realtime-flash` | text, audio | text, audio | text, audio |
 
-All three profiles support Function Calling. Model capability is not the same as an implemented
+All four profiles support Function Calling. Model capability is not the same as an implemented
 client transport: JPEG observation frames and native video are both disabled in this release.
 WebUI and TUI read the authoritative profile from Gateway health and only display it. Separate
 clients cannot select conflicting models on one Gateway. A Desktop attached to a borrowed

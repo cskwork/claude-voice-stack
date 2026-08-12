@@ -606,8 +606,9 @@ qwenaudio gateway restart
 | `qwen3.5-omni-flash-realtime` | 文本、音频、图片 | 文本、音频 | 文本、音频 |
 | `qwen3.5-omni-plus-realtime` | 文本、音频、图片 | 文本、音频 | 文本、音频 |
 | `qwen-audio-3.0-realtime-plus`（默认） | 文本、音频 | 文本、音频 | 文本、音频 |
+| `qwen-audio-3.0-realtime-flash` | 文本、音频 | 文本、音频 | 文本、音频 |
 
-三个档案都支持 Function Calling。模型能力不等于客户端已经实现的传输能力：本版本
+四个档案都支持 Function Calling。模型能力不等于客户端已经实现的传输能力：本版本
 仍关闭 JPEG 观察帧和原生视频传输。WebUI 与 TUI 从 Gateway health 读取权威档案并
 只读展示；同一 Gateway 上的不同客户端不能选择互相冲突的模型。桌面版附着到借用的
 Gateway 时，或后续 CLI 运行时使用了冲突的已配置模型时，会拒绝不一致，而不会静默

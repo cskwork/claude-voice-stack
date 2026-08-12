@@ -5,6 +5,7 @@ import {
   DEFAULT_DASHSCOPE_REALTIME_MODEL,
   listDashScopeRealtimeModelProfiles,
   resolveDashScopeRealtimeModelProfile,
+  voiceForDashScopeRealtimeModelSwitch,
 } from '../../shared/realtime-provider-catalog.mjs'
 
 export const GATEWAY_RESTART_FOLLOW_UP = '配置已更新；请执行 qwenaudio gateway restart 使 Gateway 使用新模型'
@@ -21,6 +22,11 @@ export function resolveConfigModel(env = {}, content = '') {
   return String(env.QWEN_AUDIO_REALTIME_MODEL || match?.[1] || DEFAULT_DASHSCOPE_REALTIME_MODEL).trim()
 }
 
+function configValue(content, key) {
+  const match = content.match(new RegExp(`^\\s*${key}\\s*=\\s*(.*?)\\s*$`, 'm'))
+  return String(match?.[1] || '').trim()
+}
+
 export function assertKnownRealtimeModel(model) {
   const profile = resolveDashScopeRealtimeModelProfile(model)
   if (!listDashScopeRealtimeModelProfiles().some(item => item.id === model)) {
@@ -34,21 +40,34 @@ export function updateRealtimeModelConfig(configPath, model, {
 } = {}) {
   assertKnownRealtimeModel(model)
   const existing = configText(configPath)
-  const line = `QWEN_AUDIO_REALTIME_MODEL=${model}`
+  const previousModel = resolveConfigModel({}, existing)
+  const voice = voiceForDashScopeRealtimeModelSwitch({
+    previousModel,
+    nextModel: model,
+    currentVoice: configValue(existing, 'QWEN_AUDIO_REALTIME_VOICE'),
+  })
+  const assignments = new Map([
+    ['QWEN_AUDIO_REALTIME_MODEL', model],
+    ['QWEN_AUDIO_REALTIME_VOICE', voice],
+  ])
   const newline = existing.includes('\r\n') ? '\r\n' : '\n'
   const lines = existing ? existing.split(/\r?\n/) : []
   if (lines.at(-1) === '') lines.pop()
-  let replaced = false
+  const replaced = new Set()
   const normalized = []
   for (const current of lines) {
-    if (/^\s*QWEN_AUDIO_REALTIME_MODEL\s*=.*$/.test(current)) {
-      if (!replaced) normalized.push(line)
-      replaced = true
-    } else {
+    const match = current.match(/^\s*(QWEN_AUDIO_REALTIME_(?:MODEL|VOICE))\s*=.*$/)
+    const key = match?.[1]
+    if (!key) {
       normalized.push(current)
+      continue
     }
+    if (!replaced.has(key)) normalized.push(`${key}=${assignments.get(key)}`)
+    replaced.add(key)
   }
-  if (!replaced) normalized.push(line)
+  for (const [key, value] of assignments) {
+    if (!replaced.has(key)) normalized.push(`${key}=${value}`)
+  }
   const updated = `${normalized.join(newline)}${newline}`
   const directory = dirname(configPath)
   mkdirSync(directory, { recursive: true, mode: 0o700 })
@@ -68,7 +87,12 @@ export function updateRealtimeModelConfig(configPath, model, {
       try { fsyncSync(directoryFd) } finally { closeSync(directoryFd) }
     } catch {}
   }
-  return { model, profile: resolveDashScopeRealtimeModelProfile(model), configPath }
+  return {
+    model,
+    voice,
+    profile: resolveDashScopeRealtimeModelProfile(model),
+    configPath,
+  }
 }
 
 export function showConfig({ configPath, env = {}, content = configText(configPath) }) {
