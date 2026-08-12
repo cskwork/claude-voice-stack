@@ -585,10 +585,15 @@ export class RealtimeFrontend {
   armResponseInactivityTimeout(responseId, pending) {
     clearTimeout(pending.timer)
     pending.lastResponseActivityAt = Date.now()
-    pending.timer = setTimeout(() => {
+    const handleTimeout = () => {
       if (this.responseWaiters.get(responseId) !== pending) return
       const now = Date.now()
       const inactivityMs = now - pending.lastResponseActivityAt
+      const remainingMs = this.responseInactivityTimeoutMs - inactivityMs
+      if (remainingMs > 0) {
+        pending.timer = setTimeout(handleTimeout, remainingMs)
+        return
+      }
       try {
         this.onDiagnostic?.({
           event: 'realtime.response_timeout',
@@ -614,7 +619,8 @@ export class RealtimeFrontend {
         this.resolveIdle()
       }, 1000)
       recoveryTimer.unref?.()
-    }, this.responseInactivityTimeoutMs)
+    }
+    pending.timer = setTimeout(handleTimeout, this.responseInactivityTimeoutMs)
   }
 
   settlePending(pending, outcome) {
