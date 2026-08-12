@@ -8,6 +8,7 @@ import {
 } from '../../shared/backend-catalog.mjs'
 import {
   resolveRealtimeFrontendConfiguration,
+  resolveDashScopeRealtimeModelProfile,
 } from '../../shared/realtime-provider-catalog.mjs'
 import { validateAppUrl } from './security.mjs'
 
@@ -87,6 +88,21 @@ export function portInUse(host, port, timeoutMs = 300) {
 
 export function desktopGatewayCompatibility(health, env = process.env) {
   const expectedRealtime = resolveRealtimeFrontendConfiguration(env)
+  if (health?.realtimeModel || health?.realtimeModelProfile?.id) {
+    const actualModel = String(
+      health.realtimeModelProfile?.id || health.realtimeModel,
+    ).trim()
+    const expectedModel = resolveDashScopeRealtimeModelProfile(
+      expectedRealtime.dashscopeModel,
+    ).id
+    if (expectedRealtime.provider === 'dashscope' && actualModel !== expectedModel) {
+      return {
+        compatible: false,
+        code: 'realtime-model',
+        reason: '已有 Gateway 的 Realtime 模型与桌面设置不一致',
+      }
+    }
+  }
   if (
     health?.realtimeProvider !== expectedRealtime.provider
     || health?.realtimeConfigurationSignature !== expectedRealtime.signature
@@ -183,6 +199,17 @@ export function assertDesktopGatewayCompatibility(health, env = process.env) {
   const result = desktopGatewayCompatibility(health, env)
   if (!result.compatible) {
     throw new Error(`${result.reason}，请先关闭现有 Gateway`)
+  }
+}
+
+export function resolveBorrowedGatewayAttachment(active, env = process.env) {
+  const compatibility = desktopGatewayCompatibility(active?.health, env)
+  if (!compatibility.compatible && compatibility.code === 'realtime-model') {
+    throw new Error(`${compatibility.reason}，请先关闭现有 Gateway`)
+  }
+  return {
+    origin: active.origin,
+    compatibility,
   }
 }
 

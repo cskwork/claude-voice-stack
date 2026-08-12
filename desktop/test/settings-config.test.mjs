@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import {
+  normalizeSettings,
   parseSettings,
   realtimeSettingsConfigured,
   updateSettingsContent,
@@ -13,7 +14,8 @@ const REALTIME_DEFAULTS = {
   realtimeProvider: 'dashscope',
   realtimeBaseUrl: 'wss://dashscope.aliyuncs.com/api-ws/v1/realtime',
   realtimeModel: 'qwen-audio-3.0-realtime-plus',
-  realtimeVoice: 'longanqian',
+  audioRealtimeVoice: '',
+  omniRealtimeVoice: '',
   speechToSpeechRealtimeUrl: '',
   speechToSpeechAuthToken: '',
 }
@@ -48,6 +50,43 @@ test('shows effective client settings when user config is empty', () => {
     backendModel: '',
     nodePath: '',
   })
+})
+
+test('keeps profile defaults out of persisted desktop voice overrides', () => {
+  const settings = parseSettings(
+    'QWEN_AUDIO_REALTIME_MODEL=qwen3.5-omni-plus-realtime\n',
+  )
+
+  assert.equal(settings.realtimeModel, 'qwen3.5-omni-plus-realtime')
+  assert.equal(settings.audioRealtimeVoice, '')
+  assert.equal(settings.omniRealtimeVoice, '')
+  assert.equal(
+    normalizeSettings({
+      realtimeModel: 'qwen3.5-omni-flash-realtime',
+    }).omniRealtimeVoice,
+    '',
+  )
+})
+
+test('persists independent desktop voice overrides without changing them on model switch', () => {
+  const audio = [
+    'QWEN_AUDIO_REALTIME_MODEL=qwen-audio-3.0-realtime-flash',
+    'QWEN_AUDIO_REALTIME_VOICE=custom-audio',
+    'QWEN_OMNI_REALTIME_VOICE=custom-omni',
+    '',
+  ].join('\n')
+  const omni = updateSettingsContent(audio, {
+    realtimeModel: 'qwen3.5-omni-plus-realtime',
+  })
+  assert.match(omni, /QWEN_AUDIO_REALTIME_VOICE=custom-audio/)
+  assert.match(omni, /QWEN_OMNI_REALTIME_VOICE=custom-omni/)
+
+  const updated = updateSettingsContent(omni, {
+    audioRealtimeVoice: 'next-audio',
+    omniRealtimeVoice: '',
+  })
+  assert.match(updated, /QWEN_AUDIO_REALTIME_VOICE=next-audio/)
+  assert.doesNotMatch(updated, /QWEN_OMNI_REALTIME_VOICE=/)
 })
 
 test('updates client settings without changing Gateway-owned configuration', () => {
@@ -231,7 +270,7 @@ test('reads and updates a supported desktop wake shortcut', () => {
   )
 })
 
-test('updates the Qwen Audio endpoint, model, voice and clears a backend model', () => {
+test('updates the Qwen Audio endpoint, family voices and clears a backend model', () => {
   const content = updateSettingsContent([
     'QWEN_AUDIO_REALTIME_BASE_URL=wss://dashscope.aliyuncs.com/api-ws/v1/realtime',
     'QWEN_AUDIO_REALTIME_MODEL=qwen-audio-3.0-realtime-plus',
@@ -241,7 +280,8 @@ test('updates the Qwen Audio endpoint, model, voice and clears a backend model',
   ].join('\n'), {
     realtimeBaseUrl: 'wss://voice.example.test/v1/realtime',
     realtimeModel: 'compatible-audio-model',
-    realtimeVoice: 'custom-voice',
+    audioRealtimeVoice: 'custom-voice',
+    omniRealtimeVoice: 'custom-omni',
     backendModel: '',
   })
 
@@ -251,12 +291,14 @@ test('updates the Qwen Audio endpoint, model, voice and clears a backend model',
   )
   assert.match(content, /QWEN_AUDIO_REALTIME_MODEL=compatible-audio-model/)
   assert.match(content, /QWEN_AUDIO_REALTIME_VOICE=custom-voice/)
+  assert.match(content, /QWEN_OMNI_REALTIME_VOICE=custom-omni/)
   assert.match(content, /QWEN_AUDIO_AGENT_BACKEND_MODEL=\n?/)
 
   const settings = parseSettings(content)
   assert.equal(settings.realtimeBaseUrl, 'wss://voice.example.test/v1/realtime')
   assert.equal(settings.realtimeModel, 'compatible-audio-model')
-  assert.equal(settings.realtimeVoice, 'custom-voice')
+  assert.equal(settings.audioRealtimeVoice, 'custom-voice')
+  assert.equal(settings.omniRealtimeVoice, 'custom-omni')
 })
 
 test('supports the legacy Qwen Audio realtime URL alias', () => {
@@ -410,7 +452,12 @@ test('desktop settings expose the embedded voice service without editing backend
   assert.match(html, /id="get-api-key"/)
   assert.match(html, /id="realtime-base-url"/)
   assert.match(html, /id="realtime-model"/)
+  assert.match(html, /value="qwen-audio-3\.0-realtime-flash"/)
   assert.match(html, /id="realtime-voice"/)
+  assert.match(
+    html,
+    /data-provider-panel="dashscope"[\s\S]*id="realtime-voice"[\s\S]*data-provider-panel="speech-to-speech"/,
+  )
   assert.match(html, /id="backend-model"/)
   assert.match(html, /id="auto-hide-seconds"/)
   assert.match(html, /id="wake-shortcut"/)

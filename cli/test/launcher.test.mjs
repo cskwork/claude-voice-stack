@@ -1,8 +1,15 @@
 import assert from 'node:assert/strict'
 import { EventEmitter } from 'node:events'
+import { mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { tmpdir } from 'node:os'
 import { PassThrough } from 'node:stream'
 import test from 'node:test'
 import { main } from '../src/launcher.mjs'
+import {
+  showConfig,
+  updateRealtimeModelConfig,
+} from '../src/config-command.mjs'
 
 function harness({ ownsProcesses = false } = {}) {
   const calls = []
@@ -365,6 +372,125 @@ test('prints status and configuration without starting a service', async () => {
     'stdout',
     '/home/user/.config/qwaudio/config.env\n',
   ]])
+})
+
+test('shows and sets the Gateway model without restarting it', async () => {
+  const target = harness()
+  target.dependencies.prepareEnvironment = () => ({
+    configDirectory: '/home/user/.config/qwaudio',
+    configPath: '/home/user/.config/qwaudio/config.env',
+  })
+  target.dependencies.env = {
+    AGENT_PROTOCOL: 'opencode',
+  }
+  target.dependencies.updateConfig = (path, model) => {
+    target.calls.push(['config.set', path, model])
+  }
+  const show = await main(['config', 'show'], target.dependencies)
+  assert.equal(show, 0)
+  assert.match(target.calls.at(-1)[1], /Realtime 模型/)
+  const set = await main([
+    'config', 'set', '--realtime-model',
+    'qwen3.5-omni-plus-realtime',
+  ], target.dependencies)
+  assert.equal(set, 0)
+  assert.match(target.calls.at(-1)[1], /qwenaudio gateway restart/)
+  assert.deepEqual(target.calls.find(call => call[0] === 'config.set'), [
+    'config.set', '/home/user/.config/qwaudio/config.env',
+    'qwen3.5-omni-plus-realtime',
+  ])
+  assert.equal(target.calls.some(call => call[0] === 'runtime'), false)
+})
+
+test('warns when an environment model overrides config set', async () => {
+  const target = harness()
+  target.dependencies.prepareEnvironment = () => ({
+    configDirectory: '/home/user/.config/qwaudio',
+    configPath: '/home/user/.config/qwaudio/config.env',
+  })
+  target.dependencies.env = {
+    QWEN_AUDIO_REALTIME_MODEL: 'qwen-audio-3.0-realtime-plus',
+  }
+  target.dependencies.updateConfig = (path, model) => {
+    target.calls.push(['config.set', path, model])
+  }
+
+  assert.equal(await main([
+    'config', 'set', '--realtime-model',
+    'qwen3.5-omni-plus-realtime',
+  ], target.dependencies), 0)
+
+  const output = target.calls.find(call => call[0] === 'stdout')?.[1]
+  assert.match(output, /配置文件已更新/)
+  assert.match(output, /QWEN_AUDIO_REALTIME_MODEL 环境变量仍覆盖该值/)
+  assert.doesNotMatch(output, /Gateway 使用新模型/)
+})
+
+test('atomically preserves config comments and unknown keys', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'qwaudio-config-command-'))
+  const path = join(directory, 'config.env')
+  writeFileSync(path, '# keep me\nDASHSCOPE_API_KEY=secret\nUNKNOWN_KEY=value\nQWEN_AUDIO_REALTIME_MODEL=old\n')
+  updateRealtimeModelConfig(path, 'qwen3.5-omni-flash-realtime')
+  const content = readFileSync(path, 'utf8')
+  assert.match(content, /# keep me/)
+  assert.match(content, /DASHSCOPE_API_KEY=secret/)
+  assert.match(content, /UNKNOWN_KEY=value/)
+  assert.match(content, /QWEN_AUDIO_REALTIME_MODEL=qwen3\.5-omni-flash-realtime/)
+  assert.doesNotMatch(content, /QWEN_(?:AUDIO|OMNI)_REALTIME_VOICE=/)
+  if (process.platform !== 'win32') {
+    assert.equal(statSync(path).mode & 0o777, 0o600)
+  }
+})
+
+test('changes only the model and preserves both family voice overrides', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'qwaudio-config-voice-'))
+  const path = join(directory, 'config.env')
+  writeFileSync(path, [
+    'QWEN_AUDIO_REALTIME_MODEL=qwen-audio-3.0-realtime-flash',
+    'QWEN_AUDIO_REALTIME_VOICE=custom-audio',
+    'QWEN_OMNI_REALTIME_VOICE=custom-omni',
+    '',
+  ].join('\n'))
+  updateRealtimeModelConfig(path, 'qwen3.5-omni-plus-realtime')
+  const content = readFileSync(path, 'utf8')
+  assert.match(content, /QWEN_AUDIO_REALTIME_MODEL=qwen3\.5-omni-plus-realtime/)
+  assert.match(content, /QWEN_AUDIO_REALTIME_VOICE=custom-audio/)
+  assert.match(content, /QWEN_OMNI_REALTIME_VOICE=custom-omni/)
+})
+
+test('normalizes duplicate realtime model assignments to one effective value', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'qwaudio-config-duplicate-'))
+  const path = join(directory, 'config.env')
+  writeFileSync(path, [
+    'QWEN_AUDIO_REALTIME_MODEL=qwen-audio-3.0-realtime-plus',
+    '# keep the comment',
+    'QWEN_AUDIO_REALTIME_MODEL=qwen3.5-omni-flash-realtime',
+    '',
+  ].join('\n'))
+  updateRealtimeModelConfig(path, 'qwen3.5-omni-plus-realtime')
+  const content = readFileSync(path, 'utf8')
+  assert.equal(
+    content.match(/^QWEN_AUDIO_REALTIME_MODEL=/gm)?.length,
+    1,
+  )
+  assert.match(content, /QWEN_AUDIO_REALTIME_MODEL=qwen3\.5-omni-plus-realtime/)
+  assert.match(content, /# keep the comment/)
+})
+
+test('rejects unknown models and config show redacts credentials', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'qwaudio-config-show-'))
+  const path = join(directory, 'config.env')
+  writeFileSync(path, 'DASHSCOPE_API_KEY=secret\n')
+  assert.throws(() => updateRealtimeModelConfig(path, 'unknown-model'), /不支持的 Realtime 模型/)
+  const output = showConfig({ configPath: path, env: { DASHSCOPE_API_KEY: 'secret' } })
+  assert.doesNotMatch(output, /secret|DASHSCOPE_API_KEY/)
+  assert.match(output, /qwen-audio-3\.0-realtime-plus/)
+  assert.match(output, /qwen-audio-3\.0-realtime-flash/)
+  assert.match(showConfig({
+    configPath: path,
+    env: { QWEN_AUDIO_REALTIME_MODEL: 'qwen3.5-omni-plus-realtime' },
+    content: 'QWEN_AUDIO_REALTIME_MODEL=qwen-audio-3.0-realtime-plus\n',
+  }), /Realtime 模型：qwen3\.5-omni-plus-realtime/)
 })
 
 test('installs a backend through the injected installer', async () => {

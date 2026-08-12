@@ -1,12 +1,21 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { WebSocketServer } from 'ws'
+import { config } from '../src/core/config.mjs'
 import {
   buildFrontendInstructions,
+  describeActiveRealtime,
   REALTIME_PROVIDERS,
   RealtimeFrontend,
   realtimeEventErrorMessage,
 } from '../src/voice/realtime-provider.mjs'
+import { validateRealtimeProvider } from '../src/voice/providers/registry.mjs'
+import {
+  DASHSCOPE_AUDIO_FLASH_REALTIME_MODEL,
+  DASHSCOPE_OMNI_FLASH_REALTIME_MODEL,
+  DASHSCOPE_OMNI_PLUS_REALTIME_MODEL,
+  DEFAULT_DASHSCOPE_REALTIME_MODEL,
+} from '../../shared/realtime-provider-catalog.mjs'
 
 const FRONTEND_TOOL_NAMES = [
   'spawn_thinking',
@@ -322,6 +331,220 @@ test('configures Qwen Audio Realtime with Smart Turn only', () => {
     )).function.description,
     /用户回答“可以”.*应调用 always/,
   )
+})
+
+test('resolves exact DashScope model profiles for sessions and responses', t => {
+  const originalModel = config.audioModel
+  const originalVoice = config.audioVoice
+  t.after(() => {
+    config.audioModel = originalModel
+    config.audioVoice = originalVoice
+  })
+
+  for (const [model, label, family, voice, turnDetection] of [
+    [
+      DASHSCOPE_OMNI_FLASH_REALTIME_MODEL,
+      'Qwen3.5 Omni Flash Realtime',
+      'omni',
+      'Ethan',
+      { type: 'semantic_vad' },
+    ],
+    [
+      DASHSCOPE_OMNI_PLUS_REALTIME_MODEL,
+      'Qwen3.5 Omni Plus Realtime',
+      'omni',
+      'Ethan',
+      { type: 'semantic_vad' },
+    ],
+    [
+      DEFAULT_DASHSCOPE_REALTIME_MODEL,
+      'Qwen Audio 3.0 Realtime Plus',
+      'audio',
+      'longanqian',
+      { type: 'smart_turn' },
+    ],
+  ]) {
+    config.audioModel = model
+    config.audioVoice = ''
+    const profile = REALTIME_PROVIDERS.qwen.modelProfile()
+    const session = REALTIME_PROVIDERS.qwen.buildSession({ configured: false })
+
+    assert.equal(profile.id, model)
+    assert.equal(profile.label, label)
+    assert.equal(profile.family, family)
+    assert.equal(profile.sessionDefaults.voice, voice)
+    assert.equal(
+      createQwenFrontend().capabilities.conversationItemIdEcho,
+      family !== 'omni',
+    )
+    assert.equal(session.voice, voice)
+    assert.deepEqual(profile.sessionDefaults.turnDetection, turnDetection)
+    assert.deepEqual(session.turn_detection, turnDetection)
+    assert.deepEqual(session.modalities, ['text', 'audio'])
+    assert.deepEqual(
+      REALTIME_PROVIDERS.qwen.buildSpeakResponse('完成').modalities,
+      ['text', 'audio'],
+    )
+  }
+})
+
+test('prefers the selected DashScope family voice override over the profile default', t => {
+  const originalModel = config.audioModel
+  const originalVoice = config.audioVoice
+  t.after(() => {
+    config.audioModel = originalModel
+    config.audioVoice = originalVoice
+  })
+
+  config.audioModel = DASHSCOPE_OMNI_PLUS_REALTIME_MODEL
+  config.audioVoice = 'custom-omni'
+  assert.equal(
+    REALTIME_PROVIDERS.qwen.buildSession({ configured: false }).voice,
+    'custom-omni',
+  )
+})
+
+test('advertises Omni model vision without admitting unsupported visual transport', t => {
+  const originalModel = config.audioModel
+  t.after(() => {
+    config.audioModel = originalModel
+  })
+  config.audioModel = DASHSCOPE_OMNI_PLUS_REALTIME_MODEL
+
+  const profile = REALTIME_PROVIDERS.qwen.modelProfile()
+  const frontend = createQwenFrontend()
+
+  assert.equal(profile.modelCapabilities.imageInput, true)
+  assert.equal(profile.modelCapabilities.videoInput, false)
+  assert.equal(profile.transportCapabilities.imageInput, false)
+  assert.equal(profile.transportCapabilities.observationInput, false)
+  assert.equal(profile.transportCapabilities.nativeVideoInput, false)
+  assert.equal(frontend.modelProfile, profile)
+  assert.equal(frontend.modelCapabilities, profile.modelCapabilities)
+  assert.equal(frontend.transportCapabilities, profile.transportCapabilities)
+})
+
+test('fails closed for an unknown DashScope model without inferring Omni behavior', t => {
+  const originalModel = config.audioModel
+  t.after(() => {
+    config.audioModel = originalModel
+  })
+  config.audioModel = 'qwen3.5-omni-plus-realtime-future'
+
+  const profile = REALTIME_PROVIDERS.qwen.modelProfile()
+  const session = REALTIME_PROVIDERS.qwen.buildSession({ configured: false })
+
+  assert.equal(profile.family, 'unknown')
+  assert.deepEqual(Object.values(profile.modelCapabilities), Array(7).fill(false))
+  assert.deepEqual(Object.values(profile.transportCapabilities), Array(5).fill(false))
+  assert.deepEqual(session.modalities, [])
+  assert.deepEqual(
+    REALTIME_PROVIDERS.qwen.buildSpeakResponse('完成').modalities,
+    [],
+  )
+})
+
+test('rejects an unknown DashScope model before opening its WebSocket', async t => {
+  const originalModel = config.audioModel
+  t.after(() => {
+    config.audioModel = originalModel
+  })
+  config.audioModel = 'qwen3.5-omni-flash-realtime-future'
+  const frontend = createQwenFrontend()
+
+  await assert.rejects(
+    frontend.connect(),
+    /不支持的 Realtime 模型.*qwen3\.5-omni-flash-realtime-future.*Qwen-Audio-Realtime/,
+  )
+  assert.equal(frontend.ws, null)
+})
+
+test('rejects malformed optional realtime model profiles', () => {
+  const base = REALTIME_PROVIDERS.qwen
+  const valid = base.modelProfile()
+  const malformedProfiles = [
+    {},
+    { ...valid, id: '' },
+    { ...valid, label: '' },
+    { ...valid, family: '' },
+    {
+      ...valid,
+      modelCapabilities: {
+        ...valid.modelCapabilities,
+        imageInput: 'yes',
+      },
+    },
+    {
+      ...valid,
+      transportCapabilities: {
+        ...valid.transportCapabilities,
+        observationInput: undefined,
+      },
+    },
+    { ...valid, sessionDefaults: null },
+    { ...valid, sessionDefaults: { voice: 1, turnDetection: null } },
+    { ...valid, sessionDefaults: { voice: '  ', turnDetection: null } },
+    { ...valid, sessionDefaults: { voice: null, turnDetection: {} } },
+    { ...valid, sessionDefaults: { voice: null, turnDetection: { type: '  ' } } },
+  ]
+
+  for (const profile of malformedProfiles) {
+    assert.throws(
+      () => validateRealtimeProvider({
+        ...base,
+        key: 'malformed-profile',
+        modelProfile: () => profile,
+      }),
+      /modelProfile/,
+    )
+  }
+  assert.doesNotThrow(() => validateRealtimeProvider({
+    ...base,
+    key: 'null-profile',
+    modelProfile: () => null,
+  }))
+  const { modelProfile: _modelProfile, ...withoutProfile } = base
+  assert.doesNotThrow(() => validateRealtimeProvider({
+    ...withoutProfile,
+    key: 'profile-optional',
+  }))
+})
+
+test('publishes the active DashScope profile without assigning one to s2s', t => {
+  const originalModel = config.audioModel
+  const originalApiKey = config.dashscopeApiKey
+  t.after(() => {
+    config.audioModel = originalModel
+    config.dashscopeApiKey = originalApiKey
+  })
+  config.audioModel = DASHSCOPE_OMNI_FLASH_REALTIME_MODEL
+  config.dashscopeApiKey = 'configured-for-provider-list-test'
+
+  const active = describeActiveRealtime('dashscope')
+
+  assert.equal(active.modelProfile.id, DASHSCOPE_OMNI_FLASH_REALTIME_MODEL)
+  assert.equal(active.label, 'Qwen-Audio-Realtime')
+  assert.equal(active.modelProfile.label, 'Qwen3.5 Omni Flash Realtime')
+  assert.equal(active.modelCapabilities.imageInput, true)
+  assert.equal(active.transportCapabilities.imageInput, false)
+  assert.equal(
+    active.providers.find(provider => provider.key === 'dashscope')?.label,
+    'Qwen-Audio-Realtime',
+  )
+  assert.deepEqual(
+    active.providers.find(provider => provider.key === 'dashscope')
+      ?.realtimeModelIds,
+    [
+      DASHSCOPE_OMNI_FLASH_REALTIME_MODEL,
+      DASHSCOPE_OMNI_PLUS_REALTIME_MODEL,
+      DEFAULT_DASHSCOPE_REALTIME_MODEL,
+      DASHSCOPE_AUDIO_FLASH_REALTIME_MODEL,
+    ],
+  )
+  assert.equal(REALTIME_PROVIDERS['speech-to-speech'].modelProfile, undefined)
+  const s2s = describeActiveRealtime('speech-to-speech')
+  assert.equal(s2s.modelProfile, null)
+  assert.deepEqual(s2s.modelCatalog, [])
 })
 
 test('configures a text-only Qwen session without Smart Turn', () => {
@@ -710,6 +933,34 @@ test('can close a stale function call without creating a new model response', as
     item: { id: sent[0].item.id, type: 'function_call_output' },
   })
   await outcome
+})
+
+test('accepts an Omni conversation item receipt with a provider-assigned id', async () => {
+  const frontend = createQwenFrontend({
+    provider: {
+      ...REALTIME_PROVIDERS.qwen,
+      capabilities: {
+        ...REALTIME_PROVIDERS.qwen.capabilities,
+        conversationItemIdEcho: false,
+      },
+    },
+  })
+  const sent = []
+  frontend.ready = true
+  frontend.send = event => sent.push(event)
+
+  const created = frontend.createConversationItem({
+    type: 'message',
+    role: 'user',
+    content: [{ type: 'input_text', text: 'hi' }],
+  })
+  frontend.handleLifecycle({
+    type: 'conversation.item.created',
+    item: { id: 'item_provider_assigned', type: 'message', role: 'user' },
+  })
+
+  assert.equal((await created).id, 'item_provider_assigned')
+  assert.notEqual(sent[0].item.id, 'item_provider_assigned')
 })
 
 test('can give the model contextual guidance after an accepted tool call', async () => {
@@ -1285,6 +1536,7 @@ test('the Qwen provider exposes its supported realtime capabilities', () => {
     singleResponseSlot: false,
     responseMetadataCorrelation: false,
     perResponseInstructions: true,
+    conversationItemIdEcho: true,
   })
 })
 

@@ -159,6 +159,11 @@ export function assertGatewayCompatibility(health, backend) {
 
 export function assertRealtimeGatewayCompatibility(health, env = process.env) {
   const expected = resolveRealtimeFrontendConfiguration(env)
+  const requestedModel = String(env.QWEN_AUDIO_REALTIME_MODEL || '').trim()
+  const actualModel = String(health?.realtimeModelProfile?.id || health?.realtimeModel || '').trim()
+  if (requestedModel && actualModel && requestedModel !== actualModel) {
+    throw new Error(`现有 Gateway Realtime 模型 ${actualModel} 与请求 ${requestedModel} 不一致；请关闭旧 Gateway 后重试`)
+  }
   if (!String(health?.realtimeProvider || '').trim()) {
     throw new Error(
       '现有 Gateway 未报告完整的 Realtime 前台配置，无法安全复用',

@@ -369,11 +369,14 @@ stdio, and that adapter starts Codex App Server over its own local stdio
 protocol. Codex App Server may expose other transports, but they are not a
 remote ACP endpoint and must not leak into the shared ACP adapter.
 
-Desktop, TUI and WebUI are replaceable Gateway clients. They must never spawn,
-restart or stop the Gateway or a backend. Closing a UI therefore cannot affect
-queued work or the fixed backend Agent Session. Configuration that changes
-Realtime or backend behavior takes effect on the next Gateway start; changing a
-UI's Gateway URL only reconnects that UI.
+Desktop, TUI and WebUI are replaceable Gateway clients. The Gateway is the single
+owner of its active Realtime model and publishes the exact model profile and
+transport capabilities through health. Desktop may configure and restart only
+its locally owned Gateway; WebUI and TUI treat the profile as read-only. Borrowed
+or remote Gateway model mismatches are rejected rather than silently overridden.
+Closing a UI cannot affect queued work or the fixed backend Agent Session.
+Configuration that changes Realtime or backend behavior takes effect on the next
+Gateway start; changing a UI's Gateway URL only reconnects that UI.
 
 The macOS desktop renderer is packaged inside the application. Electron serves
 those immutable assets from a private, random loopback path and proxies only

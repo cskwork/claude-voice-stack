@@ -42,7 +42,9 @@ import {
   desktopGatewayCompatibility,
   desktopGatewayEnvironment,
   EmbeddedGateway,
+  resolveBorrowedGatewayAttachment,
 } from './gateway-process.mjs'
+import { remoteRealtimeModelOutcome } from './realtime-status.mjs'
 import {
   detectBackendSetups,
 } from './backend-detection.mjs'
@@ -227,24 +229,24 @@ function gatewayPort(origin) {
 }
 
 function attachRunningGateway(active, environment, event = 'gateway.reused') {
-  const compatibility = desktopGatewayCompatibility(active.health, environment)
-  borrowedGatewayOrigin = active.origin
+  const attachment = resolveBorrowedGatewayAttachment(active, environment)
+  borrowedGatewayOrigin = attachment.origin
   const fields = {
-    origin: active.origin,
+    origin: attachment.origin,
     instanceId: active.lease.instanceId,
     owner: active.lease.owner,
-    configurationMatch: compatibility.compatible,
+    configurationMatch: attachment.compatibility.compatible,
   }
-  if (compatibility.compatible) {
+  if (attachment.compatibility.compatible) {
     logger.info(event, fields)
   } else {
     logger.warn(`${event}_with_runtime_configuration`, {
       ...fields,
-      mismatch: compatibility.code,
-      reason: compatibility.reason,
+      mismatch: attachment.compatibility.code,
+      reason: attachment.compatibility.reason,
     })
   }
-  return active.origin
+  return attachment.origin
 }
 
 async function startLocalGateway(origin) {
@@ -356,6 +358,7 @@ async function runtimeStatus(target = appOrigin) {
     realtimeProvider: health?.realtimeProvider || null,
     realtimeLabel: health?.realtimeLabel || null,
     realtimeModel: health?.realtimeModel || null,
+    realtimeModelProfile: health?.realtimeModelProfile || null,
     voiceConfigured: health?.voiceConfigured === true,
     realtimeConnection: health?.voiceClients?.realtime || null,
     backend: health?.backend
@@ -1024,6 +1027,17 @@ ipcMain.handle('qwen-audio-agent:settings-save', async (event, settings) => {
     if (!remoteRuntime.gatewayConnected) {
       throw new Error(`无法连接 Gateway：${nextOrigin}`)
     }
+    const modelOutcome = remoteRealtimeModelOutcome(remoteRuntime, normalized)
+    if (modelOutcome) {
+      return {
+        ...modelOutcome,
+        settings: previous,
+        restarted: false,
+        restartRequired: false,
+        runtime: remoteRuntime,
+        wakeShortcutRegistered: desktopPresence.shortcutRegistered,
+      }
+    }
   }
   const gatewayChanged = nextOrigin !== configuredGatewayOrigin
   const apiKeyChanged = previous.dashscopeApiKey !== normalized.dashscopeApiKey
@@ -1035,7 +1049,10 @@ ipcMain.handle('qwen-audio-agent:settings-save', async (event, settings) => {
   )
   const backendChanged = previous.agentProtocol !== normalized.agentProtocol
   const realtimeModelChanged = previous.realtimeModel !== normalized.realtimeModel
-  const realtimeVoiceChanged = previous.realtimeVoice !== normalized.realtimeVoice
+  const realtimeVoiceChanged = (
+    previous.audioRealtimeVoice !== normalized.audioRealtimeVoice
+    || previous.omniRealtimeVoice !== normalized.omniRealtimeVoice
+  )
   const speechToSpeechChanged = (
     previous.speechToSpeechRealtimeUrl
       !== normalized.speechToSpeechRealtimeUrl

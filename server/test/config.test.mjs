@@ -8,6 +8,9 @@ import {
   resolveBackendWorkspace,
   resolveOpenCodeCoordinatorAgent,
 } from '../src/core/config.mjs'
+import {
+  resolveRealtimeFrontendConfiguration,
+} from '../../shared/realtime-provider-catalog.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 
@@ -158,4 +161,45 @@ test('uses only the unified backend model override', () => {
     claude: 'qwen3.7-max',
     acp: 'qwen3.7-max',
   })
+})
+
+test('changes the realtime configuration signature when only the model changes', () => {
+  const shared = {
+    DASHSCOPE_API_KEY: 'same-key',
+    QWEN_AUDIO_REALTIME_BASE_URL: 'wss://gateway.example/realtime',
+    QWEN_AUDIO_REALTIME_VOICE: 'same-voice',
+  }
+  const first = resolveRealtimeFrontendConfiguration({
+    ...shared,
+    QWEN_AUDIO_REALTIME_MODEL: 'qwen-audio-3.0-realtime-plus',
+  })
+  const second = resolveRealtimeFrontendConfiguration({
+    ...shared,
+    QWEN_AUDIO_REALTIME_MODEL: 'qwen3.5-omni-plus-realtime',
+  })
+
+  assert.notEqual(first.signature, second.signature)
+})
+
+test('selects only the explicit voice override for the active model family', () => {
+  const legacy = resolveRealtimeFrontendConfiguration({
+    DASHSCOPE_API_KEY: 'same-key',
+    QWEN_AUDIO_REALTIME_MODEL: 'qwen-audio-3.0-realtime-plus',
+    QWEN_AUDIO_REALTIME_VOICE: 'Cherry',
+    QWEN_OMNI_REALTIME_VOICE: 'Ethan-custom',
+  })
+  const omni = resolveRealtimeFrontendConfiguration({
+    DASHSCOPE_API_KEY: 'same-key',
+    QWEN_AUDIO_REALTIME_MODEL: 'qwen3.5-omni-plus-realtime',
+    QWEN_AUDIO_REALTIME_VOICE: 'Cherry',
+    QWEN_OMNI_REALTIME_VOICE: 'Ethan-custom',
+  })
+  const defaults = resolveRealtimeFrontendConfiguration({
+    DASHSCOPE_API_KEY: 'same-key',
+    QWEN_AUDIO_REALTIME_MODEL: 'qwen3.5-omni-plus-realtime',
+  })
+
+  assert.equal(legacy.dashscopeVoice, 'Cherry')
+  assert.equal(omni.dashscopeVoice, 'Ethan-custom')
+  assert.equal(defaults.dashscopeVoice, '')
 })

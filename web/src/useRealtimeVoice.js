@@ -51,6 +51,98 @@ export function retainedRealtimeProvider(selected, providers) {
   return offered ? selected : ''
 }
 
+const INPUT_CAPABILITIES = Object.freeze([
+  ['textInput', 'text'],
+  ['audioInput', 'audio'],
+  ['imageInput', 'image'],
+  ['videoInput', 'video'],
+])
+
+const TRANSPORT_INPUT_CAPABILITIES = Object.freeze([
+  ['textInput', 'text'],
+  ['audioInput', 'audio'],
+  ['imageInput', 'image'],
+  ['observationInput', 'observation'],
+  ['nativeVideoInput', 'nativeVideo'],
+])
+
+function enabledModes(capabilities, definitions) {
+  return definitions
+    .filter(([key]) => capabilities?.[key] === true)
+    .map(([, mode]) => mode)
+}
+
+function sameCapabilities(left, right) {
+  if (!left || !right) return false
+  const keys = new Set([...Object.keys(left), ...Object.keys(right)])
+  return [...keys].every(key => left[key] === right[key])
+}
+
+export function realtimeModelStatus(health = {}) {
+  const profile = health.realtimeModelProfile
+  const id = String(health.realtimeModel || profile?.id || '').trim()
+  const catalogProfile = Array.isArray(health.realtimeModelCatalog)
+    ? health.realtimeModelCatalog.find(item => item?.id === id)
+    : null
+  const hasProfile = Boolean(profile?.id)
+  const current = Boolean(
+    id
+    && profile?.id === id
+    && catalogProfile
+    && catalogProfile.label === profile.label
+    && catalogProfile.family === profile.family
+    && sameCapabilities(
+      catalogProfile.modelCapabilities,
+      profile.modelCapabilities,
+    )
+    && sameCapabilities(
+      catalogProfile.transportCapabilities,
+      profile.transportCapabilities,
+    )
+  )
+  const modelCapabilities = current ? profile.modelCapabilities : null
+  const transportCapabilities = current ? profile.transportCapabilities : null
+
+  return {
+    id,
+    label: current ? profile.label : id,
+    metadataStatus: current ? 'current' : hasProfile ? 'stale' : 'missing',
+    modelInputModes: enabledModes(modelCapabilities, INPUT_CAPABILITIES),
+    transportInputModes: enabledModes(
+      transportCapabilities,
+      TRANSPORT_INPUT_CAPABILITIES,
+    ),
+    imageInputEnabled: transportCapabilities?.imageInput === true,
+  }
+}
+
+export function realtimeProviderSelection(selected, health = {}) {
+  if (!selected) return { provider: '', recovered: false, notice: '' }
+  const advertised = Array.isArray(health.realtimeProviders)
+    ? health.realtimeProviders.find(provider => provider?.key === selected)
+    : null
+  const activeModelId = health.realtimeModelProfile?.id
+    || health.realtimeModel
+    || ''
+  const explicitlySupportsModel = (
+    !Array.isArray(advertised?.realtimeModelIds)
+    || !activeModelId
+    || advertised.realtimeModelIds.includes(activeModelId)
+  )
+  if (advertised && explicitlySupportsModel) {
+    return { provider: selected, recovered: false, notice: '' }
+  }
+  return {
+    provider: '',
+    recovered: true,
+    notice: '已恢复为服务器默认前台',
+  }
+}
+
+export function realtimeProviderForConnection(selected, healthValidated) {
+  return healthValidated === true ? selected : ''
+}
+
 export function microphoneControlEvent({
   enabled,
   inputOnlyMute = false,

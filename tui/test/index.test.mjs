@@ -17,8 +17,26 @@ import {
   permissionStatusText,
   performManualInterrupt,
   readTuiHealth,
+  realtimeModelStatusText,
   websocketUrl,
 } from '../src/index.mjs'
+
+test('renders active realtime profile and truthful visual transport support', () => {
+  assert.match(realtimeModelStatusText({
+    realtimeModelProfile: {
+      id: 'qwen3.5-omni-plus-realtime',
+      label: 'Qwen3.5 Omni Plus Realtime',
+      transportCapabilities: { imageInput: false, nativeVideoInput: false },
+    },
+  }), /Qwen3\.5 Omni Plus Realtime/)
+  assert.match(realtimeModelStatusText({
+    realtimeModelProfile: {
+      label: 'Qwen3.5 Omni Plus Realtime',
+      transportCapabilities: { imageInput: false, nativeVideoInput: false },
+    },
+  }), /视觉输入：未支持/)
+  assert.match(realtimeModelStatusText({ realtimeLabel: 'Legacy Audio' }), /Legacy Audio/)
+})
 
 test('m key controls microphone input without disabling voice output', () => {
   assert.deepEqual(microphoneControlEvent(true), {

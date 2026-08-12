@@ -659,6 +659,34 @@ You can also specify a different OpenCode user configuration directory via
 `QWEN_AUDIO_AGENT_OPENCODE_XDG_CONFIG_HOME`. After isolation, MCPs and plugins from the
 original global configuration are not automatically loaded.
 
+## Realtime model selection
+
+One Gateway owns one active Realtime model. The Desktop settings page can configure the model
+for a locally owned Gateway, and the CLI provides the equivalent commands:
+
+```bash
+qwenaudio config show
+qwenaudio config set --realtime-model qwen3.5-omni-flash-realtime
+qwenaudio gateway restart
+```
+
+The exact supported IDs are:
+
+| Model | Model input | Model output | Current client transport |
+| --- | --- | --- | --- |
+| `qwen3.5-omni-flash-realtime` | text, audio, image | text, audio | text, audio |
+| `qwen3.5-omni-plus-realtime` | text, audio, image | text, audio | text, audio |
+| `qwen-audio-3.0-realtime-plus` (default) | text, audio | text, audio | text, audio |
+| `qwen-audio-3.0-realtime-flash` | text, audio | text, audio | text, audio |
+
+All four profiles support Function Calling. Model capability is not the same as an implemented
+client transport: JPEG observation frames and native video are both disabled in this release.
+WebUI and TUI read the authoritative profile from Gateway health and only display it. Separate
+clients cannot select conflicting models on one Gateway. A Desktop attached to a borrowed
+Gateway, or a later CLI runtime using a conflicting configured model, refuses the mismatch
+instead of silently changing the running service. To roll back, set the legacy ID above and
+restart the Gateway.
+
 ## Advanced Settings
 
 The following settings all have stable default values; ordinary users do not need to write
@@ -674,7 +702,8 @@ them to the configuration file:
 | `QWEN_AUDIO_AGENT_BACKEND_PERMISSION_MODE` | `native` |
 | `QWEN_AUDIO_REALTIME_MODEL` | `qwen-audio-3.0-realtime-plus` |
 | `QWEN_AUDIO_REALTIME_PROVIDER` | `dashscope` |
-| `QWEN_AUDIO_REALTIME_VOICE` | `longanqian` |
+| `QWEN_AUDIO_REALTIME_VOICE` | Empty; optional Audio-family override, otherwise runtime uses `longanqian` |
+| `QWEN_OMNI_REALTIME_VOICE` | Empty; optional Omni-family override, otherwise runtime uses `Ethan` |
 | `SPEECH_TO_SPEECH_REALTIME_URL` | `ws://127.0.0.1:8765/v1/realtime` |
 | `SPEECH_TO_SPEECH_AUTH_TOKEN` | Empty; only for proxies with Bearer authentication |
 | `QWEN_AUDIO_AGENT_IDENTITY_MODE` | `personal` |

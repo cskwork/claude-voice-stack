@@ -66,6 +66,10 @@ const DEFAULT_CAPABILITIES = Object.freeze({
   // Applies instructions supplied on one response.create without requiring a
   // persistent conversation item.
   perResponseInstructions: false,
+  // Echoes a client-assigned item id in conversation.item.created. Some
+  // providers acknowledge the item but replace its id, so those providers
+  // must opt out and use the single pending item waiter instead.
+  conversationItemIdEcho: true,
 })
 
 export class RealtimeFrontend {
@@ -86,6 +90,9 @@ export class RealtimeFrontend {
       throw new Error(`Realtime Provider ${provider.key || provider.label} 缺少 protocol`)
     }
     this.capabilities = { ...DEFAULT_CAPABILITIES, ...provider.capabilities }
+    this.modelProfile = provider.modelProfile?.() || null
+    this.modelCapabilities = this.modelProfile?.modelCapabilities || null
+    this.transportCapabilities = this.modelProfile?.transportCapabilities || null
     this.onEvent = onEvent
     this.onError = onError
     this.onClose = onClose
@@ -114,6 +121,12 @@ export class RealtimeFrontend {
   }
 
   connect() {
+    if (this.modelProfile?.family === 'unknown') {
+      return Promise.reject(new Error(
+        `不支持的 Realtime 模型：${this.modelProfile.id}`
+        + `（${this.provider.label}）`,
+      ))
+    }
     if (!this.provider.isConfigured()) {
       return Promise.reject(new Error(this.provider.missingConfigurationMessage))
     }
@@ -467,9 +480,13 @@ export class RealtimeFrontend {
     if (event.type === 'conversation.item.created') {
       const id = event.item?.id
       const waiter = this.conversationItemWaiters.get(id)
+        || (!this.capabilities.conversationItemIdEcho
+          && this.conversationItemWaiters.size === 1
+          ? this.conversationItemWaiters.values().next().value
+          : null)
       if (waiter) {
         clearTimeout(waiter.timer)
-        this.conversationItemWaiters.delete(id)
+        this.conversationItemWaiters.delete(waiter.id)
         waiter.resolve(event.item)
       }
     }

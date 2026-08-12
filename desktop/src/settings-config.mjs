@@ -10,7 +10,6 @@ import {
 import {
   DEFAULT_DASHSCOPE_REALTIME_MODEL,
   DEFAULT_DASHSCOPE_REALTIME_URL,
-  DEFAULT_DASHSCOPE_REALTIME_VOICE,
   DEFAULT_REALTIME_PROVIDER,
   DEFAULT_SPEECH_TO_SPEECH_REALTIME_URL,
   normalizeRealtimeProvider,
@@ -28,7 +27,8 @@ const DEFAULTS = {
   realtimeProvider: DEFAULT_REALTIME_PROVIDER,
   agentProtocol: 'none',
   realtimeModel: DEFAULT_DASHSCOPE_REALTIME_MODEL,
-  realtimeVoice: DEFAULT_DASHSCOPE_REALTIME_VOICE,
+  audioRealtimeVoice: '',
+  omniRealtimeVoice: '',
   speechToSpeechRealtimeUrl: '',
   speechToSpeechAuthToken: '',
   backendModel: '',
@@ -47,7 +47,8 @@ const SETTING_KEYS = {
   realtimeProvider: 'QWEN_AUDIO_REALTIME_PROVIDER',
   agentProtocol: 'AGENT_PROTOCOL',
   realtimeModel: 'QWEN_AUDIO_REALTIME_MODEL',
-  realtimeVoice: 'QWEN_AUDIO_REALTIME_VOICE',
+  audioRealtimeVoice: 'QWEN_AUDIO_REALTIME_VOICE',
+  omniRealtimeVoice: 'QWEN_OMNI_REALTIME_VOICE',
   speechToSpeechRealtimeUrl: 'SPEECH_TO_SPEECH_REALTIME_URL',
   speechToSpeechAuthToken: 'SPEECH_TO_SPEECH_AUTH_TOKEN',
   backendModel: 'QWEN_AUDIO_AGENT_BACKEND_MODEL',
@@ -195,6 +196,21 @@ export function parseSettings(content = '', fallback = {}) {
       || DEFAULTS.speechToSpeechAuthToken,
     ),
   )
+  const realtimeModel = String(configured(
+    values,
+    'QWEN_AUDIO_REALTIME_MODEL',
+    fallback.QWEN_AUDIO_REALTIME_MODEL || DEFAULTS.realtimeModel,
+  ) || DEFAULTS.realtimeModel).trim()
+  const audioRealtimeVoice = String(configured(
+    values,
+    'QWEN_AUDIO_REALTIME_VOICE',
+    fallback.QWEN_AUDIO_REALTIME_VOICE || DEFAULTS.audioRealtimeVoice,
+  ) || '').trim()
+  const omniRealtimeVoice = String(configured(
+    values,
+    'QWEN_OMNI_REALTIME_VOICE',
+    fallback.QWEN_OMNI_REALTIME_VOICE || DEFAULTS.omniRealtimeVoice,
+  ) || '').trim()
   return {
     gatewayUrl: configured(
       values,
@@ -241,16 +257,9 @@ export function parseSettings(content = '', fallback = {}) {
       'AGENT_PROTOCOL',
       fallback.AGENT_PROTOCOL || DEFAULTS.agentProtocol,
     )),
-    realtimeModel: String(configured(
-      values,
-      'QWEN_AUDIO_REALTIME_MODEL',
-      fallback.QWEN_AUDIO_REALTIME_MODEL || DEFAULTS.realtimeModel,
-    ) || DEFAULTS.realtimeModel).trim(),
-    realtimeVoice: String(configured(
-      values,
-      'QWEN_AUDIO_REALTIME_VOICE',
-      fallback.QWEN_AUDIO_REALTIME_VOICE || DEFAULTS.realtimeVoice,
-    ) || DEFAULTS.realtimeVoice).trim(),
+    realtimeModel,
+    audioRealtimeVoice,
+    omniRealtimeVoice,
     speechToSpeechRealtimeUrl: String(
       configuredS2sUrl
       || (realtimeProvider === 'speech-to-speech'
@@ -278,6 +287,15 @@ export function normalizeSettings(settings = {}) {
   const requestedS2sUrl = String(
     settings.speechToSpeechRealtimeUrl
     ?? DEFAULTS.speechToSpeechRealtimeUrl,
+  ).trim()
+  const realtimeModel = String(
+    settings.realtimeModel || DEFAULTS.realtimeModel,
+  ).trim() || DEFAULTS.realtimeModel
+  const audioRealtimeVoice = String(
+    settings.audioRealtimeVoice ?? DEFAULTS.audioRealtimeVoice,
+  ).trim()
+  const omniRealtimeVoice = String(
+    settings.omniRealtimeVoice ?? DEFAULTS.omniRealtimeVoice,
   ).trim()
   return {
     gatewayUrl: cleanUrl(
@@ -310,12 +328,9 @@ export function normalizeSettings(settings = {}) {
     agentProtocol: cleanAgentProtocol(
       settings.agentProtocol ?? DEFAULTS.agentProtocol,
     ),
-    realtimeModel: String(
-      settings.realtimeModel || DEFAULTS.realtimeModel,
-    ).trim() || DEFAULTS.realtimeModel,
-    realtimeVoice: String(
-      settings.realtimeVoice || DEFAULTS.realtimeVoice,
-    ).trim() || DEFAULTS.realtimeVoice,
+    realtimeModel,
+    audioRealtimeVoice,
+    omniRealtimeVoice,
     speechToSpeechRealtimeUrl: requestedS2sUrl
       ? cleanRealtimeUrl(requestedS2sUrl, '')
       : realtimeProvider === 'speech-to-speech'
@@ -370,6 +385,12 @@ export function updateSettingsContent(content = '', settings = {}) {
         encoded(normalized[field]),
       ]),
   )
+  const removed = new Set([
+    ['audioRealtimeVoice', 'QWEN_AUDIO_REALTIME_VOICE'],
+    ['omniRealtimeVoice', 'QWEN_OMNI_REALTIME_VOICE'],
+  ].filter(([field]) => (
+    settings[field] !== undefined && !normalized[field]
+  )).map(([, key]) => key))
   // Legacy keys that were merged into auto-hide. Drop them so the saved
   // config no longer carries a divergent sleep timeout.
   const legacy = new Set([
@@ -381,12 +402,13 @@ export function updateSettingsContent(content = '', settings = {}) {
     const match = line.match(/^([A-Z][A-Z0-9_]*)\s*=/)
     const key = match?.[1]
     if (key && legacy.has(key)) return null
+    if (key && removed.has(key)) return null
     if (!key || !(key in values) || seen.has(key)) return line
     seen.add(key)
     return `${key}=${values[key]}`
   }).filter(line => line !== null)
   for (const key of Object.keys(values)) {
-    if (!seen.has(key)) lines.push(`${key}=${values[key]}`)
+    if (!seen.has(key) && !removed.has(key)) lines.push(`${key}=${values[key]}`)
   }
   return `${lines.join('\n').replace(/\n+$/, '')}\n`
 }

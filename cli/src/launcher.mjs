@@ -21,6 +21,11 @@ import {
 import { launchWebUi } from './webui.mjs'
 import { acquireCliInstance } from './instance-lock.mjs'
 import { manageGatewayService } from './gateway-service.mjs'
+import {
+  GATEWAY_RESTART_FOLLOW_UP,
+  showConfig,
+  updateRealtimeModelConfig,
+} from './config-command.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const gatewayPath = resolve(root, 'server/src/index.mjs')
@@ -71,13 +76,19 @@ function applyGatewayOptions(env, options) {
 }
 
 function gatewaySummary(health) {
-  if (health?.backend?.enabled === false) return '仅前台聊天模式'
+  const model = health?.realtimeModelProfile?.label
+    || health?.realtimeLabel
+    || health?.realtimeModel
+  const modelSummary = model ? `Realtime：${model}` : ''
+  if (health?.backend?.enabled === false) {
+    return [modelSummary, '仅前台聊天模式'].filter(Boolean).join(' · ')
+  }
   const label = health?.backend?.label
     || health?.backend?.kind
     || health?.backend?.protocol
     || '后台 Agent'
   const state = health?.backend?.ok ? '已连接' : '未连接'
-  return `${label} ${state}`
+  return [modelSummary, `${label} ${state}`].filter(Boolean).join(' · ')
 }
 
 function gatewayServiceEnvironment(url) {
@@ -141,8 +152,13 @@ export async function main(argv, {
   waitForServiceStop = url => waitForGatewayStop(url, { inspectGateway }),
   runWebUi = options => launchWebUi(options),
   acquireInstance = directory => acquireCliInstance(directory),
+  updateConfig = updateRealtimeModelConfig,
 } = {}) {
+  const processRealtimeModelOverride = String(
+    env.QWEN_AUDIO_REALTIME_MODEL || '',
+  ).trim()
   const readOnlyCommand = ['setup', 'install'].includes(argv[0])
+    || (argv[0] === 'config' && argv[1] === 'show')
   const environment = prepareEnvironment({ readOnly: readOnlyCommand })
   const options = parseArguments(argv, env)
   if (options.help) {
@@ -150,8 +166,26 @@ export async function main(argv, {
     return 0
   }
   if (options.command === 'config') {
-    stdout.write(`${environment.configPath
-      || resolve(environment.configDirectory, 'config.env')}\n`)
+    const configPath = environment.configPath
+      || resolve(environment.configDirectory, 'config.env')
+    if (!options.configAction) {
+      stdout.write(`${configPath}\n`)
+    } else if (options.configAction === 'show') {
+      stdout.write(`${showConfig({ configPath, env })}\n`)
+    } else {
+      updateConfig(configPath, options.realtimeModel)
+      if (
+        processRealtimeModelOverride
+        && processRealtimeModelOverride !== options.realtimeModel
+      ) {
+        stdout.write(
+          '配置文件已更新；当前 QWEN_AUDIO_REALTIME_MODEL 环境变量仍覆盖该值。'
+          + '请先取消环境变量，再执行 qwenaudio gateway restart\n',
+        )
+      } else {
+        stdout.write(`${GATEWAY_RESTART_FOLLOW_UP}\n`)
+      }
+    }
     return 0
   }
   if (options.command === 'setup') {

@@ -125,7 +125,7 @@ qwenaudio config
 
 ```dotenv
 DASHSCOPE_API_KEY=your-key
-# 语音前台模型：qwen-audio-3.0-realtime-flash 或 qwen-audio-3.0-realtime-plus（默认）
+# 语音前台模型：Omni Flash/Plus 或 Audio Flash/Plus（Plus 默认）
 QWEN_AUDIO_REALTIME_MODEL=qwen-audio-3.0-realtime-plus
 # 后台Agent：可选，不设置或设置为 none 时，启动仅前台模式
 AGENT_PROTOCOL=openclaw
@@ -134,6 +134,12 @@ QWEN_AUDIO_AGENT_BACKEND_MODEL=qwen3.7-max
 ```
 
 > 默认使用 DashScope 实时语音前台；也可切换为本地 [speech-to-speech 前台](docs/voice-frontends/speech-to-speech.zh.md)，无需云端 API Key。
+> `qwen3.5-omni-flash-realtime` 与 `qwen3.5-omni-plus-realtime`
+> 在模型层支持文本、音频和图片输入。本版本客户端传输层仅启用文本和音频；
+> 图片/画面帧与原生视频传输仍保持关闭，待对应客户端和 Gateway 链路实现。
+
+桌面版或 `qwenaudio config set --realtime-model <id>` 配置 Gateway 统一使用的模型；
+CLI 修改后需要重启 Gateway。WebUI 与 TUI 只显示当前生效模型，不单独覆盖模型。
 
 2. 启动 Gateway，另开终端启动 TUI（也可用 `qwenaudio webui` 启动浏览器界面）：
 
