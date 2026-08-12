@@ -127,6 +127,81 @@ test('only reports a queued announcement as completed after response.done', asyn
   })
 })
 
+test('keeps a long response alive while output activity continues', async () => {
+  const frontend = createQwenFrontend({
+    responseStartTimeoutMs: 100,
+    responseInactivityTimeoutMs: 80,
+  })
+  frontend.ready = true
+  const sent = []
+  frontend.send = event => sent.push(event)
+
+  const outcome = frontend.speak('一段持续时间较长的语音回复')
+  await new Promise(resolve => setImmediate(resolve))
+  frontend.handleLifecycle({
+    type: 'response.created',
+    response: { id: 'response-long' },
+  })
+  await new Promise(resolve => setTimeout(resolve, 50))
+  frontend.handleLifecycle({
+    type: 'response.audio.delta',
+    response_id: 'response-long',
+    delta: 'audio-one',
+  })
+  await new Promise(resolve => setTimeout(resolve, 50))
+  frontend.handleLifecycle({
+    type: 'response.audio_transcript.delta',
+    response_id: 'response-long',
+    delta: '仍在输出',
+  })
+  await new Promise(resolve => setTimeout(resolve, 50))
+  frontend.handleLifecycle({
+    type: 'response.done',
+    response: { id: 'response-long', status: 'completed' },
+  })
+
+  assert.deepEqual(await outcome, {
+    completed: true,
+    responseId: 'response-long',
+  })
+  assert.doesNotMatch(
+    sent.map(event => event.type).join(','),
+    /response\.cancel/,
+  )
+})
+
+test('cancels and diagnoses a response only after output becomes inactive', async () => {
+  const diagnostics = []
+  const frontend = createQwenFrontend({
+    responseStartTimeoutMs: 100,
+    responseInactivityTimeoutMs: 10,
+    onDiagnostic: diagnostic => diagnostics.push(diagnostic),
+  })
+  frontend.ready = true
+  const sent = []
+  frontend.send = event => sent.push(event)
+
+  const outcome = frontend.speak('这次响应会停止输出')
+  await new Promise(resolve => setImmediate(resolve))
+  frontend.handleLifecycle({
+    type: 'response.created',
+    response: { id: 'response-stalled' },
+  })
+
+  assert.deepEqual(await outcome, {
+    timedOut: true,
+    phase: 'inactivity',
+    responseId: 'response-stalled',
+  })
+  assert.equal(sent.at(-1).type, 'response.cancel')
+  assert.equal(diagnostics.length, 1)
+  assert.equal(diagnostics[0].event, 'realtime.response_timeout')
+  assert.equal(diagnostics[0].provider, 'dashscope')
+  assert.equal(diagnostics[0].responseId, 'response-stalled')
+  assert.equal(diagnostics[0].phase, 'inactivity')
+  assert.ok(diagnostics[0].inactivityMs >= 10)
+})
+
 test('skips a queued response when its late deduplication guard rejects it', async () => {
   const frontend = createQwenFrontend()
   frontend.ready = true
