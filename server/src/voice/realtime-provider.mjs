@@ -74,9 +74,11 @@ export class RealtimeFrontend {
     onEvent,
     onError,
     onClose,
+    onDiagnostic,
     agentContext = {},
     responseStartTimeoutMs,
-    responseCompletionTimeoutMs = 120000,
+    responseInactivityTimeoutMs,
+    responseCompletionTimeoutMs,
   } = {}) {
     this.provider = validateRealtimeProvider(provider)
     this.protocol = provider.protocol
@@ -87,6 +89,7 @@ export class RealtimeFrontend {
     this.onEvent = onEvent
     this.onError = onError
     this.onClose = onClose
+    this.onDiagnostic = onDiagnostic
     this.agentContext = agentContext
     this.ws = null
     this.ready = false
@@ -102,7 +105,12 @@ export class RealtimeFrontend {
     this.responseStartTimeoutMs = responseStartTimeoutMs
       ?? this.provider.responseStartTimeoutMs
       ?? 30000
-    this.responseCompletionTimeoutMs = responseCompletionTimeoutMs
+    // Keep the previous option as an internal compatibility alias. This is an
+    // inactivity watchdog, not an absolute response duration limit: long
+    // speech must remain valid while the provider keeps streaming output.
+    this.responseInactivityTimeoutMs = responseInactivityTimeoutMs
+      ?? responseCompletionTimeoutMs
+      ?? 120000
   }
 
   connect() {
@@ -477,7 +485,12 @@ export class RealtimeFrontend {
       return
     }
     if (isResponseActivityEvent(event)) {
-      this.activeResponses.add(realtimeResponseId(event))
+      const responseId = realtimeResponseId(event)
+      this.activeResponses.add(responseId)
+      const pending = this.responseWaiters.get(responseId)
+      if (pending && event.type !== 'response.done') {
+        this.armResponseInactivityTimeout(responseId, pending)
+      }
     }
     if (event.type === 'response.created') {
       const id = realtimeResponseId(event)
@@ -499,23 +512,9 @@ export class RealtimeFrontend {
       if (id) {
         this.activeResponses.add(id)
         if (pending) {
-          pending.timer = setTimeout(() => {
-            if (this.responseWaiters.get(id) !== pending) return
-            this.send(this.protocol.responseCancel())
-            this.settlePending(pending, {
-              timedOut: true,
-              phase: 'completion',
-              responseId: id,
-            })
-            const recoveryTimer = setTimeout(() => {
-              if (this.responseWaiters.get(id) !== pending) return
-              this.responseWaiters.delete(id)
-              this.activeResponses.delete(id)
-              this.resolveIdle()
-            }, 1000)
-            recoveryTimer.unref?.()
-          }, this.responseCompletionTimeoutMs)
           this.responseWaiters.set(id, pending)
+          pending.responseStartedAt = Date.now()
+          this.armResponseInactivityTimeout(id, pending)
         }
       }
     }
@@ -581,6 +580,41 @@ export class RealtimeFrontend {
         : { failed: true, responseId: id, status })
       this.resolveIdle()
     }
+  }
+
+  armResponseInactivityTimeout(responseId, pending) {
+    clearTimeout(pending.timer)
+    pending.lastResponseActivityAt = Date.now()
+    pending.timer = setTimeout(() => {
+      if (this.responseWaiters.get(responseId) !== pending) return
+      const now = Date.now()
+      const inactivityMs = now - pending.lastResponseActivityAt
+      try {
+        this.onDiagnostic?.({
+          event: 'realtime.response_timeout',
+          provider: this.provider.key,
+          responseId,
+          phase: 'inactivity',
+          inactivityMs,
+          elapsedMs: now - pending.responseStartedAt,
+        })
+      } catch {
+        // Diagnostics must never prevent response recovery.
+      }
+      this.send(this.protocol.responseCancel())
+      this.settlePending(pending, {
+        timedOut: true,
+        phase: 'inactivity',
+        responseId,
+      })
+      const recoveryTimer = setTimeout(() => {
+        if (this.responseWaiters.get(responseId) !== pending) return
+        this.responseWaiters.delete(responseId)
+        this.activeResponses.delete(responseId)
+        this.resolveIdle()
+      }, 1000)
+      recoveryTimer.unref?.()
+    }, this.responseInactivityTimeoutMs)
   }
 
   settlePending(pending, outcome) {
