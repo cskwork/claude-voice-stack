@@ -26,6 +26,8 @@ tells you:
 
 ## News
 
+- **Unreleased**
+  🎙️ Added Qwen3.5-Omni Realtime frontend models; 🔊 Audio and Omni can keep separate voice preferences.
 - **2026-08-12 · [v1.8.3](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.8.3)**
   ✨ Refined prompts; 📉 reduced token usage; 🔧 fixed known issues.
 - **2026-08-11 · [v1.8.2](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.8.2)**
