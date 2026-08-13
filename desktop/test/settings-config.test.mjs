@@ -20,6 +20,12 @@ const REALTIME_DEFAULTS = {
   speechToSpeechAuthToken: '',
 }
 
+const BACKEND_CONNECTION_DEFAULTS = {
+  backendOwnership: 'owned',
+  backendUrl: '',
+  backendCredential: '',
+}
+
 test('reads desktop-owned settings with friendly defaults', () => {
   assert.deepEqual(parseSettings(''), {
     gatewayUrl: 'http://127.0.0.1:3101',
@@ -30,6 +36,7 @@ test('reads desktop-owned settings with friendly defaults', () => {
     ...REALTIME_DEFAULTS,
     agentProtocol: 'none',
     backendModel: '',
+    ...BACKEND_CONNECTION_DEFAULTS,
     nodePath: '',
   })
 })
@@ -48,6 +55,7 @@ test('shows effective client settings when user config is empty', () => {
     ...REALTIME_DEFAULTS,
     agentProtocol: 'none',
     backendModel: '',
+    ...BACKEND_CONNECTION_DEFAULTS,
     nodePath: '',
   })
 })
@@ -121,6 +129,7 @@ test('updates client settings without changing Gateway-owned configuration', () 
     agentProtocol: 'qoder',
     realtimeModel: 'realtime-model',
     backendModel: '',
+    ...BACKEND_CONNECTION_DEFAULTS,
     nodePath: '',
   })
 })
@@ -175,6 +184,7 @@ test('an explicitly empty key and backend override stale process values', () => 
     ...REALTIME_DEFAULTS,
     agentProtocol: 'none',
     backendModel: '',
+    ...BACKEND_CONNECTION_DEFAULTS,
     nodePath: '',
   })
 })
@@ -424,7 +434,7 @@ test('rejects invalid Gateway URLs', () => {
   }), /只支持 HTTP 或 HTTPS/)
 })
 
-test('desktop settings expose the embedded voice service without editing backend ownership', () => {
+test('desktop settings expose external backend connection controls', () => {
   const html = readFileSync(
     new URL('../src/settings.html', import.meta.url),
     'utf8',
@@ -459,6 +469,9 @@ test('desktop settings expose the embedded voice service without editing backend
     /data-provider-panel="dashscope"[\s\S]*id="realtime-voice"[\s\S]*data-provider-panel="speech-to-speech"/,
   )
   assert.match(html, /id="backend-model"/)
+  assert.match(html, /id="backend-ownership"/)
+  assert.match(html, /id="backend-url"/)
+  assert.match(html, /id="backend-credential"/)
   assert.match(html, /id="auto-hide-seconds"/)
   assert.match(html, /id="wake-shortcut"/)
   assert.match(html, /id="record-wake-shortcut"/)
@@ -470,9 +483,12 @@ test('desktop settings expose the embedded voice service without editing backend
   assert.doesNotMatch(html, />空闲休眠</)
   assert.doesNotMatch(html, />自动隐藏</)
   assert.doesNotMatch(html, />全局快捷键</)
-  // 后台 Agent 列表按本机可用性检测结果动态渲染，HTML 里只保留空容器
+  // 后台 Agent 选项按本机可用性动态渲染到可搜索选择器。
+  assert.match(html, /id="backend-picker-trigger"/)
+  assert.match(html, /aria-haspopup="listbox"/)
+  assert.match(html, /id="backend-search"/)
   assert.match(html, /<div\s+id="backend-list"/)
-  assert.match(html, /role="radiogroup"/)
+  assert.match(html, /role="listbox"/)
   assert.match(html, /id="refresh-backends"/)
   // 版本与自动更新状态由主进程推送渲染
   assert.match(html, /id="updater-status"/)
@@ -482,8 +498,49 @@ test('desktop settings expose the embedded voice service without editing backend
   for (const id of [
     'api-key',
     'backend-permission-mode',
-    'backend-url',
   ]) {
     assert.doesNotMatch(html, new RegExp(`id="${id}"`))
   }
+})
+
+test('reads and updates an external OpenClaw connection', () => {
+  const settings = parseSettings([
+    'AGENT_PROTOCOL=openclaw',
+    'QWEN_AUDIO_AGENT_BACKEND_OWNERSHIP=external',
+    'OPENCLAW_BASE_URL=wss://openclaw.example.test',
+    'OPENCLAW_GATEWAY_TOKEN=private-token',
+    '',
+  ].join('\n'))
+
+  assert.equal(settings.backendOwnership, 'external')
+  assert.equal(settings.backendUrl, 'wss://openclaw.example.test')
+  assert.equal(settings.backendCredential, 'private-token')
+
+  const content = updateSettingsContent('', {
+    agentProtocol: 'openclaw',
+    backendOwnership: 'external',
+    backendUrl: 'https://openclaw.example.test/',
+    backendCredential: 'new-token',
+  })
+  assert.match(content, /QWEN_AUDIO_AGENT_BACKEND_OWNERSHIP=external/)
+  assert.match(content, /OPENCLAW_BASE_URL=https:\/\/openclaw\.example\.test/)
+  assert.match(content, /OPENCLAW_GATEWAY_TOKEN=new-token/)
+})
+
+test('rejects external mode for unsupported backends and missing addresses', () => {
+  assert.throws(() => normalizeSettings({
+    agentProtocol: 'opencode',
+    backendOwnership: 'external',
+    backendUrl: 'http://127.0.0.1:4096',
+  }), /不支持连接外部后台服务/)
+  assert.throws(() => normalizeSettings({
+    agentProtocol: 'openclaw',
+    backendOwnership: 'external',
+    backendUrl: '',
+  }), /请填写外部后台服务地址/)
+  assert.throws(() => normalizeSettings({
+    agentProtocol: 'openclaw',
+    backendOwnership: 'external',
+    backendUrl: 'wss://user:secret@openclaw.example.test',
+  }), /不能包含用户名或密码/)
 })

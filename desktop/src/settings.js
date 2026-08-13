@@ -36,9 +36,22 @@ const speechToSpeechAuthToken = document.querySelector(
   '#speech-to-speech-token',
 )
 const backendList = document.querySelector('#backend-list')
+const backendPicker = document.querySelector('.backend-picker')
+const backendPickerTrigger = document.querySelector('#backend-picker-trigger')
+const backendPickerPopover = document.querySelector('#backend-picker-popover')
+const backendPickerName = document.querySelector('#backend-picker-name')
+const backendPickerStatus = document.querySelector('#backend-picker-status')
+const backendPickerEmpty = document.querySelector('#backend-picker-empty')
+const backendSearch = document.querySelector('#backend-search')
 const refreshBackends = document.querySelector('#refresh-backends')
 const realtimeModel = document.querySelector('#realtime-model')
 const backendModel = document.querySelector('#backend-model')
+const backendOwnership = document.querySelector('#backend-ownership')
+const backendUrl = document.querySelector('#backend-url')
+const backendCredential = document.querySelector('#backend-credential')
+const backendConnectionRow = document.querySelector('.backend-connection-row')
+const backendUrlRow = document.querySelector('.backend-url-row')
+const backendCredentialRow = document.querySelector('.backend-credential-row')
 const nodePathInput = document.querySelector('#node-path')
 const applyNodePath = document.querySelector('#apply-node-path')
 const nodePathRow = document.querySelector('.node-path-row')
@@ -279,9 +292,34 @@ let installingBackend = ''
 let pendingNodePathBackend = ''
 let installProgressText = ''
 
+function setBackendPickerOpen(open, { focus = false } = {}) {
+  backendPickerPopover.hidden = !open
+  backendPickerTrigger.setAttribute('aria-expanded', String(open))
+  if (open && focus) {
+    requestAnimationFrame(() => backendSearch.focus())
+  }
+}
+
 function selectedBackend() {
   return backendList.querySelector('input[name="agent-protocol"]:checked')
     ?.value || 'none'
+}
+
+function renderBackendConnection() {
+  const state = backendOptionStates(backendReport)
+    .find(option => option.id === selectedBackend())
+  const externalService = state?.externalService
+  const supported = externalService?.supported === true
+  backendConnectionRow.hidden = !supported
+  if (!supported) backendOwnership.value = 'owned'
+  const external = supported && backendOwnership.value === 'external'
+  backendUrlRow.hidden = !external
+  backendCredentialRow.hidden = !(
+    external && externalService?.credential
+  )
+  if (externalService?.defaultBaseUrl) {
+    backendUrl.placeholder = externalService.defaultBaseUrl
+  }
 }
 
 // 按本机检测结果重建后台 Agent 列表：每行 = 单选钮 + 名称 + 状态徽标
@@ -305,9 +343,46 @@ function renderBackendOptions(currentValue) {
     })
   }
   const selected = requestedValue || 'none'
-  backendList.replaceChildren(...states.map(state => {
+  const selectedState = states.find(state => state.id === selected) || states[0]
+  const selectedRuntimeReady = selectedState && backendRuntimeReady(selectedState, {
+    selectedBackend: settings?.agentProtocol,
+    runtimeBackend: runtime?.backend,
+  })
+  backendPickerName.textContent = selectedState?.id === 'none'
+    ? '无后台 Agent'
+    : selectedState?.label || backendLabel(selected)
+  backendPickerStatus.textContent = selectedState?.id === 'none'
+    ? ''
+    : selectedRuntimeReady
+      ? '已就绪'
+      : selectedState?.statusLabel || selectedState?.reason || ''
+  backendPickerStatus.className = selectedRuntimeReady
+    ? 'ready'
+    : selectedState?.authenticationRequired ? 'attention' : ''
+
+  const query = backendSearch.value.trim().toLocaleLowerCase()
+  const visibleStates = states.filter(state => {
+    if (!query) return true
+    return [state.label, state.id, state.statusLabel, state.reason]
+      .some(value => String(value || '').toLocaleLowerCase().includes(query))
+  })
+  const standalone = visibleStates.filter(state => state.id === 'none')
+  const installed = visibleStates.filter(state => state.id !== 'none' && state.ready)
+  const available = visibleStates.filter(state => state.id !== 'none' && !state.ready)
+  const children = []
+  const appendGroup = (label, items) => {
+    if (!items.length) return
+    if (label) {
+      const heading = document.createElement('div')
+      heading.className = 'backend-group-label'
+      heading.textContent = label
+      children.push(heading)
+    }
+    children.push(...items.map(state => {
     const row = document.createElement('label')
     row.className = 'backend-row'
+    row.setAttribute('role', 'option')
+    row.setAttribute('aria-selected', String(state.id === selected))
     row.classList.toggle('selected', state.id === selected)
     row.classList.toggle('installing', installingBackend === state.id)
     row.classList.toggle(
@@ -377,7 +452,14 @@ function renderBackendOptions(currentValue) {
       row.append(button)
     }
     return row
-  }))
+    }))
+  }
+  appendGroup('', standalone)
+  appendGroup('已安装', installed)
+  appendGroup('可安装', available)
+  backendList.replaceChildren(...children)
+  backendPickerEmpty.hidden = visibleStates.length > 0
+  renderBackendConnection()
 }
 
 // npm 缺失时的引导：错误文案 + 指定路径入口 + Node.js 下载链接。
@@ -482,6 +564,44 @@ backendList.addEventListener('change', event => {
       row.querySelector('input')?.checked === true,
     )
   }
+  backendSearch.value = ''
+  setBackendPickerOpen(false)
+  renderBackendOptions(selectedBackend())
+  backendPickerTrigger.focus()
+  renderBackendConnection()
+  updateApplyState()
+})
+
+backendPickerTrigger.addEventListener('click', () => {
+  setBackendPickerOpen(backendPickerPopover.hidden, { focus: true })
+})
+
+backendPickerTrigger.addEventListener('keydown', event => {
+  if (!['ArrowDown', 'Enter', ' '].includes(event.key)) return
+  event.preventDefault()
+  setBackendPickerOpen(true, { focus: true })
+})
+
+backendSearch.addEventListener('input', () => {
+  renderBackendOptions(selectedBackend())
+})
+
+backendSearch.addEventListener('keydown', event => {
+  if (event.key !== 'Escape') return
+  event.preventDefault()
+  setBackendPickerOpen(false)
+  backendPickerTrigger.focus()
+})
+
+document.addEventListener('pointerdown', event => {
+  if (!backendPickerPopover.hidden && !backendPicker.contains(event.target)) {
+    setBackendPickerOpen(false)
+  }
+})
+
+backendOwnership.addEventListener('change', () => {
+  showMessage('')
+  renderBackendConnection()
   updateApplyState()
 })
 
@@ -573,6 +693,9 @@ function formSettings() {
     speechToSpeechRealtimeUrl: speechToSpeechRealtimeUrl.value,
     speechToSpeechAuthToken: speechToSpeechAuthToken.value,
     backendModel: backendModel.value,
+    backendOwnership: backendOwnership.value,
+    backendUrl: backendUrl.value,
+    backendCredential: backendCredential.value,
     nodePath: nodePathInput.value.trim(),
   }
 }
@@ -594,6 +717,9 @@ function fingerprint(value) {
     speechToSpeechRealtimeUrl: value.speechToSpeechRealtimeUrl,
     speechToSpeechAuthToken: value.speechToSpeechAuthToken,
     backendModel: value.backendModel,
+    backendOwnership: value.backendOwnership,
+    backendUrl: value.backendUrl,
+    backendCredential: value.backendCredential,
     nodePath: value.nodePath,
   })
 }
@@ -796,6 +922,10 @@ function render() {
   speechToSpeechAuthToken.value = settings.speechToSpeechAuthToken || ''
   renderRealtimeProvider(settings.realtimeProvider)
   backendModel.value = settings.backendModel || ''
+  backendOwnership.value = settings.backendOwnership || 'owned'
+  backendUrl.value = settings.backendUrl || ''
+  backendCredential.value = settings.backendCredential || ''
+  renderBackendConnection()
   nodePathInput.value = settings.nodePath || ''
   renderRuntime()
   appliedFingerprint = fingerprint(formSettings())
@@ -813,6 +943,8 @@ for (const control of [
   realtimeModel,
   realtimeVoice,
   backendModel,
+  backendUrl,
+  backendCredential,
   nodePathInput,
   ...realtimeProviderInputs,
   wakeWordEnabled,

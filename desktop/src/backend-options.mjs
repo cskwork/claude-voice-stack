@@ -74,6 +74,9 @@ export function backendOptionStates(report) {
       title: ready
         ? ''
         : String(item.issues?.[0] || install.reason || '').trim(),
+      ...(item.externalService?.supported
+        ? { externalService: { ...item.externalService } }
+        : {}),
     })
   }
   return states

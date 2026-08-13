@@ -1,4 +1,4 @@
-import { resolveDashScopeRealtimeModelProfile } from '../../shared/realtime-provider-catalog.mjs'
+import { resolveDashScopeRealtimeModelProfile } from '../../shared/realtime-model-catalog.mjs'
 
 export function realtimeStatusLabel(provider) {
   return provider === 'speech-to-speech'

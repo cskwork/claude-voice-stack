@@ -222,16 +222,49 @@
             data-settings-panel="backend"
             hidden
           >
-            <div class="settings-card">
+            <div class="settings-card backend-settings-card">
               <div class="setting-row backend-list-row">
                 <span class="setting-label" id="backend-list-label">后台 Agent</span>
                 <div class="field-with-action backend-list-action">
-                  <!-- 行由 settings.js 按本机检测结果动态渲染 -->
-                  <div
-                    id="backend-list"
-                    role="radiogroup"
-                    aria-labelledby="backend-list-label"
-                  ></div>
+                  <div class="backend-picker">
+                    <button
+                      id="backend-picker-trigger"
+                      class="backend-picker-trigger"
+                      type="button"
+                      aria-haspopup="listbox"
+                      aria-expanded="false"
+                      aria-controls="backend-picker-popover"
+                    >
+                      <span class="backend-picker-selection">
+                        <span id="backend-picker-name">无后台 Agent</span>
+                        <span id="backend-picker-status"></span>
+                      </span>
+                      <span class="backend-picker-chevron" aria-hidden="true"></span>
+                    </button>
+                    <div
+                      id="backend-picker-popover"
+                      class="backend-picker-popover"
+                      hidden
+                    >
+                      <div class="backend-search-wrap">
+                        <input
+                          id="backend-search"
+                          type="search"
+                          autocomplete="off"
+                          spellcheck="false"
+                          placeholder="搜索 Agent"
+                          aria-label="搜索后台 Agent"
+                        />
+                      </div>
+                      <!-- 选项由 settings.js 按本机检测结果动态渲染 -->
+                      <div
+                        id="backend-list"
+                        role="listbox"
+                        aria-labelledby="backend-list-label"
+                      ></div>
+                      <p id="backend-picker-empty" hidden>没有匹配的 Agent</p>
+                    </div>
+                  </div>
                   <button
                     id="refresh-backends"
                     class="link-button"
@@ -249,6 +282,36 @@
                   autocomplete="off"
                   spellcheck="false"
                   placeholder="留空使用默认模型"
+                />
+              </div>
+
+              <div class="setting-row backend-connection-row" hidden>
+                <label for="backend-ownership">连接方式</label>
+                <select id="backend-ownership">
+                  <option value="owned">由应用管理</option>
+                  <option value="external">连接现有服务</option>
+                </select>
+              </div>
+
+              <div class="setting-row backend-url-row" hidden>
+                <label for="backend-url">服务地址</label>
+                <input
+                  id="backend-url"
+                  type="url"
+                  autocomplete="off"
+                  spellcheck="false"
+                  placeholder="http://127.0.0.1:18789"
+                />
+              </div>
+
+              <div class="setting-row backend-credential-row" hidden>
+                <label for="backend-credential">访问令牌</label>
+                <input
+                  id="backend-credential"
+                  type="password"
+                  autocomplete="off"
+                  spellcheck="false"
+                  placeholder="留空表示不使用令牌"
                 />
               </div>
 

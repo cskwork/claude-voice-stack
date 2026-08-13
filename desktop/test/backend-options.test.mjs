@@ -63,6 +63,26 @@ test('ready backends are selectable and never installable', () => {
   })
 })
 
+test('passes external service capabilities to the renderer state', () => {
+  const states = backendOptionStates(report([
+    backend({
+      id: 'openclaw',
+      label: 'OpenClaw',
+      ready: true,
+      externalService: {
+        supported: true,
+        defaultBaseUrl: 'http://127.0.0.1:18789',
+        credential: true,
+      },
+    }),
+  ]))
+  assert.deepEqual(states[1].externalService, {
+    supported: true,
+    defaultBaseUrl: 'http://127.0.0.1:18789',
+    credential: true,
+  })
+})
+
 test('unavailable installable backends show a short reason and full title', () => {
   const states = backendOptionStates(report([
     backend({
