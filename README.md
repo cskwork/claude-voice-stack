@@ -27,7 +27,7 @@ tells you:
 ## News
 
 - **2026-08-13 · [v1.10.0](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.10.0)**
-  🐋 Added experimental DeepSeek backend support through ACP, with one-click installation and reuse of the official dsh configuration.
+  🐋 Added experimental DeepSeek Harness backend support with one-click installation.
 - **2026-08-13 · [v1.9.1](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.9.1)**
   🖥️ Improved desktop task card presentation and fixed several known issues.
 - **2026-08-13 · [v1.9.0](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.9.0)**

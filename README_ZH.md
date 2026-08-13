@@ -21,7 +21,7 @@
 ## News
 
 - **2026-08-13 · [v1.10.0](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.10.0)**
-  🐋 新增实验性 DeepSeek 后台接入，支持 ACP、一键安装并复用官方 dsh 配置。
+  🐋 新增实验性 DeepSeek Harness 后台接入，支持一键安装。
 - **2026-08-13 · [v1.9.1](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.9.1)**
   🖥️ 优化桌面端任务卡片展示，并修复若干已知问题。
 - **2026-08-13 · [v1.9.0](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.9.0)**

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { join } from 'node:path'
 import test from 'node:test'
 
 import { inspectBackendAuthentication } from '../../shared/backend-auth-status.mjs'
@@ -57,14 +58,14 @@ test('detects DeepSeek Harness API-key configuration', async () => {
   assert.equal((await inspectBackendAuthentication('deepseek', {
     env: { HOME: '/home/user' },
     readCredentialFile: async path => {
-      assert.equal(path, '/home/user/.dsh/.credentials.yaml')
+      assert.equal(path, join('/home/user', '.dsh', '.credentials.yaml'))
       return 'DEEPSEEK_API_KEY: sk-stored\n'
     },
   })).status, 'authenticated')
   assert.equal((await inspectBackendAuthentication('deepseek', {
     env: { DSH_HOME: '/custom/dsh' },
     readCredentialFile: async path => {
-      assert.equal(path, '/custom/dsh/.credentials.yaml')
+      assert.equal(path, join('/custom/dsh', '.credentials.yaml'))
       throw new Error('missing')
     },
   })).status, 'unauthenticated')
