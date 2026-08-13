@@ -22,9 +22,9 @@ test('presents every active coordinator request as one frontend processing phase
     status: 'running',
     workState: 'active',
   }), 'running')
-  assert.equal(taskLabel({ phase: 'queued' }), '正在处理')
-  assert.equal(taskLabel({ phase: 'running' }), '正在处理')
-  assert.equal(taskLabel({ phase: 'delegated' }), '项目正在执行')
+  assert.equal(taskLabel({ phase: 'queued' }), '排队中')
+  assert.equal(taskLabel({ phase: 'running' }), '进行中')
+  assert.equal(taskLabel({ phase: 'delegated' }), '进行中')
   assert.equal(taskLabel({ phase: 'finalizing' }), '正在整理结果')
   assert.equal(taskLabel({ phase: 'cancelling' }), '正在取消')
   assert.equal(phaseForTask({
@@ -42,7 +42,16 @@ test('presents every active coordinator request as one frontend processing phase
   assert.equal(taskDetail({
     phase: 'delegated',
     delegation: { title: '已有项目' },
-  }), '正在继续处理：已有项目')
+  }), '进行中')
+  assert.equal(taskDetail({
+    phase: 'delegated',
+    objective: '开发游戏',
+    activity: [{
+      kind: 'tool',
+      status: 'running',
+      category: 'write',
+    }],
+  }), '正在修改内容')
   assert.equal(phaseForTask({
     status: 'cancelled',
   }), 'cancelled')
@@ -107,6 +116,33 @@ test('shows stable user-facing progress instead of raw backend commands', () => 
     phase: 'completed',
     result: '小狗图片已经生成',
   }), '小狗图片已经生成')
+})
+
+test('shows ACP plan progress without exposing protocol details', () => {
+  assert.equal(taskDetail({
+    phase: 'running',
+    objective: 'Build a game',
+    activity: [{
+      id: 'acp-plan',
+      kind: 'plan',
+      status: 'running',
+      detail: 'Implement gameplay',
+      completed: 1,
+      total: 3,
+    }],
+  }), '1/3 · Implement gameplay')
+})
+
+test('prefers the active ACP step over later text and completed tools', () => {
+  assert.equal(taskDetail({
+    phase: 'running',
+    objective: 'Build a game',
+    activity: [
+      { kind: 'tool', status: 'completed', label: 'Inspect project' },
+      { kind: 'tool', status: 'pending', label: 'Implement gameplay' },
+      { kind: 'text', status: 'running' },
+    ],
+  }), 'Implement gameplay')
 })
 
 test('reconciles a disconnected card with its real terminal state', () => {

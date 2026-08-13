@@ -1,7 +1,7 @@
 export const DESKTOP_ORB_WIDTH = 172
-export const DESKTOP_ORB_HEIGHT = 170
+export const DESKTOP_ORB_HEIGHT = 204
 export const DESKTOP_TASK_SURFACE_WIDTH = 360
-export const DESKTOP_TASK_CARD_HEIGHT = 68
+export const DESKTOP_TASK_CARD_HEIGHT = 54
 export const DESKTOP_TASK_CARD_GAP = 8
 export const DESKTOP_TASK_STACK_PADDING = 8
 

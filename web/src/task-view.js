@@ -31,17 +31,17 @@ export function taskLabel(task) {
   if (task.phase === 'failed') return t('处理失败')
   if (task.phase === 'cancelled') return t('已取消')
   if (task.phase === 'disconnected') return t('连接已中断')
-  if (task.phase === 'queued') return t('正在处理')
-  if (task.phase === 'delegated') return t('项目正在执行')
+  if (task.phase === 'queued') return t('排队中')
+  if (task.phase === 'delegated') return t('进行中')
   if (task.phase === 'finalizing') return t('正在整理结果')
   if (task.phase === 'cancelling') return t('正在取消')
   if (task.phase === 'completed') return t('处理完成')
   if (task.phase === 'responding') return t('正在回复')
-  return t('正在处理')
+  return t('进行中')
 }
 
 function latestVisibleActivity(activity = []) {
-  return activity.findLast(item => (
+  const visible = activity.filter(item => (
     item
     && item.tool !== 'invalid'
     && !(
@@ -49,6 +49,14 @@ function latestVisibleActivity(activity = []) {
       && String(item.text || '').trim().startsWith('<qwen_audio_agent_request>')
     )
   ))
+  return visible.findLast(item => (
+    item.kind === 'tool'
+    && !['completed', 'failed'].includes(item.status)
+  ))
+    || visible.findLast(item => item.kind === 'plan' && item.status === 'running')
+    || visible.findLast(item => item.kind === 'tool')
+    || visible.findLast(item => item.kind === 'plan')
+    || visible.at(-1)
 }
 
 export function taskDetail(task) {
@@ -58,11 +66,6 @@ export function taskDetail(task) {
   if (task.error) return task.error
   if (task.phase === 'cancelled') return t('这项工作已停止')
   if (task.phase === 'queued') return task.objective
-  if (task.phase === 'delegated') {
-    return task.delegation?.title
-      ? t('正在继续处理：{title}', { title: task.delegation.title })
-      : t('正在等待项目任务完成')
-  }
   if (task.phase === 'finalizing') return t('项目结果已返回，协调 Agent 正在整理')
   if (task.phase === 'cancelling') return t('正在等待后台确认停止')
   if (task.phase === 'responding') return t('结果已经返回，正在准备语音回复')
@@ -70,10 +73,22 @@ export function taskDetail(task) {
   if (task.phase === 'disconnected') return t('正在等待与后台重新连接')
 
   const activity = latestVisibleActivity(task.activity)
-  if (!activity) return task.objective
+  if (!activity) return task.phase === 'delegated'
+    ? t('进行中')
+    : task.objective
   if (activity.kind === 'session') return t('正在连接后台 Agent')
-  if (activity.kind === 'text') return t('正在整理结果')
+  if (activity.kind === 'plan') {
+    const count = activity.total > 0
+      ? `${activity.completed}/${activity.total}`
+      : ''
+    return [count, activity.detail].filter(Boolean).join(' · ')
+      || t('正在执行任务')
+  }
+  if (activity.kind === 'text') return task.phase === 'delegated'
+    ? t('进行中')
+    : t('正在整理结果')
   if (activity.kind === 'tool') {
+    if (activity.label) return activity.label
     if (activity.category === 'image') return t('正在生成图片')
     if (activity.category === 'search') return t('正在查询相关信息')
     if (activity.category === 'read') return t('正在读取相关内容')
