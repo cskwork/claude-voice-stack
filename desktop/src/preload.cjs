@@ -9,6 +9,10 @@ contextBridge.exposeInMainWorld('qwenAudioAgentDesktop', {
   dragStart: (x, y) => sendPoint('qwen-audio-agent:drag-start', x, y),
   dragMove: (x, y) => sendPoint('qwen-audio-agent:drag-move', x, y),
   dragEnd: () => ipcRenderer.send('qwen-audio-agent:drag-end'),
+  setTaskCardCount: count => ipcRenderer.send(
+    'qwen-audio-agent:task-card-count',
+    count,
+  ),
   openSettings: () => ipcRenderer.send('qwen-audio-agent:open-settings'),
   enterHide: () => ipcRenderer.invoke('qwen-audio-agent:enter-hide'),
   wake: () => ipcRenderer.send('qwen-audio-agent:wake'),

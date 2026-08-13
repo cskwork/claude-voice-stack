@@ -45,6 +45,7 @@ const translations = {
   '开启麦克风': 'Enable microphone',
   '设置': 'Settings',
   '退出': 'Quit',
+  '后台任务': 'Background tasks',
   '正在提交': 'Submitting',
   '始终允许': 'Always allow',
   '拒绝': 'Deny',

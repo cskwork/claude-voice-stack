@@ -155,3 +155,24 @@ test('does not expose backend session routing in the frontend task view', () => 
   assert.equal(completed.backendRef, undefined)
   assert.equal(completed.type, undefined)
 })
+
+test('preserves task kind and timing across partial progress events', () => {
+  const accepted = taskView({
+    id: 'task-work',
+    kind: 'work',
+    status: 'queued',
+    objective: '开发游戏',
+    createdAt: 1_000,
+    startedAt: null,
+  })
+  const progress = taskView({
+    id: 'task-work',
+    status: 'running',
+    objective: '开发游戏',
+    elapsedMs: 800,
+  }, accepted)
+
+  assert.equal(progress.kind, 'work')
+  assert.equal(progress.createdAt, 1_000)
+  assert.equal(progress.startedAt, null)
+})

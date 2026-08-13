@@ -48,6 +48,10 @@ import {
   desktopTasksActive,
   desktopTasksAttention,
 } from './desktop-hide.js'
+import {
+  desktopTaskCards,
+  desktopTaskElapsedLabel,
+} from './desktop-task-cards.js'
 
 const desktopOrbMode = (
   new URLSearchParams(window.location.search).get('desktop') === 'orb'
@@ -515,7 +519,10 @@ export default function App() {
         }),
         {
           id: task.id,
+          kind: task.kind,
           objective: task.objective,
+          createdAt: task.createdAt,
+          startedAt: task.startedAt,
           elapsedMs: task.elapsedMs || 0,
           phase: 'running',
           turnId: task.turnId,
@@ -618,7 +625,8 @@ export default function App() {
       setAgentTasks(items => upsertTask(
         items,
         failed.id,
-        task => ({ ...task, phase: 'failed', error: failed.error }),
+        task => ({ ...taskView(failed, task), phase: 'failed' }),
+        { ...taskView(failed), phase: 'failed' },
       ))
     }
     if (event.type === 'task.cancelled') {
@@ -716,6 +724,35 @@ export default function App() {
   const attentionTask = agentTasks.find(
     task => task.authorization?.status === 'pending',
   )
+  const desktopCards = useMemo(
+    () => desktopOrbMode ? desktopTaskCards(agentTasks) : [],
+    [agentTasks],
+  )
+  const [desktopTaskClock, setDesktopTaskClock] = useState(Date.now)
+
+  useEffect(() => {
+    if (!desktopOrbMode) return undefined
+    window.qwenAudioAgentDesktop?.setTaskCardCount(desktopCards.length)
+    return undefined
+  }, [desktopCards.length])
+
+  const desktopCardsRunning = desktopCards.some(task => ![
+    'completed',
+    'failed',
+    'cancelled',
+  ].includes(task.phase))
+
+  useEffect(() => {
+    if (!desktopCardsRunning) return undefined
+    setDesktopTaskClock(Date.now())
+    const timer = setInterval(() => setDesktopTaskClock(Date.now()), 1000)
+    return () => clearInterval(timer)
+  }, [desktopCardsRunning])
+
+  useEffect(() => {
+    if (!desktopOrbMode) return undefined
+    return () => window.qwenAudioAgentDesktop?.setTaskCardCount(0)
+  }, [])
   const ownershipLabel = voice.ownership.holder
     ? frontendLabel(voice.ownership.holder)
     : ''
@@ -936,8 +973,9 @@ export default function App() {
   }
 
   if (desktopOrbMode) {
-    return <main className="desktop-gallery-shell">
-      <section
+    return <main className={`desktop-gallery-shell${desktopCards.length ? ' has-task-cards' : ''}`}>
+      <div className="desktop-orb-anchor">
+        <section
         ref={voice.levelElementRef}
         className={desktopOrbClassName({
           state: orbVisualState,
@@ -962,7 +1000,7 @@ export default function App() {
         onPointerMove={moveOrb}
         onPointerUp={endOrbDrag}
         onPointerCancel={endOrbDrag}
-      >
+        >
         {isBuiltinOrbSkin(orbSkinId) || spriteOrbFailed
           ? (
               <DesktopFluidOrb
@@ -1027,7 +1065,33 @@ export default function App() {
             <OrbControlIcon type="close" />
           </button>
         </nav>
-      </section>
+        </section>
+      </div>
+      {desktopCards.length > 0 && <section
+        className="desktop-task-stack"
+        aria-label={t('后台任务')}
+        aria-live="polite"
+      >
+        {desktopCards.map(task => {
+          const detail = taskDetail(task)
+          return <article
+            key={task.id}
+            className={`desktop-task-card ${task.phase}`}
+            title={detail}
+          >
+            <div className="desktop-task-card-head">
+              <span className="desktop-task-state">
+                <i aria-hidden="true" />
+                {taskLabel(task)}
+              </span>
+              <time>{desktopTaskElapsedLabel(task, desktopTaskClock)}</time>
+            </div>
+            <strong>{task.objective || taskLabel(task)}</strong>
+            {detail && detail !== task.objective && <small>{detail}</small>}
+            <span className="desktop-task-progress" aria-hidden="true" />
+          </article>
+        })}
+      </section>}
     </main>
   }
 

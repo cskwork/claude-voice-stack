@@ -93,7 +93,30 @@ export function taskView(task, previous = {}) {
   return {
     ...previous,
     id: task.id,
+    ...(
+      task.kind !== undefined || previous.kind !== undefined
+        ? { kind: task.kind !== undefined ? task.kind : previous.kind }
+        : {}
+    ),
     objective: task.objective,
+    ...(
+      task.createdAt !== undefined || previous.createdAt !== undefined
+        ? {
+            createdAt: task.createdAt !== undefined
+              ? task.createdAt
+              : previous.createdAt,
+          }
+        : {}
+    ),
+    ...(
+      task.startedAt !== undefined || previous.startedAt !== undefined
+        ? {
+            startedAt: task.startedAt !== undefined
+              ? task.startedAt
+              : previous.startedAt,
+          }
+        : {}
+    ),
     elapsedMs: task.elapsedMs || 0,
     phase: phaseForTask(task),
     turnId: task.turnId,

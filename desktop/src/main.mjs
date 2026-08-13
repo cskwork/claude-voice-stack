@@ -52,6 +52,12 @@ import {
   backendDefinition,
 } from '../../shared/backend-catalog.mjs'
 import {
+  DESKTOP_ORB_HEIGHT,
+  DESKTOP_ORB_WIDTH,
+  desktopSurfaceSize,
+  resizeDesktopSurfaceBounds,
+} from './desktop-surface-layout.mjs'
+import {
   withBackendLifecycle,
 } from '../../shared/backend-install.mjs'
 import {
@@ -497,15 +503,15 @@ function createTray() {
 
 function createWindow() {
   const { workArea } = screen.getPrimaryDisplay()
-  const width = 172
-  const height = 170
+  const width = DESKTOP_ORB_WIDTH
+  const height = DESKTOP_ORB_HEIGHT
   const window = new BrowserWindow({
     width,
     height,
     minWidth: width,
     minHeight: height,
-    maxWidth: width,
-    maxHeight: height,
+    maxWidth: workArea.width,
+    maxHeight: workArea.height,
     x: workArea.x + workArea.width - width - 24,
     y: workArea.y + 24,
     frame: false,
@@ -640,6 +646,18 @@ ipcMain.on('qwen-audio-agent:drag-move', (event, point) => {
 
 ipcMain.on('qwen-audio-agent:drag-end', event => {
   if (mainWindow && event.sender === mainWindow.webContents) dragState = null
+})
+
+ipcMain.on('qwen-audio-agent:task-card-count', (event, value) => {
+  if (!mainWindow || event.sender !== mainWindow.webContents) return
+  const taskCount = Math.min(100, Math.max(0, Math.floor(Number(value) || 0)))
+  const bounds = mainWindow.getBounds()
+  const workArea = screen.getDisplayMatching(bounds).workArea
+  const size = desktopSurfaceSize(taskCount, {
+    workAreaHeight: workArea.height,
+  })
+  if (bounds.width === size.width && bounds.height === size.height) return
+  mainWindow.setBounds(resizeDesktopSurfaceBounds(bounds, size, workArea), true)
 })
 
 ipcMain.on('qwen-audio-agent:open-settings', event => {
