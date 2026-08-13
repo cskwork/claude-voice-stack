@@ -89,6 +89,20 @@ function categoryForTool(update) {
 }
 
 export function activityFromUpdate(update, known = new Map()) {
+  if (update?.sessionUpdate === 'plan') {
+    const entries = Array.isArray(update.entries) ? update.entries : []
+    const completed = entries.filter(entry => entry?.status === 'completed').length
+    const current = entries.find(entry => entry?.status === 'in_progress')
+      || entries.find(entry => entry?.status === 'pending')
+    return {
+      id: 'acp-plan',
+      kind: 'plan',
+      status: current ? 'running' : 'completed',
+      detail: bounded(current?.content || ''),
+      completed,
+      total: entries.length,
+    }
+  }
   if (!['tool_call', 'tool_call_update'].includes(update?.sessionUpdate)) {
     if (update?.sessionUpdate === 'agent_message_chunk') {
       return { id: null, kind: 'text', status: 'running' }
@@ -104,6 +118,12 @@ export function activityFromUpdate(update, known = new Map()) {
     id: id || null,
     kind: 'tool',
     tool: bounded(merged.name || merged.title, 100) || 'tool',
+    label: bounded(
+      merged.rawInput?.description
+      || merged.title
+      || '',
+      160,
+    ),
     status: merged.status || 'running',
     category: categoryForTool(merged),
     detail: bounded(

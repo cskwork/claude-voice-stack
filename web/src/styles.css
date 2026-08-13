@@ -123,11 +123,136 @@ header .voice.waiting { color: #ded5ff; border-color: #927cf480; }
 .desktop-gallery-shell {
   width: 100%;
   height: 100%;
-  display: grid;
-  place-items: center;
-  overflow: visible;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  overflow: hidden;
   background: transparent;
   user-select: none;
+}
+.desktop-orb-anchor {
+  flex: 0 0 204px;
+  width: 172px;
+  height: 204px;
+  display: grid;
+  place-items: center;
+}
+
+.desktop-task-stack {
+  width: 100%;
+  min-height: 0;
+  margin-top: -14px;
+  padding: 6px 8px 8px;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 8px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.desktop-task-stack::-webkit-scrollbar { display: none; }
+.desktop-gallery-shell .desktop-task-card {
+  position: relative;
+  flex: 0 0 54px;
+  align-self: stretch;
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  height: 54px;
+  margin: 0;
+  padding: 8px 12px 9px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 14px;
+  color: #f3f1fa;
+  background:
+    linear-gradient(135deg, #25232ce8, #15161ce8),
+    #17181e;
+  box-shadow: none;
+  animation: desktop-task-in .22s ease-out;
+}
+.desktop-task-state {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  overflow: hidden;
+  color: #898692;
+}
+.desktop-task-state i {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #9a84f6;
+  box-shadow: 0 0 8px #9a84f6a6;
+}
+.desktop-task-card strong,
+.desktop-task-card small {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.desktop-task-card strong {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+.desktop-task-card small {
+  flex: 1 1 auto;
+  color: inherit;
+  font-size: 10px;
+  line-height: 1.25;
+}
+.desktop-task-progress {
+  position: absolute;
+  right: 12px;
+  bottom: 4px;
+  left: 12px;
+  height: 2px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: #ffffff0a;
+}
+.desktop-task-progress::after {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 42%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, transparent, #9b86f7, transparent);
+  animation: desktop-task-progress 1.55s ease-in-out infinite;
+}
+.desktop-task-progress.determinate::after {
+  width: var(--desktop-task-progress);
+  animation: none;
+  background: #9b86f7c7;
+  transition: width .25s ease;
+}
+.desktop-task-card.completed .desktop-task-state i {
+  background: #61d5aa;
+  box-shadow: 0 0 8px #61d5aa80;
+}
+.desktop-task-card.failed .desktop-task-state i {
+  background: #ea8585;
+  box-shadow: 0 0 8px #ea858580;
+}
+.desktop-task-card.cancelled,
+.desktop-task-card.disconnected { opacity: .78; }
+.desktop-task-card.cancelled .desktop-task-state i,
+.desktop-task-card.disconnected .desktop-task-state i {
+  background: #b9a675;
+  box-shadow: 0 0 8px #b9a67566;
+}
+.desktop-task-card.completed .desktop-task-progress::after,
+.desktop-task-card.failed .desktop-task-progress::after,
+.desktop-task-card.cancelled .desktop-task-progress::after {
+  width: 100%;
+  animation: none;
+  background: #ffffff16;
 }
 
 .stage {
@@ -397,12 +522,12 @@ header .voice.waiting { color: #ded5ff; border-color: #927cf480; }
 .desktop-orb-controls {
   position: absolute;
   left: 50%;
-  top: 104px;
+  top: 132px;
   display: flex;
-  gap: 5px;
-  padding: 4px;
+  gap: 4px;
+  padding: 3px;
   border: 1px solid #ffffff12;
-  border-radius: 15px;
+  border-radius: 13px;
   background: #17171ddd;
   box-shadow: 0 8px 20px #0006, inset 0 1px #ffffff0a;
   backdrop-filter: blur(16px) saturate(1.25);
@@ -418,13 +543,13 @@ header .voice.waiting { color: #ded5ff; border-color: #927cf480; }
   transform: translate(-50%, 0) scale(1);
 }
 .desktop-orb-controls button {
-  width: 27px;
-  height: 27px;
+  width: 26px;
+  height: 26px;
   padding: 0;
   display: grid;
   place-items: center;
   border: 0;
-  border-radius: 10px;
+  border-radius: 9px;
   color: #9b9da9;
   background: transparent;
   transition: color .15s ease, background .15s ease, transform .15s ease;
@@ -446,8 +571,8 @@ header .voice.waiting { color: #ded5ff; border-color: #927cf480; }
   background: #c97c8814;
 }
 .desktop-orb-controls svg {
-  width: 15px;
-  height: 15px;
+  width: 14px;
+  height: 14px;
   fill: none;
   stroke: currentColor;
   stroke-width: 1.8;
@@ -819,6 +944,13 @@ article.user .message-body .inline-code { background: #5e44c9; color: #f0eaff; }
 @keyframes task-in {
   from { opacity: 0; transform: translateY(4px) scale(.995); }
 }
+@keyframes desktop-task-in {
+  from { opacity: 0; transform: translateY(-5px) scale(.985); }
+}
+@keyframes desktop-task-progress {
+  from { transform: translateX(-110%); }
+  to { transform: translateX(340%); }
+}
 
 @media (max-width: 600px) {
   header { padding: 0 14px; }
@@ -844,6 +976,8 @@ article.user .message-body .inline-code { background: #5e44c9; color: #f0eaff; }
   .goo .fill,
   .conversation-turn,
   .agent-task,
+  .desktop-task-card,
+  .desktop-task-progress::after,
   .task-spinner {
     animation: none;
     transition: none;

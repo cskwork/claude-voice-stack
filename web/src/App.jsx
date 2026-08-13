@@ -48,6 +48,9 @@ import {
   desktopTasksActive,
   desktopTasksAttention,
 } from './desktop-hide.js'
+import {
+  desktopTaskCards,
+} from './desktop-task-cards.js'
 
 const desktopOrbMode = (
   new URLSearchParams(window.location.search).get('desktop') === 'orb'
@@ -98,7 +101,7 @@ function frontendLabel(holder) {
   }[holder?.type] || t('其他入口')
 }
 
-function OrbControlIcon({ type, muted = false }) {
+function OrbControlIcon({ type, muted = false, collapsed = false }) {
   if (type === 'microphone') {
     return <svg viewBox="0 0 24 24" aria-hidden="true">
       <rect x="9" y="3.5" width="6" height="11" rx="3" />
@@ -110,6 +113,11 @@ function OrbControlIcon({ type, muted = false }) {
     return <svg viewBox="0 0 24 24" aria-hidden="true">
       <circle cx="12" cy="12" r="3" />
       <path d="M19.4 15a1.8 1.8 0 0 0 .36 1.98l.04.04a2 2 0 0 1-2.83 2.83l-.04-.04a1.8 1.8 0 0 0-1.98-.36 1.8 1.8 0 0 0-1.08 1.65V21a2 2 0 0 1-4 0v-.06A1.8 1.8 0 0 0 8.8 19.3a1.8 1.8 0 0 0-1.98.36l-.04.04a2 2 0 0 1-2.83-2.83l.04-.04a1.8 1.8 0 0 0 .36-1.98A1.8 1.8 0 0 0 2.7 13.8H2.6a2 2 0 0 1 0-4h.06A1.8 1.8 0 0 0 4.3 8.72a1.8 1.8 0 0 0-.36-1.98l-.04-.04a2 2 0 0 1 2.83-2.83l.04.04a1.8 1.8 0 0 0 1.98.36A1.8 1.8 0 0 0 9.82 2.6V2.5a2 2 0 0 1 4 0v.06A1.8 1.8 0 0 0 14.9 4.2a1.8 1.8 0 0 0 1.98-.36l.04-.04a2 2 0 0 1 2.83 2.83l-.04.04a1.8 1.8 0 0 0-.36 1.98 1.8 1.8 0 0 0 1.65 1.08h.1a2 2 0 0 1 0 4h-.06A1.8 1.8 0 0 0 19.4 15Z" />
+    </svg>
+  }
+  if (type === 'tasks') {
+    return <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d={collapsed ? 'm7 9 5 5 5-5' : 'm7 14 5-5 5 5'} />
     </svg>
   }
   return <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -143,6 +151,7 @@ export default function App() {
   const [healthValidated, setHealthValidated] = useState(false)
   const [backend, setBackend] = useState({ label: 'Agent', ready: false })
   const [agentTasks, setAgentTasks] = useState([])
+  const [desktopTasksCollapsed, setDesktopTasksCollapsed] = useState(false)
   const [orbDragging, setOrbDragging] = useState(false)
   const [spriteOrbFailed, setSpriteOrbFailed] = useState(false)
   const [desktopLifecycle, setDesktopLifecycle] = useState('active')
@@ -515,7 +524,10 @@ export default function App() {
         }),
         {
           id: task.id,
+          kind: task.kind,
           objective: task.objective,
+          createdAt: task.createdAt,
+          startedAt: task.startedAt,
           elapsedMs: task.elapsedMs || 0,
           phase: 'running',
           turnId: task.turnId,
@@ -537,7 +549,7 @@ export default function App() {
     if (event.type === 'task.delegated') {
       const task = event.task
       if (!task.turnId || task.turnId === currentTurnId.current) {
-        setActivity(t('项目正在执行'))
+        setActivity(t('进行中'))
       }
       setAgentTasks(items => upsertTask(
         items,
@@ -618,7 +630,8 @@ export default function App() {
       setAgentTasks(items => upsertTask(
         items,
         failed.id,
-        task => ({ ...task, phase: 'failed', error: failed.error }),
+        task => ({ ...taskView(failed, task), phase: 'failed' }),
+        { ...taskView(failed), phase: 'failed' },
       ))
     }
     if (event.type === 'task.cancelled') {
@@ -716,6 +729,26 @@ export default function App() {
   const attentionTask = agentTasks.find(
     task => task.authorization?.status === 'pending',
   )
+  const desktopCards = useMemo(
+    () => desktopOrbMode ? desktopTaskCards(agentTasks) : [],
+    [agentTasks],
+  )
+  useEffect(() => {
+    if (!desktopCards.length) setDesktopTasksCollapsed(false)
+  }, [desktopCards.length])
+
+  useEffect(() => {
+    if (!desktopOrbMode) return undefined
+    window.qwenAudioAgentDesktop?.setTaskCardCount(
+      desktopTasksCollapsed ? 0 : desktopCards.length,
+    )
+    return undefined
+  }, [desktopCards.length, desktopTasksCollapsed])
+
+  useEffect(() => {
+    if (!desktopOrbMode) return undefined
+    return () => window.qwenAudioAgentDesktop?.setTaskCardCount(0)
+  }, [])
   const ownershipLabel = voice.ownership.holder
     ? frontendLabel(voice.ownership.holder)
     : ''
@@ -936,8 +969,11 @@ export default function App() {
   }
 
   if (desktopOrbMode) {
-    return <main className="desktop-gallery-shell">
-      <section
+    return <main className={`desktop-gallery-shell${
+      desktopCards.length && !desktopTasksCollapsed ? ' has-task-cards' : ''
+    }`}>
+      <div className="desktop-orb-anchor">
+        <section
         ref={voice.levelElementRef}
         className={desktopOrbClassName({
           state: orbVisualState,
@@ -962,7 +998,7 @@ export default function App() {
         onPointerMove={moveOrb}
         onPointerUp={endOrbDrag}
         onPointerCancel={endOrbDrag}
-      >
+        >
         {isBuiltinOrbSkin(orbSkinId) || spriteOrbFailed
           ? (
               <DesktopFluidOrb
@@ -1015,6 +1051,16 @@ export default function App() {
           >
             <OrbControlIcon type="settings" />
           </button>
+          {desktopCards.length > 0 && <button
+            onClick={event => {
+              event.stopPropagation()
+              setDesktopTasksCollapsed(value => !value)
+            }}
+            aria-label={desktopTasksCollapsed ? t('展开后台任务') : t('折叠后台任务')}
+            title={desktopTasksCollapsed ? t('展开后台任务') : t('折叠后台任务')}
+          >
+            <OrbControlIcon type="tasks" collapsed={desktopTasksCollapsed} />
+          </button>}
           <button
             className="danger"
             onClick={event => {
@@ -1027,7 +1073,43 @@ export default function App() {
             <OrbControlIcon type="close" />
           </button>
         </nav>
-      </section>
+        </section>
+      </div>
+      {desktopCards.length > 0 && !desktopTasksCollapsed && <section
+        className="desktop-task-stack"
+        aria-label={t('后台任务')}
+        aria-live="polite"
+      >
+        {desktopCards.map(task => {
+          const detail = taskDetail(task)
+          const title = task.delegation?.title || task.objective || taskLabel(task)
+          const progress = ['completed', 'failed', 'cancelled'].includes(task.phase)
+            ? taskLabel(task)
+            : detail && detail !== title ? detail : taskLabel(task)
+          const plan = task.activity?.findLast(item => item.kind === 'plan')
+          const progressRatio = ['completed', 'failed', 'cancelled'].includes(task.phase)
+            ? 1
+            : plan?.total > 0 ? plan.completed / plan.total : null
+          return <article
+            key={task.id}
+            className={`desktop-task-card ${task.phase}`}
+            title={detail}
+          >
+            <strong>{title}</strong>
+            <span className="desktop-task-state">
+              <i aria-hidden="true" />
+              <small>{progress}</small>
+            </span>
+            <span
+              className={`desktop-task-progress${progressRatio == null ? '' : ' determinate'}`}
+              style={progressRatio == null ? undefined : {
+                '--desktop-task-progress': `${Math.max(0, Math.min(1, progressRatio)) * 100}%`,
+              }}
+              aria-hidden="true"
+            />
+          </article>
+        })}
+      </section>}
     </main>
   }
 

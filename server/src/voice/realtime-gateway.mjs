@@ -1600,10 +1600,9 @@ export function attachRealtimeGateway(server, {
       })
     }
 
-    // The desktop window and the realtime provider must enter sleep as one
-    // state transition. Waiting for the independent inactivity timer lets a
-    // hidden, muted orb continue forwarding wake-word audio to the realtime
-    // model, which can produce replies while no orb is visible.
+    // The desktop window and the realtime provider enter sleep as one explicit
+    // state transition. Desktop decides when it is safe to hide because only
+    // the client knows about visible work, permission prompts and playback.
     const requestExplicitSleep = () => {
       if (!config.wakeWordEnabled || textOnlySession) return false
       explicitSleepRequested = true
@@ -1778,6 +1777,14 @@ export function attachRealtimeGateway(server, {
           && Array.isArray(event.clientStates)
           && event.clientStates.includes('sleeping')
         ) ? ['sleeping'] : []
+        // A desktop that advertises the sleeping state owns its inactivity
+        // policy. Keep Gateway's legacy automatic timer only for clients that
+        // cannot request an explicit synchronized sleep transition.
+        sleepController.setTimeoutMs(
+          clientContext.states.includes('sleeping')
+            ? 0
+            : config.sleepTimeoutMs,
+        )
         frontend?.updateAgentContext({
           client: clientContext,
           textOnly: textOnlySession,

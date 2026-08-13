@@ -62,3 +62,23 @@ test('enables without auto-sleeping when timeoutMs is 0', async () => {
   assert.equal(sleeps, 0)
   controller.close()
 })
+
+test('can hand inactivity timing to a client without an old timer firing', async () => {
+  let sleeps = 0
+  const controller = new SleepController({
+    timeoutMs: 40,
+    onSleep: () => { sleeps += 1 },
+  })
+  controller.enable()
+  await wait(15)
+  assert.equal(controller.setTimeoutMs(0), 0)
+  controller.recordActivity()
+  await wait(70)
+  assert.equal(sleeps, 0)
+
+  controller.holdSleeping()
+  assert.equal(controller.wake(), true)
+  await wait(20)
+  assert.equal(sleeps, 0)
+  controller.close()
+})
