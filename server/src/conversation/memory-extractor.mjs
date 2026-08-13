@@ -88,11 +88,36 @@ function cleanPatch(value) {
     .join('')
 }
 
-// The model may wrap JSON in a Markdown code fence despite instructions.
+// The model may wrap JSON in a Markdown code fence or append a short
+// explanation despite instructions. Extract exactly the first complete JSON
+// object so a harmless suffix cannot discard an otherwise valid memory patch.
+function firstJsonObject(value) {
+  const start = value.indexOf('{')
+  if (start < 0) return value
+  let depth = 0
+  let quoted = false
+  let escaped = false
+  for (let index = start; index < value.length; index += 1) {
+    const character = value[index]
+    if (quoted) {
+      if (escaped) escaped = false
+      else if (character === '\\') escaped = true
+      else if (character === '"') quoted = false
+      continue
+    }
+    if (character === '"') quoted = true
+    else if (character === '{') depth += 1
+    else if (character === '}' && --depth === 0) {
+      return value.slice(start, index + 1)
+    }
+  }
+  return value
+}
+
 function parsePatch(text) {
   const raw = String(text || '').trim()
   const unfenced = raw.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '')
-  const parsed = JSON.parse(unfenced)
+  const parsed = JSON.parse(firstJsonObject(unfenced))
   if (!parsed || !Array.isArray(parsed.changes)) {
     throw new Error('extractor output has no changes array')
   }
