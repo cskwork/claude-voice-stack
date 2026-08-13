@@ -4,6 +4,7 @@ export const DESKTOP_TASK_SURFACE_WIDTH = 360
 export const DESKTOP_TASK_CARD_HEIGHT = 54
 export const DESKTOP_TASK_CARD_GAP = 8
 export const DESKTOP_TASK_STACK_PADDING = 8
+export const DESKTOP_TASK_STACK_LIFT = 14
 
 export function desktopSurfaceSize(taskCount, {
   workAreaHeight = Number.POSITIVE_INFINITY,
@@ -20,6 +21,7 @@ export function desktopSurfaceSize(taskCount, {
   const requestedHeight = (
     DESKTOP_ORB_HEIGHT
     + stackHeight
+    - DESKTOP_TASK_STACK_LIFT
   )
   return {
     width: DESKTOP_TASK_SURFACE_WIDTH,

@@ -141,6 +141,7 @@ header .voice.waiting { color: #ded5ff; border-color: #927cf480; }
 .desktop-task-stack {
   width: 100%;
   min-height: 0;
+  margin-top: -14px;
   padding: 6px 8px 8px;
   display: flex;
   flex: 1 1 auto;
@@ -523,10 +524,10 @@ header .voice.waiting { color: #ded5ff; border-color: #927cf480; }
   left: 50%;
   top: 132px;
   display: flex;
-  gap: 5px;
-  padding: 4px;
+  gap: 4px;
+  padding: 3px;
   border: 1px solid #ffffff12;
-  border-radius: 15px;
+  border-radius: 13px;
   background: #17171ddd;
   box-shadow: 0 8px 20px #0006, inset 0 1px #ffffff0a;
   backdrop-filter: blur(16px) saturate(1.25);
@@ -542,13 +543,13 @@ header .voice.waiting { color: #ded5ff; border-color: #927cf480; }
   transform: translate(-50%, 0) scale(1);
 }
 .desktop-orb-controls button {
-  width: 27px;
-  height: 27px;
+  width: 26px;
+  height: 26px;
   padding: 0;
   display: grid;
   place-items: center;
   border: 0;
-  border-radius: 10px;
+  border-radius: 9px;
   color: #9b9da9;
   background: transparent;
   transition: color .15s ease, background .15s ease, transform .15s ease;
@@ -570,8 +571,8 @@ header .voice.waiting { color: #ded5ff; border-color: #927cf480; }
   background: #c97c8814;
 }
 .desktop-orb-controls svg {
-  width: 15px;
-  height: 15px;
+  width: 14px;
+  height: 14px;
   fill: none;
   stroke: currentColor;
   stroke-width: 1.8;

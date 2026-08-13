@@ -18,7 +18,7 @@ test('keeps the compact orb surface without task cards', () => {
 test('grows downward for task cards and caps at the work area', () => {
   assert.deepEqual(desktopSurfaceSize(2, { workAreaHeight: 900 }), {
     width: DESKTOP_TASK_SURFACE_WIDTH,
-    height: 336,
+    height: 322,
   })
   assert.deepEqual(desktopSurfaceSize(20, { workAreaHeight: 700 }), {
     width: DESKTOP_TASK_SURFACE_WIDTH,
