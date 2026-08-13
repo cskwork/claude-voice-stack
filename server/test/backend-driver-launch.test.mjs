@@ -8,6 +8,7 @@ import { openCodeBackendDriver } from '../src/agent/backends/opencode.mjs'
 import { openClawBackendDriver } from '../src/agent/backends/openclaw.mjs'
 import { codexBackendDriver } from '../src/agent/backends/codex.mjs'
 import { claudeBackendDriver } from '../src/agent/backends/claude.mjs'
+import { deepSeekHarnessBackendDriver } from '../src/agent/backends/deepseek-harness.mjs'
 
 function assertLauncherPattern(profile, root, scriptName) {
   const connection = profile.acpConnection
@@ -65,4 +66,20 @@ test('Claude Code driver uses process.execPath + claude-code-acp.mjs', () => {
     directory: '/work',
   })
   assertLauncherPattern(profile, '/repo', 'claude-code-acp.mjs')
+})
+
+test('DeepSeek Harness driver isolates its ACP limitations', () => {
+  const profile = deepSeekHarnessBackendDriver.createProfile({
+    root: '/repo',
+    directory: '/work',
+    sessionRoot: '/state/deepseek-harness',
+    permissionMode: 'native',
+  })
+  assertLauncherPattern(profile, '/repo', 'deepseek-harness-acp.mjs')
+  assert.equal(profile.externalMcp, false)
+  assert.equal(profile.sessionMcp, false)
+  assert.equal(profile.delegation, false)
+  assert.equal(profile.nativeSessionHistory, false)
+  assert.equal(profile.acpConnection.env.DSH_PERMISSION_MODE, 'workspace-write')
+  assert.equal(profile.acpConnection.env.DSH_MODEL, 'deepseek-v4-pro')
 })

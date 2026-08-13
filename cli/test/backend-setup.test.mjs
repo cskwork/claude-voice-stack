@@ -191,6 +191,34 @@ test('checks explicit generic ACP commands and adapter binaries', () => {
   assert.equal(claude.adapter.source, 'installed')
 })
 
+test('detects the DeepSeek Harness ACP runtime', () => {
+  const item = inspector({
+    backend: 'deepseek',
+    commands: {
+      dsh: '/bin/dsh',
+      'dsh-acp-demo': '/bin/dsh-acp-demo',
+    },
+  }).backends[0]
+  assert.equal(item.ready, true)
+  assert.equal(item.integration, 'native')
+})
+
+test('requires both the DeepSeek Harness CLI and ACP runtime', () => {
+  const missingCli = inspector({
+    backend: 'deepseek',
+    commands: { 'dsh-acp-demo': '/bin/dsh-acp-demo' },
+  }).backends[0]
+  assert.equal(missingCli.ready, false)
+  assert.match(missingCli.issues[0], /DeepSeek/)
+
+  const missingAcp = inspector({
+    backend: 'deepseek',
+    commands: { dsh: '/bin/dsh', npx: '/bin/npx' },
+  }).backends[0]
+  assert.equal(missingAcp.ready, false)
+  assert.match(missingAcp.issues[0], /dsh-acp-demo/)
+})
+
 test('honors explicit package and binary runtime requirements', () => {
   const packageMode = inspector({
     backend: 'opencode',

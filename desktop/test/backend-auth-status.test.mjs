@@ -50,6 +50,26 @@ test('detects explicit unauthenticated results without treating failures as proo
   })).status, 'unauthenticated')
 })
 
+test('detects DeepSeek Harness API-key configuration', async () => {
+  assert.equal((await inspectBackendAuthentication('deepseek', {
+    env: { DEEPSEEK_API_KEY: 'test-key' },
+  })).status, 'authenticated')
+  assert.equal((await inspectBackendAuthentication('deepseek', {
+    env: { HOME: '/home/user' },
+    readCredentialFile: async path => {
+      assert.equal(path, '/home/user/.dsh/.credentials.yaml')
+      return 'DEEPSEEK_API_KEY: sk-stored\n'
+    },
+  })).status, 'authenticated')
+  assert.equal((await inspectBackendAuthentication('deepseek', {
+    env: { DSH_HOME: '/custom/dsh' },
+    readCredentialFile: async path => {
+      assert.equal(path, '/custom/dsh/.credentials.yaml')
+      throw new Error('missing')
+    },
+  })).status, 'unauthenticated')
+})
+
 test('never treats stale CodeBuddy credential files as proof of login', async () => {
   assert.equal((await inspectBackendAuthentication('codebuddy', {
     command: 'codebuddy',
