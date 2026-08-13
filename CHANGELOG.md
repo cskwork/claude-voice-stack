@@ -1,12 +1,15 @@
 # Changelog
 
-## Unreleased
+## 1.9.0
 
 - DashScope Realtime 档案支持稳定的 Qwen3.5 Omni Plus/Flash 模型名；本次只接入模型、
   Session 配置和现有 Function Calling 委派链路，不包含图片、视频或文字输入 UI。
 - 图片、视频帧、摄像头采集和文字交互入口将在 Issue #131 的独立 PR 中实现。
 - Audio 与 Omni 模型族使用独立的可选音色覆盖；切换模型只修改模型 ID，未显式配置
   音色时运行时分别使用 `longanqian` 与 `Ethan`，不会把默认值写入用户配置。
+- 桌面设置页新增可搜索的后台 Agent 选择器，并支持配置外部后台服务。
+- 桌面悬浮球新增后台任务卡片，实时展示多个任务的 Agent 执行步骤、权限状态与结果；
+  支持折叠，并统一消费 ACP Plan 和工具调用进度。
 
 ## 1.8.3
 

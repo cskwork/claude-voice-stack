@@ -20,8 +20,8 @@
 
 ## News
 
-- **未发布**
-  🎙️ 新增 Qwen3.5-Omni Realtime 前台模型；🔊 Audio 与 Omni 可分别保存音色偏好。
+- **2026-08-13 · [v1.9.0](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.9.0)**
+  🧩 桌面任务卡实时展示 Agent 进度；🔎 后台 Agent 选择更清晰、支持搜索；🎙️ 支持 Qwen3.5-Omni Realtime 前台模型接入。
 - **2026-08-12 · [v1.8.3](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.8.3)**
   ✨ 优化 Prompt；📉 减少 Token 消耗；🔧 修复已知问题。
 - **2026-08-11 · [v1.8.2](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.8.2)**
