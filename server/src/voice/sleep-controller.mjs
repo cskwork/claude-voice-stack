@@ -22,8 +22,23 @@ export class SleepController {
     return true
   }
 
+  setTimeoutMs(timeoutMs) {
+    this.timeoutMs = Math.max(0, Number(timeoutMs) || 0)
+    clearTimeout(this.timer)
+    this.timer = null
+    if (this.enabled && !this.sleeping && this.timeoutMs) {
+      this.recordActivity()
+    }
+    return this.timeoutMs
+  }
+
   recordActivity() {
     if (!this.enabled || this.sleeping || this.closed) return
+    if (!this.timeoutMs) {
+      clearTimeout(this.timer)
+      this.timer = null
+      return
+    }
     this.schedule(this.timeoutMs)
   }
 
