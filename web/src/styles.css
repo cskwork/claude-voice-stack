@@ -130,10 +130,15 @@ header .voice.waiting { color: #ded5ff; border-color: #927cf480; }
   background: transparent;
   user-select: none;
 }
+.desktop-gallery-shell.tasks-above {
+  flex-direction: column-reverse;
+}
 .desktop-orb-anchor {
   flex: 0 0 204px;
+  align-self: flex-start;
   width: 172px;
   height: 204px;
+  margin-left: var(--desktop-orb-offset-x, 0);
   display: grid;
   place-items: center;
 }
@@ -150,6 +155,11 @@ header .voice.waiting { color: #ded5ff; border-color: #927cf480; }
   overflow-x: hidden;
   overflow-y: auto;
   scrollbar-width: none;
+}
+.desktop-gallery-shell.tasks-above .desktop-task-stack {
+  margin-top: 0;
+  margin-bottom: -14px;
+  padding: 8px 8px 6px;
 }
 .desktop-task-stack::-webkit-scrollbar { display: none; }
 .desktop-gallery-shell .desktop-task-card {

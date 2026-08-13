@@ -26,6 +26,8 @@ tells you:
 
 ## News
 
+- **2026-08-13 · [v1.9.1](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.9.1)**
+  🖥️ Improved desktop task card presentation and fixed several known issues.
 - **2026-08-13 · [v1.9.0](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.9.0)**
   🧩 Desktop task cards show live Agent progress; 🔎 backend Agent selection is clearer and searchable; 🎙️ supports Qwen3.5-Omni Realtime frontend integration.
 - **2026-08-12 · [v1.8.3](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.8.3)**

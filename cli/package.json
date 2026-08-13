@@ -1,7 +1,7 @@
 {
   "name": "@qwen-audio-agent/cli",
   "private": true,
-  "version": "1.9.0",
+  "version": "1.9.1",
   "type": "module",
   "bin": {
     "qwenaudio": "./bin/qwenaudio.mjs"

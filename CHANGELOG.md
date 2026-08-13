@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.9.1
+
+- 优化桌面端任务卡片展示，并修复若干已知问题。
+
 ## 1.9.0
 
 - DashScope Realtime 档案支持稳定的 Qwen3.5 Omni Plus/Flash 模型名；本次只接入模型、
