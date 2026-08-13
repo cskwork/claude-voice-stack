@@ -336,8 +336,8 @@ function renderBackendOptions(currentValue) {
       selectable: true,
       installable: false,
       requiresConfirmation: false,
-      authenticationRequired: false,
-      authenticatable: false,
+      configurationRequired: false,
+      configurable: false,
       reason: '当前不可用',
       title: '',
     })
@@ -358,7 +358,7 @@ function renderBackendOptions(currentValue) {
       : selectedState?.statusLabel || selectedState?.reason || ''
   backendPickerStatus.className = selectedRuntimeReady
     ? 'ready'
-    : selectedState?.authenticationRequired ? 'attention' : ''
+    : selectedState?.configurationRequired ? 'attention' : ''
 
   const query = backendSearch.value.trim().toLocaleLowerCase()
   const visibleStates = states.filter(state => {
@@ -419,7 +419,7 @@ function renderBackendOptions(currentValue) {
       status.className = `backend-status${
         runtimeReady
           ? ' ready'
-          : state.authenticationRequired ? ' attention' : (
+          : state.configurationRequired ? ' attention' : (
             state.ready ? ' installed' : ''
           )
       }`
@@ -441,14 +441,14 @@ function renderBackendOptions(currentValue) {
         : '一键安装到本机'
       row.append(button)
     }
-    if (state.authenticatable && !runtimeReady) {
+    if (state.configurable && !runtimeReady) {
       const button = document.createElement('button')
-      button.className = 'backend-authenticate'
+      button.className = 'backend-configure'
       button.type = 'button'
       button.dataset.backend = state.id
       button.disabled = Boolean(installingBackend)
-      button.textContent = '登录'
-      button.title = '在终端中打开该 Agent 的官方登录入口'
+      button.textContent = state.configurationLabel || '配置'
+      button.title = '打开该 Agent 自己提供的配置入口'
       row.append(button)
     }
     return row
@@ -513,7 +513,7 @@ async function installBackendRow(id) {
     }
     showMessage(
       result.authentication?.required
-        ? `${backendLabel(id)} 已安装，请完成登录。`
+        ? `${backendLabel(id)} 已安装，请完成配置。`
         : result.alreadyInstalled
           ? `${backendLabel(id)} 已安装。`
           : `${backendLabel(id)} 安装成功。`,
@@ -613,16 +613,16 @@ backendList.addEventListener('click', event => {
     void installBackendRow(button.dataset.backend)
     return
   }
-  const authentication = event.target.closest('.backend-authenticate')
-  if (!authentication || authentication.disabled) return
+  const configuration = event.target.closest('.backend-configure')
+  if (!configuration || configuration.disabled) return
   event.preventDefault()
-  window.qwenAudioAgentDesktop.authenticateBackend(authentication.dataset.backend)
+  window.qwenAudioAgentDesktop.configureBackend(configuration.dataset.backend)
     .then(() => showMessage(
-      `已打开 ${backendLabel(authentication.dataset.backend)} 登录入口。`,
+      `已打开 ${backendLabel(configuration.dataset.backend)} 配置入口。`,
       'notice',
     ))
     .catch(error => showMessage(
-      friendlyError(error, '无法打开登录入口'),
+      friendlyError(error, '无法打开配置入口'),
       'error',
     ))
 })

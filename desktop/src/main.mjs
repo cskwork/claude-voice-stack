@@ -63,7 +63,7 @@ import {
 import {
   createBackendInstaller,
 } from './backend-installer.mjs'
-import { openBackendAuthentication } from './backend-authentication.mjs'
+import { openBackendConfiguration } from './backend-configuration.mjs'
 import {
   parseSettings,
   realtimeSettingsConfigured,
@@ -1049,18 +1049,21 @@ ipcMain.handle('qwen-audio-agent:backend-install', async (event, payload) => {
   })
 })
 
-ipcMain.handle('qwen-audio-agent:backend-authenticate', async (event, payload) => {
+ipcMain.handle('qwen-audio-agent:backend-configure', async (event, payload) => {
   if (!settingsWindow || event.sender !== settingsWindow.webContents) {
-    throw new Error('无权启动后台 Agent 登录')
+    throw new Error('无权启动后台 Agent 配置')
   }
   const id = typeof payload === 'string' ? payload : payload?.backend
   const definition = backendDefinition(id)
   if (!definition) throw new Error(`不支持的后台：${String(id || '')}`)
-  await openBackendAuthentication(definition.id, {
+  const result = await openBackendConfiguration(definition.id, {
     env: backendDetectionEnvironment(),
   })
-  logger.info('backend.authentication_opened', { backend: definition.id })
-  return { ok: true }
+  logger.info('backend.configuration_opened', {
+    backend: definition.id,
+    action: result.action?.kind,
+  })
+  return result
 })
 
 ipcMain.handle('qwen-audio-agent:updater-status', event => {

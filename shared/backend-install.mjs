@@ -14,6 +14,11 @@ import { homedir } from 'node:os'
 import { inspectBackendAuthentication } from './backend-auth-status.mjs'
 import { backendDefinition } from './backend-catalog.mjs'
 import {
+  backendConfigurationAction,
+  backendOnboardingAdapter,
+  resolveBackendOnboarding,
+} from './backend-onboarding.mjs'
+import {
   backendAuthenticationSupport,
   backendConfigurationSupport,
   backendLifecycleSpec,
@@ -26,11 +31,11 @@ function clean(value) {
 }
 
 function specSteps(id, platform) {
-  const lifecycle = backendLifecycleSpec(id)
-  const spec = lifecycle?.installation
-  if (!spec) return { lifecycle, spec: null, steps: [] }
+  const onboarding = backendOnboardingAdapter(id, { platform })
+  const spec = onboarding.installation
+  if (!spec) return { lifecycle: backendLifecycleSpec(id), spec: null, steps: [] }
   return {
-    lifecycle,
+    lifecycle: backendLifecycleSpec(id),
     spec,
     steps: spec.steps.filter(step => (
       !step.platforms || step.platforms.includes(platform)
@@ -145,10 +150,21 @@ export function withBackendLifecycle(report, {
         { env, platform },
       )
       const install = installSupport(item.id, { env, platform })
+      const configuration = {
+        ...backendConfigurationSupport(item.id, { env, platform }),
+        required: authentication.required === true,
+        status: authentication.status,
+        actionAvailable: authentication.actionAvailable === true,
+        action: backendConfigurationAction(item.id, { env, platform }),
+      }
       return {
         ...item,
         install,
         authentication,
+        onboarding: resolveBackendOnboarding(item, {
+          installation: install,
+          configuration,
+        }),
         ...(definition?.supportsExternalService
           ? {
               externalService: {
@@ -162,7 +178,7 @@ export function withBackendLifecycle(report, {
           : {}),
         lifecycle: resolveBackendLifecycle(item, {
           installation: install,
-          configuration: backendConfigurationSupport(item.id),
+          configuration,
           authentication,
         }),
       }
@@ -385,10 +401,15 @@ export async function installBackend(id, {
       observed,
       { env: resolvedEnv, platform },
     )
+    const configurationHint = backendOnboardingAdapter(definition.id, {
+      env: resolvedEnv,
+      platform,
+    }).configuration.action?.hint
     return {
       ok: true,
       report: before,
-      loginHint: backendLifecycleSpec(definition.id).authentication?.hint,
+      configurationHint,
+      loginHint: configurationHint,
       authentication,
       alreadyInstalled: true,
     }
@@ -536,10 +557,15 @@ export async function installBackend(id, {
     observed,
     { env, platform },
   )
+  const configurationHint = backendOnboardingAdapter(definition.id, {
+    env: resolvedEnv,
+    platform,
+  }).configuration.action?.hint
   return {
     ok: true,
     report,
-    loginHint: backendLifecycleSpec(definition.id).authentication?.hint,
+    configurationHint,
+    loginHint: configurationHint,
     authentication,
   }
 }

@@ -8,7 +8,7 @@ import {
   resolveBackendLifecycle,
 } from '../../shared/backend-lifecycle.mjs'
 
-test('describes installation, configuration, and authentication in one catalog', () => {
+test('combines catalog installation with adapter-owned configuration', () => {
   const spec = backendLifecycleSpec('codebuddy')
   assert.equal(spec.installation.steps[0].packageEnv, 'CODEBUDDY_PACKAGE')
   assert.equal(spec.configuration.mode, 'backend-owned')
@@ -39,7 +39,7 @@ test('does not equate installation with authentication or runtime readiness', ()
       supported: true,
     },
   })
-  assert.equal(lifecycle.state, 'authentication-required')
+  assert.equal(lifecycle.state, 'configuration-required')
   assert.equal(lifecycle.installation.status, 'installed')
   assert.equal(lifecycle.readiness.status, 'not-connected')
 })

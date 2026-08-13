@@ -233,11 +233,12 @@ export async function main(argv, {
         ? `✓ ${label} 已安装\n`
         : `✓ ${label} 安装完成\n`,
     )
+    const configurationHint = result.configurationHint || result.loginHint
     if (
-      result.loginHint
+      configurationHint
       && result.authentication?.status !== 'authenticated'
     ) {
-      stdout.write(`${result.loginHint}\n`)
+      stdout.write(`${configurationHint}\n`)
     }
     return 0
   }

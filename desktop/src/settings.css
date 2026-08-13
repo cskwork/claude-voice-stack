@@ -828,7 +828,7 @@ select {
 }
 
 .backend-install,
-.backend-authenticate {
+.backend-configure {
   min-height: 32px;
   padding: 4px 12px;
   border: 1px solid var(--divider);
@@ -850,7 +850,7 @@ select {
 }
 
 .backend-install:hover:not(:disabled),
-.backend-authenticate:hover:not(:disabled) {
+.backend-configure:hover:not(:disabled) {
   border-color: var(--text-primary);
 }
 

@@ -43,7 +43,7 @@ It checks the backend executable, ACP integration method, and necessary Adapters
 displays the current selection. The check command itself does not install or download the backend
 Agent, does not trigger login, and does not output or validate credentials or modify model
 configuration. It indicates whether OpenCode/OpenClaw can automatically download and configure
-itself at formal startup; the authentication status of other backends is managed by the Agent
+itself at formal startup; the configuration status of other backends is managed by the Agent
 itself.
 
 To check only a specified backend or get machine-readable results:
@@ -78,14 +78,20 @@ qwenaudio install deepseek
 - ACP adapters for Codex and Claude Code are provided together with the main body; Hermes uses
   the official installation script. Script-type steps display the full command before execution
   and wait for confirmation; `--yes` skips confirmation (use with caution).
-- After installation is complete, the availability of the backend is automatically re-detected;
-  backends that require login will provide login instructions.
+- After installation, backend availability is detected again automatically; backends that need
+  initialization, login, or credentials expose one consistent **Configure** action.
 - The generic `acp` backend does not provide one-click installation; please install it yourself
   and configure it via `ACP_COMMAND`.
 - In the "Backend Agent" list on the desktop edition settings page, backends that are not
   installed and support one-click installation will display an "Install" button at the end of
   the row, using the same installation logic as the CLI; script-type installations will pop up
   a native confirmation dialog.
+
+Desktop provides a shared shell for installation, configuration, and connection state without
+encoding any Agent-specific login flow. Each backend onboarding adapter declares its trusted
+configuration entry and status probe. An adapter may open a terminal today and can later provide
+a browser, form, or instructions action without changing product-specific logic in Settings.
+The renderer submits only a backend ID and can never assemble or execute configuration commands.
 
 DeepSeek Harness is currently an experimental integration. After installation,
 run `dsh web` and configure the official API key in its model settings. The ACP

@@ -507,7 +507,7 @@ test('installs a backend through the injected installer', async () => {
     target.calls.push(['install', id])
     options.onProgress({ phase: 'start', title: '步骤 1', display: 'npm i -g x' })
     options.onProgress({ phase: 'output', chunk: 'added 1 package\n' })
-    return { ok: true, loginHint: '请在终端登录' }
+    return { ok: true, configurationHint: '请完成官方配置' }
   }
   assert.equal(await main(['install', 'codex'], target.dependencies), 0)
   assert.deepEqual(preparation, { readOnly: true })
@@ -525,7 +525,7 @@ test('installs a backend through the injected installer', async () => {
   assert.match(output, /步骤 1：npm i -g x/)
   assert.match(output, /added 1 package/)
   assert.match(output, /✓ Codex 安装完成/)
-  assert.match(output, /请在终端登录/)
+  assert.match(output, /请完成官方配置/)
 })
 
 test('asks before running script install steps unless --yes is given', async () => {
