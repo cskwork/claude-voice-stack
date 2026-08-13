@@ -476,12 +476,16 @@ select {
 }
 
 .service-url-row,
+.backend-url-row,
+.backend-credential-row,
 .node-path-row,
 .backend-list-row {
   align-items: start;
 }
 
 .service-url-row > label,
+.backend-url-row > label,
+.backend-credential-row > label,
 .node-path-row > label,
 .backend-list-row > .setting-label {
   padding-top: 10px;

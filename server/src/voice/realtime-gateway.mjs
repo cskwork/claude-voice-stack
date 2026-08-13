@@ -1388,6 +1388,11 @@ export function attachRealtimeGateway(server, {
           connectionLogger.warn(event, fields)
         },
         onError: error => {
+          // Closing a frontend while it is still handshaking is expected when
+          // the client enters sleep or reconnects. Its late socket error
+          // belongs to the detached frontend and must not mark the live voice
+          // client unavailable.
+          if (frontend !== createdFrontend) return
           const classification = createdFrontend.provider.classifyError(error.message)
           if (classification !== 'inactivity') {
             connectionLogger.warn('realtime.provider_error', {
@@ -1408,6 +1413,7 @@ export function attachRealtimeGateway(server, {
           }
         },
         onClose: () => {
+          if (frontend !== createdFrontend) return
           connectionLogger.warn('realtime.closed', {
             provider: createdFrontend.provider.key,
             connectedMs: realtimeConnectedAt
@@ -1416,7 +1422,6 @@ export function attachRealtimeGateway(server, {
             blocked: Boolean(realtimeBlockedError),
           })
           send(ws, { type: 'voice.state', state: 'idle' })
-          if (frontend !== createdFrontend) return
           frontend = null
           if (!inputEnabled && !outputEnabled) return
           send(ws, {
@@ -1483,6 +1488,7 @@ export function attachRealtimeGateway(server, {
           }
         })
         .catch(error => {
+          if (frontend !== createdFrontend) return
           connectionLogger.error('realtime.connect_failed', {
             provider: createdFrontend.provider.key,
             durationMs: Date.now() - connectStartedAt,

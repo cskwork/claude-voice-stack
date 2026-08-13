@@ -252,6 +252,36 @@
                 />
               </div>
 
+              <div class="setting-row backend-connection-row" hidden>
+                <label for="backend-ownership">连接方式</label>
+                <select id="backend-ownership">
+                  <option value="owned">由应用管理</option>
+                  <option value="external">连接现有服务</option>
+                </select>
+              </div>
+
+              <div class="setting-row backend-url-row" hidden>
+                <label for="backend-url">服务地址</label>
+                <input
+                  id="backend-url"
+                  type="url"
+                  autocomplete="off"
+                  spellcheck="false"
+                  placeholder="http://127.0.0.1:18789"
+                />
+              </div>
+
+              <div class="setting-row backend-credential-row" hidden>
+                <label for="backend-credential">访问令牌</label>
+                <input
+                  id="backend-credential"
+                  type="password"
+                  autocomplete="off"
+                  spellcheck="false"
+                  placeholder="留空表示不使用令牌"
+                />
+              </div>
+
               <div class="setting-row node-path-row" hidden>
                 <label for="node-path">Node.js 路径</label>
                 <div class="field-with-action">

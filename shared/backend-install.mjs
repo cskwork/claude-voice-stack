@@ -125,6 +125,7 @@ export function withBackendLifecycle(report, {
   return {
     ...report,
     backends: (report?.backends || []).map(item => {
+      const definition = backendDefinition(item.id)
       const authentication = resolvedAuthentication(
         item.id,
         item.authentication,
@@ -135,6 +136,17 @@ export function withBackendLifecycle(report, {
         ...item,
         install,
         authentication,
+        ...(definition?.supportsExternalService
+          ? {
+              externalService: {
+                supported: true,
+                defaultBaseUrl: definition.defaultBaseUrl || '',
+                credential: Boolean(
+                  definition.externalService?.credentialEnvironment,
+                ),
+              },
+            }
+          : {}),
         lifecycle: resolveBackendLifecycle(item, {
           installation: install,
           configuration: backendConfigurationSupport(item.id),

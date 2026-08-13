@@ -2,6 +2,14 @@
 
 The desktop app provides a persistent on-screen voice orb and includes a built-in Gateway, eliminating the need to start a service beforehand. If a local Gateway already exists in the same user configuration directory, it will connect directly and use the Gateway's current runtime configuration; otherwise, the desktop app will start and manage it automatically. On first run, the app creates a configuration file and guides you to fill in the DashScope API Key on the settings page and select a backend agent (frontend-only mode is also available).
 
+## Backend Agent Connection
+
+The app manages the selected backend Agent by default. For Agents that expose
+an external-service capability, the Backend Agent settings also allow connecting
+to an existing service by address and optional access token. OpenClaw currently
+supports this mode; Agents without that capability continue to use their managed
+ACP process and do not show irrelevant connection fields.
+
 ## Orb and Auto Sleep
 
 When idle, the orb automatically hides and disconnects real-time voice; you can also say "可以退下了" (you may step down) to hide it. The app remains in the menu bar and can be re-summoned from the menu bar or via a show shortcut. The default shortcut is `⇧⌘ Space` and can be changed in app settings.

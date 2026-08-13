@@ -39,6 +39,12 @@ const backendList = document.querySelector('#backend-list')
 const refreshBackends = document.querySelector('#refresh-backends')
 const realtimeModel = document.querySelector('#realtime-model')
 const backendModel = document.querySelector('#backend-model')
+const backendOwnership = document.querySelector('#backend-ownership')
+const backendUrl = document.querySelector('#backend-url')
+const backendCredential = document.querySelector('#backend-credential')
+const backendConnectionRow = document.querySelector('.backend-connection-row')
+const backendUrlRow = document.querySelector('.backend-url-row')
+const backendCredentialRow = document.querySelector('.backend-credential-row')
 const nodePathInput = document.querySelector('#node-path')
 const applyNodePath = document.querySelector('#apply-node-path')
 const nodePathRow = document.querySelector('.node-path-row')
@@ -284,6 +290,23 @@ function selectedBackend() {
     ?.value || 'none'
 }
 
+function renderBackendConnection() {
+  const state = backendOptionStates(backendReport)
+    .find(option => option.id === selectedBackend())
+  const externalService = state?.externalService
+  const supported = externalService?.supported === true
+  backendConnectionRow.hidden = !supported
+  if (!supported) backendOwnership.value = 'owned'
+  const external = supported && backendOwnership.value === 'external'
+  backendUrlRow.hidden = !external
+  backendCredentialRow.hidden = !(
+    external && externalService?.credential
+  )
+  if (externalService?.defaultBaseUrl) {
+    backendUrl.placeholder = externalService.defaultBaseUrl
+  }
+}
+
 // 按本机检测结果重建后台 Agent 列表：每行 = 单选钮 + 名称 + 状态徽标
 // + 安装按钮（仅“不可用且支持一键安装”时显示）；当前生效的值即使
 // 不可用也保留可选，避免列表丢值。
@@ -378,6 +401,7 @@ function renderBackendOptions(currentValue) {
     }
     return row
   }))
+  renderBackendConnection()
 }
 
 // npm 缺失时的引导：错误文案 + 指定路径入口 + Node.js 下载链接。
@@ -482,6 +506,13 @@ backendList.addEventListener('change', event => {
       row.querySelector('input')?.checked === true,
     )
   }
+  renderBackendConnection()
+  updateApplyState()
+})
+
+backendOwnership.addEventListener('change', () => {
+  showMessage('')
+  renderBackendConnection()
   updateApplyState()
 })
 
@@ -573,6 +604,9 @@ function formSettings() {
     speechToSpeechRealtimeUrl: speechToSpeechRealtimeUrl.value,
     speechToSpeechAuthToken: speechToSpeechAuthToken.value,
     backendModel: backendModel.value,
+    backendOwnership: backendOwnership.value,
+    backendUrl: backendUrl.value,
+    backendCredential: backendCredential.value,
     nodePath: nodePathInput.value.trim(),
   }
 }
@@ -594,6 +628,9 @@ function fingerprint(value) {
     speechToSpeechRealtimeUrl: value.speechToSpeechRealtimeUrl,
     speechToSpeechAuthToken: value.speechToSpeechAuthToken,
     backendModel: value.backendModel,
+    backendOwnership: value.backendOwnership,
+    backendUrl: value.backendUrl,
+    backendCredential: value.backendCredential,
     nodePath: value.nodePath,
   })
 }
@@ -796,6 +833,10 @@ function render() {
   speechToSpeechAuthToken.value = settings.speechToSpeechAuthToken || ''
   renderRealtimeProvider(settings.realtimeProvider)
   backendModel.value = settings.backendModel || ''
+  backendOwnership.value = settings.backendOwnership || 'owned'
+  backendUrl.value = settings.backendUrl || ''
+  backendCredential.value = settings.backendCredential || ''
+  renderBackendConnection()
   nodePathInput.value = settings.nodePath || ''
   renderRuntime()
   appliedFingerprint = fingerprint(formSettings())
@@ -813,6 +854,8 @@ for (const control of [
   realtimeModel,
   realtimeVoice,
   backendModel,
+  backendUrl,
+  backendCredential,
   nodePathInput,
   ...realtimeProviderInputs,
   wakeWordEnabled,

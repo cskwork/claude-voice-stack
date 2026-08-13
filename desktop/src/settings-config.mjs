@@ -2,6 +2,7 @@ import { parseEnv } from 'node:util'
 import {
   backendDefinition,
   normalizeBackendProtocol,
+  resolveBackendOwnership,
 } from '../../shared/backend-catalog.mjs'
 import {
   normalizeOrbSkinId,
@@ -32,6 +33,9 @@ const DEFAULTS = {
   speechToSpeechRealtimeUrl: '',
   speechToSpeechAuthToken: '',
   backendModel: '',
+  backendOwnership: 'owned',
+  backendUrl: '',
+  backendCredential: '',
   nodePath: '',
 }
 
@@ -52,6 +56,7 @@ const SETTING_KEYS = {
   speechToSpeechRealtimeUrl: 'SPEECH_TO_SPEECH_REALTIME_URL',
   speechToSpeechAuthToken: 'SPEECH_TO_SPEECH_AUTH_TOKEN',
   backendModel: 'QWEN_AUDIO_AGENT_BACKEND_MODEL',
+  backendOwnership: 'QWEN_AUDIO_AGENT_BACKEND_OWNERSHIP',
   nodePath: 'QWEN_AUDIO_AGENT_NODE_PATH',
 }
 
@@ -73,6 +78,19 @@ function cleanRealtimeUrl(value, fallback, label = '服务地址') {
   const url = new URL(text)
   if (!['ws:', 'wss:'].includes(url.protocol)) {
     throw new Error(`${label}只支持 WS 或 WSS`)
+  }
+  return text.replace(/\/+$/, '')
+}
+
+function cleanBackendUrl(value, label = '后台服务地址') {
+  const text = String(value || '').trim()
+  if (!text) return ''
+  const url = new URL(text)
+  if (!['http:', 'https:', 'ws:', 'wss:'].includes(url.protocol)) {
+    throw new Error(`${label}只支持 HTTP、HTTPS、WS 或 WSS`)
+  }
+  if (url.username || url.password) {
+    throw new Error(`${label}不能包含用户名或密码，请使用独立的访问令牌`)
   }
   return text.replace(/\/+$/, '')
 }
@@ -135,6 +153,37 @@ function encoded(value) {
 
 export function parseSettings(content = '', fallback = {}) {
   const values = parseEnv(content)
+  const agentProtocol = cleanAgentProtocol(configured(
+    values,
+    'AGENT_PROTOCOL',
+    fallback.AGENT_PROTOCOL || DEFAULTS.agentProtocol,
+  ))
+  const backend = backendDefinition(agentProtocol)
+  const backendUrl = backend?.baseUrlEnvironment
+    ? String(configured(
+      values,
+      backend.baseUrlEnvironment,
+      fallback[backend.baseUrlEnvironment] || '',
+    ) || '').trim()
+    : ''
+  const backendOwnership = backend
+    ? resolveBackendOwnership(agentProtocol, {
+      baseUrlConfigured: Boolean(backendUrl),
+      requestedOwnership: configured(
+        values,
+        'QWEN_AUDIO_AGENT_BACKEND_OWNERSHIP',
+        fallback.QWEN_AUDIO_AGENT_BACKEND_OWNERSHIP || '',
+      ),
+    })
+    : DEFAULTS.backendOwnership
+  const credentialEnvironment = backend?.externalService?.credentialEnvironment
+  const backendCredential = credentialEnvironment
+    ? String(configured(
+      values,
+      credentialEnvironment,
+      fallback[credentialEnvironment] || '',
+    ) || '').trim()
+    : ''
   const realtimeProvider = normalizeRealtimeProvider(configured(
     values,
     'QWEN_AUDIO_REALTIME_PROVIDER',
@@ -252,11 +301,7 @@ export function parseSettings(content = '', fallback = {}) {
     realtimeBaseUrl: String(configuredRealtimeBaseUrl || '').trim()
       || DEFAULTS.realtimeBaseUrl,
     realtimeProvider,
-    agentProtocol: cleanAgentProtocol(configured(
-      values,
-      'AGENT_PROTOCOL',
-      fallback.AGENT_PROTOCOL || DEFAULTS.agentProtocol,
-    )),
+    agentProtocol,
     realtimeModel,
     audioRealtimeVoice,
     omniRealtimeVoice,
@@ -272,6 +317,9 @@ export function parseSettings(content = '', fallback = {}) {
       'QWEN_AUDIO_AGENT_BACKEND_MODEL',
       fallback.QWEN_AUDIO_AGENT_BACKEND_MODEL || DEFAULTS.backendModel,
     ) || '').trim(),
+    backendOwnership,
+    backendUrl,
+    backendCredential,
     nodePath: String(configured(
       values,
       'QWEN_AUDIO_AGENT_NODE_PATH',
@@ -297,6 +345,23 @@ export function normalizeSettings(settings = {}) {
   const omniRealtimeVoice = String(
     settings.omniRealtimeVoice ?? DEFAULTS.omniRealtimeVoice,
   ).trim()
+  const agentProtocol = cleanAgentProtocol(
+    settings.agentProtocol ?? DEFAULTS.agentProtocol,
+  )
+  const backend = backendDefinition(agentProtocol)
+  const backendUrl = backend?.baseUrlEnvironment
+    ? cleanBackendUrl(settings.backendUrl ?? DEFAULTS.backendUrl)
+    : ''
+  const backendOwnership = backend
+    ? resolveBackendOwnership(agentProtocol, {
+      baseUrlConfigured: Boolean(backendUrl),
+      requestedOwnership: settings.backendOwnership
+        ?? DEFAULTS.backendOwnership,
+    })
+    : DEFAULTS.backendOwnership
+  if (backendOwnership === 'external' && !backendUrl) {
+    throw new Error('请填写外部后台服务地址')
+  }
   return {
     gatewayUrl: cleanUrl(
       settings.gatewayUrl,
@@ -325,9 +390,7 @@ export function normalizeSettings(settings = {}) {
       'Qwen Audio 服务地址',
     ),
     realtimeProvider,
-    agentProtocol: cleanAgentProtocol(
-      settings.agentProtocol ?? DEFAULTS.agentProtocol,
-    ),
+    agentProtocol,
     realtimeModel,
     audioRealtimeVoice,
     omniRealtimeVoice,
@@ -343,6 +406,11 @@ export function normalizeSettings(settings = {}) {
     backendModel: String(
       settings.backendModel ?? DEFAULTS.backendModel,
     ).trim(),
+    backendOwnership,
+    backendUrl,
+    backendCredential: backend?.externalService?.credentialEnvironment
+      ? String(settings.backendCredential ?? DEFAULTS.backendCredential).trim()
+      : '',
     nodePath: String(
       settings.nodePath ?? DEFAULTS.nodePath,
     ).trim(),
@@ -385,11 +453,21 @@ export function updateSettingsContent(content = '', settings = {}) {
         encoded(normalized[field]),
       ]),
   )
+  const backend = backendDefinition(normalized.agentProtocol)
+  if (settings.backendUrl !== undefined && backend?.baseUrlEnvironment) {
+    values[backend.baseUrlEnvironment] = encoded(normalized.backendUrl)
+  }
+  const credentialEnvironment = backend?.externalService?.credentialEnvironment
+  if (settings.backendCredential !== undefined && credentialEnvironment) {
+    values[credentialEnvironment] = encoded(normalized.backendCredential)
+  }
   const removed = new Set([
     ['audioRealtimeVoice', 'QWEN_AUDIO_REALTIME_VOICE'],
     ['omniRealtimeVoice', 'QWEN_OMNI_REALTIME_VOICE'],
-  ].filter(([field]) => (
-    settings[field] !== undefined && !normalized[field]
+    ['backendUrl', backend?.baseUrlEnvironment],
+    ['backendCredential', credentialEnvironment],
+  ].filter(([field, key]) => (
+    Boolean(key) && settings[field] !== undefined && !normalized[field]
   )).map(([, key]) => key))
   // Legacy keys that were merged into auto-hide. Drop them so the saved
   // config no longer carries a divergent sleep timeout.

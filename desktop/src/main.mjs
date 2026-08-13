@@ -1060,6 +1060,11 @@ ipcMain.handle('qwen-audio-agent:settings-save', async (event, settings) => {
       !== normalized.speechToSpeechAuthToken
   )
   const backendModelChanged = previous.backendModel !== normalized.backendModel
+  const backendConnectionChanged = (
+    previous.backendOwnership !== normalized.backendOwnership
+    || previous.backendUrl !== normalized.backendUrl
+    || previous.backendCredential !== normalized.backendCredential
+  )
   const orbSkinChanged = previous.orbSkin !== normalized.orbSkin
   const autoHideChanged = (
     previous.autoHideSeconds !== normalized.autoHideSeconds
@@ -1078,6 +1083,7 @@ ipcMain.handle('qwen-audio-agent:settings-save', async (event, settings) => {
     || realtimeVoiceChanged
     || speechToSpeechChanged
     || backendModelChanged
+    || backendConnectionChanged
     || wakeWordChanged
   )
   if (!remote && borrowedGatewayOrigin && gatewayRuntimeChanged) {
@@ -1129,6 +1135,7 @@ ipcMain.handle('qwen-audio-agent:settings-save', async (event, settings) => {
       realtimeModel: realtimeModelChanged,
       speechToSpeech: speechToSpeechChanged,
       backendModel: backendModelChanged,
+      backendConnection: backendConnectionChanged,
       orbSkin: orbSkinChanged,
       autoHide: autoHideChanged,
       wakeShortcut: wakeShortcutChanged,
@@ -1162,14 +1169,20 @@ ipcMain.handle('qwen-audio-agent:settings-save', async (event, settings) => {
   process.env.QWEN_AUDIO_ORB_STYLE = normalized.orbStyle
   process.env.QWEN_AUDIO_ORB_SKIN = normalized.orbSkin
   await ensureDesktopUi()
-  const runtime = await runtimeStatus(appOrigin)
-  if (
+  const desktopRendererChanged = (
     (restarted || gatewayChanged || orbSkinChanged || autoHideChanged)
     && mainWindow
     && !mainWindow.isDestroyed()
-  ) {
+  )
+  if (desktopRendererChanged) {
+    // Applying runtime settings is an explicit desktop interaction. A
+    // previously auto-hidden orb must rejoin the new Gateway as an active
+    // client instead of carrying its wake-word-only sleep state across the
+    // restart.
+    desktopPresence.wake('settings')
     void loadQwenAudioAgent(mainWindow)
   }
+  const runtime = await runtimeStatus(appOrigin)
   return {
     settings: normalized,
     restarted,

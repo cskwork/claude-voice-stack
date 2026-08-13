@@ -40,6 +40,9 @@ const definitions = new Map([
     baseUrlEnvironment: 'OPENCLAW_BASE_URL',
     defaultBaseUrl: 'http://127.0.0.1:18789',
     supportsExternalService: true,
+    externalService: {
+      credentialEnvironment: 'OPENCLAW_GATEWAY_TOKEN',
+    },
     supportsFullPermission: false,
   }],
   ['qoder', {
