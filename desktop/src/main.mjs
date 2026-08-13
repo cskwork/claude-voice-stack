@@ -54,8 +54,8 @@ import {
 import {
   DESKTOP_ORB_HEIGHT,
   DESKTOP_ORB_WIDTH,
-  desktopSurfaceSize,
-  resizeDesktopSurfaceBounds,
+  desktopOrbBounds,
+  desktopSurfaceLayout,
 } from './desktop-surface-layout.mjs'
 import {
   withBackendLifecycle,
@@ -178,6 +178,9 @@ let mainWindow = null
 let settingsWindow = null
 let rendererServer = null
 let dragState = null
+let desktopTaskCount = 0
+let desktopTaskPlacement = 'below'
+let desktopOrbOffsetX = 0
 let reconnectTimer = null
 let embeddedGateway = null
 let borrowedGatewayOrigin = ''
@@ -558,6 +561,9 @@ function createWindow() {
       clearTimeout(reconnectTimer)
       reconnectTimer = null
       mainWindow = null
+      desktopTaskCount = 0
+      desktopTaskPlacement = 'below'
+      desktopOrbOffsetX = 0
     }
   })
 
@@ -620,6 +626,17 @@ function validPoint(point) {
   )
 }
 
+function validWindowPosition(x, y) {
+  return (
+    Number.isSafeInteger(x)
+    && Number.isSafeInteger(y)
+    && x >= -2_147_483_648
+    && x <= 2_147_483_647
+    && y >= -2_147_483_648
+    && y <= 2_147_483_647
+  )
+}
+
 ipcMain.on('qwen-audio-agent:drag-start', (event, point) => {
   if (!mainWindow || event.sender !== mainWindow.webContents || !validPoint(point)) return
   const [windowX, windowY] = mainWindow.getPosition()
@@ -638,26 +655,71 @@ ipcMain.on('qwen-audio-agent:drag-move', (event, point) => {
     || !dragState
     || !validPoint(point)
   ) return
-  mainWindow.setPosition(
-    Math.round(dragState.windowX + point.x - dragState.pointerX),
-    Math.round(dragState.windowY + point.y - dragState.pointerY),
-  )
+  const x = Math.round(dragState.windowX + point.x - dragState.pointerX)
+  const y = Math.round(dragState.windowY + point.y - dragState.pointerY)
+  if (!validWindowPosition(x, y)) {
+    logger.warn('desktop.drag_position_invalid', { x, y })
+    dragState = null
+    return
+  }
+  try {
+    mainWindow.setPosition(x, y)
+  } catch (error) {
+    logger.warn('desktop.drag_position_failed', { x, y, error })
+    dragState = null
+  }
 })
 
 ipcMain.on('qwen-audio-agent:drag-end', event => {
-  if (mainWindow && event.sender === mainWindow.webContents) dragState = null
+  if (!mainWindow || event.sender !== mainWindow.webContents) return
+  dragState = null
+  updateDesktopTaskSurface(desktopTaskCount)
 })
+
+function updateDesktopTaskSurface(value) {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  const taskCount = Math.min(100, Math.max(0, Math.floor(Number(value) || 0)))
+  const bounds = mainWindow.getBounds()
+  const orbBounds = desktopOrbBounds(bounds, {
+    taskCount: desktopTaskCount,
+    placement: desktopTaskPlacement,
+    orbOffsetX: desktopOrbOffsetX,
+  })
+  const workArea = screen.getDisplayMatching(orbBounds).workArea
+  const layout = desktopSurfaceLayout({
+    bounds,
+    currentTaskCount: desktopTaskCount,
+    taskCount,
+    placement: desktopTaskPlacement,
+    orbOffsetX: desktopOrbOffsetX,
+    workArea,
+  })
+  desktopTaskCount = taskCount
+  desktopTaskPlacement = layout.placement
+  desktopOrbOffsetX = layout.orbOffsetX
+  mainWindow.webContents.send(
+    'qwen-audio-agent:task-card-placement',
+    {
+      placement: desktopTaskPlacement,
+      orbOffsetX: desktopOrbOffsetX,
+    },
+  )
+  const next = layout.bounds
+  if (
+    bounds.x !== next.x
+    || bounds.y !== next.y
+    || bounds.width !== next.width
+    || bounds.height !== next.height
+  ) {
+    // The orb is the visual anchor. Animating the transparent window bounds
+    // makes the orb appear to slide before the renderer applies its offset.
+    mainWindow.setBounds(next, false)
+  }
+}
 
 ipcMain.on('qwen-audio-agent:task-card-count', (event, value) => {
   if (!mainWindow || event.sender !== mainWindow.webContents) return
-  const taskCount = Math.min(100, Math.max(0, Math.floor(Number(value) || 0)))
-  const bounds = mainWindow.getBounds()
-  const workArea = screen.getDisplayMatching(bounds).workArea
-  const size = desktopSurfaceSize(taskCount, {
-    workAreaHeight: workArea.height,
-  })
-  if (bounds.width === size.width && bounds.height === size.height) return
-  mainWindow.setBounds(resizeDesktopSurfaceBounds(bounds, size, workArea), true)
+  updateDesktopTaskSurface(value)
 })
 
 ipcMain.on('qwen-audio-agent:open-settings', event => {
@@ -1261,6 +1323,12 @@ if (!app.requestSingleInstanceLock()) {
       app.dock?.hide()
     }
     createTray()
+    const refreshDesktopTaskSurface = () => {
+      updateDesktopTaskSurface(desktopTaskCount)
+    }
+    screen.on('display-added', refreshDesktopTaskSurface)
+    screen.on('display-removed', refreshDesktopTaskSurface)
+    screen.on('display-metrics-changed', refreshDesktopTaskSurface)
     if (!desktopPresence.registerShortcut(initialSettings.wakeShortcut)) {
       logger.warn('desktop.wake_shortcut_unavailable', {
         accelerator: initialSettings.wakeShortcut,

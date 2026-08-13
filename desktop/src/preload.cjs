@@ -13,6 +13,22 @@ contextBridge.exposeInMainWorld('qwenAudioAgentDesktop', {
     'qwen-audio-agent:task-card-count',
     count,
   ),
+  onTaskCardPlacement: callback => {
+    if (typeof callback !== 'function') return () => {}
+    const listener = (_event, layout) => {
+      callback({
+        placement: layout?.placement === 'above' ? 'above' : 'below',
+        orbOffsetX: Number.isFinite(layout?.orbOffsetX)
+          ? layout.orbOffsetX
+          : 0,
+      })
+    }
+    ipcRenderer.on('qwen-audio-agent:task-card-placement', listener)
+    return () => ipcRenderer.removeListener(
+      'qwen-audio-agent:task-card-placement',
+      listener,
+    )
+  },
   openSettings: () => ipcRenderer.send('qwen-audio-agent:open-settings'),
   enterHide: () => ipcRenderer.invoke('qwen-audio-agent:enter-hide'),
   wake: () => ipcRenderer.send('qwen-audio-agent:wake'),

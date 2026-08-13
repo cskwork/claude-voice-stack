@@ -152,6 +152,10 @@ export default function App() {
   const [backend, setBackend] = useState({ label: 'Agent', ready: false })
   const [agentTasks, setAgentTasks] = useState([])
   const [desktopTasksCollapsed, setDesktopTasksCollapsed] = useState(false)
+  const [desktopTaskLayout, setDesktopTaskLayout] = useState({
+    placement: 'below',
+    orbOffsetX: 0,
+  })
   const [orbDragging, setOrbDragging] = useState(false)
   const [spriteOrbFailed, setSpriteOrbFailed] = useState(false)
   const [desktopLifecycle, setDesktopLifecycle] = useState('active')
@@ -739,6 +743,13 @@ export default function App() {
 
   useEffect(() => {
     if (!desktopOrbMode) return undefined
+    return window.qwenAudioAgentDesktop?.onTaskCardPlacement?.(
+      setDesktopTaskLayout,
+    )
+  }, [])
+
+  useEffect(() => {
+    if (!desktopOrbMode) return undefined
     window.qwenAudioAgentDesktop?.setTaskCardCount(
       desktopTasksCollapsed ? 0 : desktopCards.length,
     )
@@ -971,7 +982,8 @@ export default function App() {
   if (desktopOrbMode) {
     return <main className={`desktop-gallery-shell${
       desktopCards.length && !desktopTasksCollapsed ? ' has-task-cards' : ''
-    }`}>
+    }${desktopTaskLayout.placement === 'above' ? ' tasks-above' : ''}`}
+    style={{ '--desktop-orb-offset-x': `${desktopTaskLayout.orbOffsetX}px` }}>
       <div className="desktop-orb-anchor">
         <section
         ref={voice.levelElementRef}
