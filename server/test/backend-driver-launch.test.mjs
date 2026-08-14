@@ -1,4 +1,4 @@
-// Tests that all 4 ACP backend drivers use the unified cross-platform
+// Tests that all 5 ACP backend drivers use the unified cross-platform
 // launcher pattern: command = process.execPath, args = [scripts/*.mjs, ...],
 // env = { ELECTRON_RUN_AS_NODE: '1' }.
 import assert from 'node:assert/strict'
@@ -9,6 +9,8 @@ import { openClawBackendDriver } from '../src/agent/backends/openclaw.mjs'
 import { codexBackendDriver } from '../src/agent/backends/codex.mjs'
 import { claudeBackendDriver } from '../src/agent/backends/claude.mjs'
 import { deepSeekHarnessBackendDriver } from '../src/agent/backends/deepseek-harness.mjs'
+
+import { piBackendDriver } from '../src/agent/backends/pi.mjs'
 
 function assertLauncherPattern(profile, root, scriptName) {
   const connection = profile.acpConnection
@@ -82,4 +84,13 @@ test('DeepSeek Harness driver isolates its ACP limitations', () => {
   assert.equal(profile.nativeSessionHistory, false)
   assert.equal(profile.acpConnection.env.DSH_PERMISSION_MODE, 'workspace-write')
   assert.equal(profile.acpConnection.env.DSH_MODEL, 'deepseek-v4-pro')
+
+test('Pi driver uses process.execPath + pi-acp.mjs', () => {
+  const profile = piBackendDriver.createProfile({
+    root: '/repo',
+    directory: '/work',
+    cliPath: '/opt/pi-acp',
+  })
+  assertLauncherPattern(profile, '/repo', 'pi-acp.mjs')
+  assert.equal(profile.acpConnection.env.PI_ACP_BIN, '/opt/pi-acp')
 })

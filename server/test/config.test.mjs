@@ -87,6 +87,10 @@ test('uses the user data directory for additional ACP backend workspaces', () =>
     resolveBackendWorkspace('qwen', {}, directory),
     resolve(directory, 'workspaces/qwen'),
   )
+  assert.equal(
+    resolveBackendWorkspace('pi', {}, directory),
+    resolve(directory, 'workspaces/pi'),
+  )
 })
 
 test('maps one backend model name to each managed backend provider', () => {
@@ -104,6 +108,8 @@ test('maps one backend model name to each managed backend provider', () => {
     codex: 'qwen3.7-plus',
     claude: 'qwen3.7-plus',
     deepSeekHarness: '',
+
+    pi: 'qwen3.7-plus',
     acp: 'qwen3.7-plus',
   })
 })
@@ -124,6 +130,8 @@ test('ignores backend-native model variables as Gateway overrides', () => {
     codex: '',
     claude: '',
     deepSeekHarness: '',
+
+    pi: '',
     acp: '',
   })
 })
@@ -143,6 +151,8 @@ test('treats legacy auto as no backend model override', () => {
     codex: '',
     claude: '',
     deepSeekHarness: '',
+
+    pi: '',
     acp: '',
   })
 })
@@ -163,6 +173,8 @@ test('uses only the unified backend model override', () => {
     codex: 'qwen3.7-max',
     claude: 'qwen3.7-max',
     deepSeekHarness: '',
+
+    pi: 'qwen3.7-max',
     acp: 'qwen3.7-max',
   })
 })
