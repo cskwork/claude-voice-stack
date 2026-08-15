@@ -20,6 +20,8 @@
 
 ## News
 
+- **2026-08-15 · [v1.10.1](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.10.1)**
+  🐛 修复若干已知问题；🖥️ 提升桌面版易用性。
 - **2026-08-13 · [v1.10.0](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.10.0)**
   🐋 新增实验性 DeepSeek Harness 后台接入，支持一键安装。
 - **2026-08-13 · [v1.9.1](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.9.1)**
@@ -68,11 +70,13 @@ https://github.com/user-attachments/assets/42022655-36d1-46b2-9c26-ff0765284000
 ### 核心特色
 
 - 全双工实时语音交互、自然打断和持续多轮对话
+- 从统一模型目录选择 DashScope Qwen Audio 与 Qwen3.5 Omni Realtime 模型
 - 一键选择你喜欢的办事 Agent，复用已有的工具、MCP、Skill
 - 前台对话与后台任务并驾齐驱，可随时追问任务进度或取消任务
 - 支持创建多个独立任务，由后台 Agent 异步执行，并持续追踪任务状态
 - 任务结果自动回到当前对话，支持继续追问和修改
 - 支持 WebUI、终端 TUI 和桌面悬浮球（macOS / Windows / Linux）
+- 桌面版自动休眠时断开云端 Realtime，但不停止已提交任务；可通过自定义快捷键或本地唤醒词恢复
 - 支持当前用户的长期个性化覆盖与跨会话记忆
 
 ## 参考架构
@@ -132,7 +136,7 @@ qwenaudio config
 
 ```dotenv
 DASHSCOPE_API_KEY=your-key
-# 语音前台模型：Omni Flash/Plus 或 Audio Flash/Plus（Plus 默认）
+# 语音前台模型：Omni Flash/Plus 或 Audio Flash/Plus（默认 Audio Plus）
 QWEN_AUDIO_REALTIME_MODEL=qwen-audio-3.0-realtime-plus
 # 后台Agent：可选，不设置或设置为 none 时，启动仅前台模式
 AGENT_PROTOCOL=openclaw
@@ -162,8 +166,10 @@ qwenaudio tui    # 终端 2：TUI
 
 ## 桌面版
 
-桌面版提供常驻桌面的语音悬浮球，内置 Gateway，支持自动隐藏、快捷键唤回和语音
-唤醒。从发布页下载对应平台安装包，或从源码构建：
+桌面版提供常驻桌面的语音悬浮球，内置 Gateway，支持空闲自动休眠、自定义唤醒
+快捷键和本地语音唤醒。休眠时会断开 Realtime 前台，但桌面进程、Gateway、后台
+Agent 和已提交任务仍继续运行；它不等于退出或重启桌面版。任务完成后可以唤醒
+桌面版，并把结果带回当前对话。从发布页下载对应平台安装包，或从源码构建：
 
 ```bash
 npm run desktop:build:local      # macOS
@@ -176,7 +182,10 @@ npm run desktop:build:linux      # Linux（AppImage + deb，无需签名）
 ## 后台 Agent
 
 `AGENT_PROTOCOL` 可选。留空即仅前台模式；选择后可复用已安装 Agent 的用户级
-模型、工具、MCP、Skill 和认证。OpenCode 和 OpenClaw 支持一键安装与百炼配置。
+模型、工具、MCP、Skill 和认证。CLI 与桌面版共用同一套接入规范：检测到已有 Agent
+时直接复用；用户选择一键安装时只补齐缺失组件；安装、配置和运行状态分别判断。
+配置仍由后台 Agent 自己负责，桌面版打开其原生配置入口，不读取、复制或改写它的
+凭据。
 
 ```bash
 qwenaudio setup   # 查看当前可用的后台 Agent
