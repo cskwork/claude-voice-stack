@@ -3,6 +3,15 @@ import { baseEnvironment, clean, processAcpConnection } from './shared.mjs'
 export const codeBuddyBackendDriver = {
   id: 'codebuddy',
   label: 'CodeBuddy',
+  capabilities: {
+    delegation: true,
+    permissions: true,
+    backendUi: false,
+    nativeSessionHistory: true,
+    externalMcp: true,
+    nativeDelegation: false,
+    sessionMcp: true,
+  },
 
   createProfile({
     directory,
@@ -24,7 +33,7 @@ export const codeBuddyBackendDriver = {
         ],
         cwd: directory,
         env: {
-          ...baseEnvironment(),
+          ...baseEnvironment('codebuddy'),
           ...(clean(modelUrl)
             ? { CODEBUDDY_MODEL_URL: clean(modelUrl) }
             : {}),

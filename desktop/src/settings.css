@@ -254,6 +254,10 @@ h2 {
   background: var(--success);
 }
 
+.connection-status.checking::before {
+  background: var(--warning);
+}
+
 .connection-status.disconnected::before {
   background: var(--danger);
 }

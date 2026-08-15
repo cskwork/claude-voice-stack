@@ -16,42 +16,22 @@ import {
 } from './acp-backend-session-utils.mjs'
 import { createAcpClient } from './acp-client-factory.mjs'
 import { AcpSessionRegistry } from './acp-session-registry.mjs'
-import {
-  ACP_SESSION_TOOL_NAMES,
-  AcpSessionToolServer,
-} from './acp-session-tools.mjs'
+import { AcpSessionToolServer } from './acp-session-tools.mjs'
 import {
   builtinMcpServers,
   createBuiltinMcpLifecycle,
 } from './builtin-mcp.mjs'
+import { BackendRuntimeState } from './backend-runtime-state.mjs'
+import { KeyedSerialExecutor } from './keyed-serial-executor.mjs'
+import { PermissionBroker } from './permission-broker.mjs'
 
 const MAX_SESSION_RESULTS = 100
 const MAX_DELEGATION_RESULT_CHARS = 12_000
-// Health endpoints are polled frequently by desktop and web clients. A local
-// ACP process that cannot start (missing credentials, invalid configuration,
-// missing executable, etc.) must not be respawned on every probe.
-const HEALTH_FAILURE_BACKOFF_MS = 30_000
 
 export { acpBackendProfile } from './acp-backend-profile.mjs'
 
 function clean(value) {
   return String(value || '').trim()
-}
-
-function backendFailureCode(error) {
-  const code = clean(error?.code || error?.cause?.code).toUpperCase()
-  const message = clean(error?.message || error).toLowerCase()
-  if (code === 'ENOENT') return 'NOT_INSTALLED'
-  if (/api key|credential|not configured|未配置|凭据/.test(message)) {
-    return 'CONFIG_REQUIRED'
-  }
-  if (/unauth|not logged in|login|认证|登录/.test(message)) {
-    return 'AUTH_REQUIRED'
-  }
-  if (/protocol version|协议版本/.test(message)) return 'PROTOCOL_MISMATCH'
-  if (/timeout|timed out|超时/.test(message)) return 'START_TIMEOUT'
-  if (/exited|退出/.test(message)) return 'PROCESS_EXITED'
-  return 'START_FAILED'
 }
 
 function explicitModel(value) {
@@ -166,6 +146,8 @@ export class AcpBackendAdapter {
     client,
     clientFactory = createAcpClient,
     backendAvailable = endpointAvailable,
+    readinessPollMs = 250,
+    readinessTimeoutMs = Math.min(timeoutMs, 60_000),
     sessionToolServer,
     nativeDelegationAdapter,
     builtinMcp = builtinMcpServers(),
@@ -207,30 +189,31 @@ export class AcpBackendAdapter {
     this.builtinMcpLifecycle = !client && clientFactory === createAcpClient
       ? createBuiltinMcpLifecycle(this.builtinMcp)
       : { markUsed() {}, close: () => Promise.resolve() }
-    this.pendingPermissions = new Map()
-    this.resolvedPermissions = new Map()
+    this.permissionBroker = new PermissionBroker({
+      protocol: this.protocol,
+      permissionMode: this.permissionMode,
+    })
     this.coordinatorSessions = new Map()
     this.coordinatorSessionPromises = new Map()
     // ACP agents may cache the first MCP connection for a Session. Keep its
     // descriptor stable while serialized owner turns replace the run context.
     this.coordinatorToolRegistrations = new Map()
     this.coordinatorToolRegistrationPromises = new Map()
-    this.sessionQueues = new Map()
+    this.sessionExecutor = new KeyedSerialExecutor()
     this.activeCoordinatorTurns = new Set()
     this.delegatedWorkRuns = new Map()
     this.pendingCoordinatorFacts = new Map()
-    this.lastHealthFailure = null
-    this.runtimeHealth = {
-      ok: false,
-      status: 'stopped',
-      code: 'NOT_STARTED',
+    this.runtimeState = new BackendRuntimeState({
       protocol: this.protocol,
       ownership: this.ownership,
-      transport: 'acp',
-      acpConnection: this.profile.acpConnection?.kind || null,
-    }
+      connectionKind: this.profile.acpConnection?.kind,
+      label: this.profile.label,
+      stderr: () => this.client?.stderr,
+    })
     this.nativeDelegationAdapter = nativeDelegationAdapter || null
     this.backendAvailable = client ? null : backendAvailable
+    this.readinessPollMs = readinessPollMs
+    this.readinessTimeoutMs = readinessTimeoutMs
     this.client = client || clientFactory({
       label: this.profile.label,
       connection: this.profile.acpConnection,
@@ -245,6 +228,22 @@ export class AcpBackendAdapter {
 
   get label() {
     return this.profile.label
+  }
+
+  get lastHealthFailure() {
+    return this.runtimeState.lastFailure
+  }
+
+  get runtimeHealth() {
+    return this.runtimeState.value
+  }
+
+  get pendingPermissions() {
+    return this.permissionBroker.pending
+  }
+
+  get resolvedPermissions() {
+    return this.permissionBroker.resolved
   }
 
   describe() {
@@ -262,69 +261,26 @@ export class AcpBackendAdapter {
       backendAgent: this.coordinatorAgent || null,
       sessionModel: 'one-persistent-backend-agent',
       capabilities: {
-        delegation: this.profile.delegation !== false,
-        permissions: true,
-        backendUi: Boolean(this.profile.backendUi),
-        nativeSessionHistory: this.profile.nativeSessionHistory !== false,
-        externalMcp: this.profile.externalMcp,
+        ...this.profile.capabilities,
       },
     }
   }
 
   status() {
-    if (this.runtimeHealth.ok && this.client.ready === false) {
-      return {
-        ...this.runtimeHealth,
-        ok: false,
-        status: 'stopped',
-        code: 'PROCESS_EXITED',
-        error: `${this.label} ACP 进程已退出`,
-      }
-    }
-    if (!this.lastHealthFailure) return { ...this.runtimeHealth }
-    const elapsed = Date.now() - this.lastHealthFailure.at
-    return {
-      ...this.runtimeHealth,
-      retryAfterMs: Math.max(0, HEALTH_FAILURE_BACKOFF_MS - elapsed),
-    }
+    return this.runtimeState.status({ clientReady: this.client.ready })
   }
 
   markRuntimeReady(initialized) {
-    this.lastHealthFailure = null
-    this.runtimeHealth = {
-      ok: true,
-      status: 'ready',
-      code: 'READY',
-      protocol: this.protocol,
-      ownership: this.ownership,
-      transport: 'acp',
-      acpConnection: this.profile.acpConnection?.kind || null,
-      agentInfo: initialized?.agentInfo || null,
-      capabilities: initialized?.agentCapabilities || {},
-    }
+    this.runtimeState.ready(initialized)
   }
 
   markRuntimeFailure(error) {
-    const result = {
-      ok: false,
-      status: 'failed',
-      code: backendFailureCode(error),
-      protocol: this.protocol,
-      ownership: this.ownership,
-      transport: 'acp',
-      acpConnection: this.profile.acpConnection?.kind || null,
-      error: `${error.message}${
-        clean(this.client.stderr) ? `：${clean(this.client.stderr)}` : ''
-      }`,
-    }
-    this.runtimeHealth = result
-    this.lastHealthFailure = { at: Date.now(), result }
+    this.runtimeState.failed(error)
   }
 
   async health() {
     if (
-      this.lastHealthFailure
-      && Date.now() - this.lastHealthFailure.at < HEALTH_FAILURE_BACKOFF_MS
+      this.runtimeState.shouldBackoff()
     ) {
       return this.status()
     }
@@ -335,25 +291,10 @@ export class AcpBackendAdapter {
         && this.backendAvailable
         && !await this.backendAvailable(this.baseUrl)
       ) {
-        this.runtimeHealth = {
-          ok: false,
-          status: 'starting',
-          code: 'BACKEND_STARTING',
-          protocol: this.protocol,
-          ownership: this.ownership,
-          transport: 'acp',
-          acpConnection: this.profile.acpConnection?.kind || null,
-          error: this.profile.readinessMessage,
-        }
+        this.runtimeState.waiting(this.profile.readinessMessage)
         return this.status()
       }
-      this.runtimeHealth = {
-        ...this.runtimeHealth,
-        ok: false,
-        status: 'starting',
-        code: 'STARTING',
-        error: '',
-      }
+      this.runtimeState.starting()
       const initialized = await this.client.start()
       this.markRuntimeReady(initialized)
       return this.status()
@@ -363,15 +304,35 @@ export class AcpBackendAdapter {
     }
   }
 
-  serialize(key, operation) {
-    const previous = this.sessionQueues.get(key) || Promise.resolve()
-    const current = previous.catch(() => {}).then(operation)
-    this.sessionQueues.set(key, current)
-    return current.finally(() => {
-      if (this.sessionQueues.get(key) === current) {
-        this.sessionQueues.delete(key)
+  needsBackendReadinessProbe() {
+    return Boolean(
+      this.profile.readinessMessage
+      && this.baseUrl
+      && this.backendAvailable,
+    )
+  }
+
+  async waitForBackendReadiness(signal) {
+    if (!this.needsBackendReadinessProbe()) return
+    if (signal?.aborted) {
+      throw signal.reason || new Error('任务已取消')
+    }
+    const deadline = Date.now() + this.readinessTimeoutMs
+    while (!await this.backendAvailable(this.baseUrl)) {
+      this.runtimeState.waiting(this.profile.readinessMessage)
+      if (Date.now() >= deadline) {
+        const error = new Error(
+          `${this.profile.label} 后台服务启动超时`,
+        )
+        error.code = 'ETIMEDOUT'
+        throw error
       }
-    })
+      await waitForRetry(this.readinessPollMs, signal)
+    }
+  }
+
+  serialize(key, operation) {
+    return this.sessionExecutor.run(key, operation)
   }
 
   async ensureCoordinatorSession(ownerId, mcpServers = []) {
@@ -666,130 +627,20 @@ export class AcpBackendAdapter {
     }
   }
 
-  optionFor(params, decision) {
-    const options = Array.isArray(params?.options) ? params.options : []
-    const kinds = decision === 'always'
-      ? ['allow_once', 'allow_always']
-      : ['reject_always', 'reject_once']
-    for (const kind of kinds) {
-      const option = options.find(candidate => candidate.kind === kind)
-      if (option) return option
-    }
-    return null
-  }
-
   async handlePermission(params, { signal, session } = {}) {
-    const name = clean(params?.toolCall?.name || params?.toolCall?.title)
-    const internal = ACP_SESSION_TOOL_NAMES.some(toolName => (
-      name === toolName
-      || name.endsWith(`__${toolName}`)
-      || name.startsWith(`${toolName} (`)
-    ))
-    if (
-      this.permissionMode === 'full'
-      || internal
-    ) {
-      const option = this.optionFor(params, 'always')
-      return option
-        ? { outcome: { outcome: 'selected', optionId: option.optionId } }
-        : { outcome: { outcome: 'cancelled' } }
-    }
-    const id = `auth_${randomUUID().replaceAll('-', '')}`
-    const pending = deferred()
-    const permission = {
-      id,
-      workId: session?.coordinationRunId || null,
-      status: 'pending',
-      category: bounded(name, 80) || 'unknown',
-      summary: [
-        bounded(name, 80),
-        bounded(
-          params?.toolCall?.rawInput?.description
-          || params?.toolCall?.rawInput?.command
-          || params?.toolCall?.rawInput?.path
-          || '',
-        ),
-      ].filter(Boolean).join('：'),
-      patterns: [],
-    }
-    const record = {
-      ...permission,
-      ownerId: clean(session?.ownerId),
-      sessionId: clean(session?.sessionId),
-      permissionScopeId: clean(session?.permissionScopeId),
-      params,
-      pending,
-      onEvent: session?.onEvent,
-    }
-    this.pendingPermissions.set(id, record)
-    record.onEvent?.({ type: 'backend.permission.requested', permission })
-    signal?.addEventListener('abort', () => {
-      this.cancelPermission(record)
-    }, { once: true })
-    return pending.promise
+    return this.permissionBroker.request(params, { signal, session })
   }
 
   cancelPermission(record) {
-    if (!record || !this.pendingPermissions.delete(record.id)) return false
-    record.pending.resolve({ outcome: { outcome: 'cancelled' } })
-    const permission = {
-      id: record.id,
-      workId: record.workId,
-      status: 'cancelled',
-      category: record.category,
-      summary: record.summary,
-    }
-    record.onEvent?.({ type: 'backend.permission.resolved', permission })
-    return true
+    return this.permissionBroker.cancel(record)
   }
 
   async respondPermission(id, decision, { ownerId } = {}) {
-    const record = this.pendingPermissions.get(String(id))
-    if (!record) {
-      const resolved = this.resolvedPermissions.get(String(id))
-      if (resolved?.ownerId === clean(ownerId)) return resolved.permission
-    }
-    if (!record || record.ownerId !== clean(ownerId)) {
-      throw new AgentError('权限请求不存在、已经失效或不属于当前用户', {
-        protocol: this.protocol,
-      })
-    }
-    this.pendingPermissions.delete(record.id)
-    const approved = decision === 'always'
-    const option = this.optionFor(
-      record.params,
-      approved ? 'always' : 'reject',
-    )
-    record.pending.resolve(option
-      ? { outcome: { outcome: 'selected', optionId: option.optionId } }
-      : { outcome: { outcome: 'cancelled' } })
-    const permission = {
-      id: record.id,
-      workId: record.workId,
-      status: approved ? 'approved' : 'denied',
-      category: record.category,
-      summary: record.summary,
-    }
-    record.onEvent?.({ type: 'backend.permission.resolved', permission })
-    this.resolvedPermissions.set(permission.id, {
-      ownerId: record.ownerId,
-      permission,
-    })
-    while (this.resolvedPermissions.size > 200) {
-      this.resolvedPermissions.delete(
-        this.resolvedPermissions.keys().next().value,
-      )
-    }
-    return permission
+    return this.permissionBroker.respond(id, decision, { ownerId })
   }
 
   cancelPermissionsForScope(permissionScopeId) {
-    const scope = clean(permissionScopeId)
-    if (!scope) return
-    for (const record of this.pendingPermissions.values()) {
-      if (record.permissionScopeId !== scope) continue
-      this.cancelPermission(record)
-    }
+    this.permissionBroker.cancelScope(permissionScopeId)
   }
 
   onSessionUpdate(run, update) {
@@ -1346,8 +1197,14 @@ export class AcpBackendAdapter {
   } = {}) {
     if (typeof this.client.start === 'function') {
       try {
+        // Health polling and task dispatch share the ACP client's start
+        // promise. The execution path additionally waits for an owned service
+        // endpoint, so the first task after a cold start cannot race its bridge.
+        await this.waitForBackendReadiness(signal)
+        this.runtimeState.starting()
         this.markRuntimeReady(await this.client.start())
       } catch (error) {
+        if (signal?.aborted) throw error
         this.markRuntimeFailure(error)
         throw error
       }
@@ -1594,10 +1451,7 @@ export class AcpBackendAdapter {
         new Error(`${this.label} backend is shutting down`),
       )
     }
-    for (const record of this.pendingPermissions.values()) {
-      record.pending.resolve({ outcome: { outcome: 'cancelled' } })
-    }
-    this.pendingPermissions.clear()
+    this.permissionBroker.cancelAll()
     await Promise.allSettled(
       [...this.coordinatorToolRegistrationPromises.values()],
     )
@@ -1611,13 +1465,6 @@ export class AcpBackendAdapter {
       this.client.close(),
     ])
     await this.builtinMcpLifecycle.close()
-    this.lastHealthFailure = null
-    this.runtimeHealth = {
-      ...this.runtimeHealth,
-      ok: false,
-      status: 'stopped',
-      code: 'STOPPED',
-      error: '',
-    }
+    this.runtimeState.stopped()
   }
 }

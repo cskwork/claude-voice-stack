@@ -110,9 +110,6 @@ if (FIRST_ARG === 'gateway') {
 // ── gateway token ────────────────────────────────────────────────────────────
 
 let token = process.env.OPENCLAW_GATEWAY_TOKEN || process.env.AGENT_API_KEY || ''
-if (!token && managed && process.env.QWEN_AUDIO_AGENT_AUTH_SECRET) {
-  token = process.env.QWEN_AUDIO_AGENT_AUTH_SECRET
-}
 process.env.OPENCLAW_GATEWAY_TOKEN = token
 const tokenFile = process.env.OPENCLAW_GATEWAY_TOKEN_FILE || join(STATE_DIR, 'gateway-token')
 if (token) {

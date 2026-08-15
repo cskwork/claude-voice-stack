@@ -91,3 +91,33 @@ test('remembers that the backend is not configured', async () => {
     known: true,
   })
 })
+
+test('treats startup as unknown and retries until the backend is ready', async () => {
+  let probes = 0
+  const availability = new BackendAvailability({
+    retryMs: 1,
+    probe: async () => {
+      probes += 1
+      return probes === 1
+        ? { configured: true, ok: false, transient: true }
+        : { configured: true, ok: true }
+    },
+  })
+
+  await availability.refresh()
+  assert.deepEqual(availability.snapshot(), {
+    configured: true,
+    ok: false,
+    known: false,
+  })
+  while (probes < 2) {
+    await new Promise(resolve => setTimeout(resolve, 2))
+  }
+  await availability.refreshing
+  assert.deepEqual(availability.snapshot(), {
+    configured: true,
+    ok: true,
+    known: true,
+  })
+  availability.close()
+})

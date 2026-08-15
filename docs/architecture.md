@@ -347,6 +347,21 @@ ACP bridge can add another connection kind without changing coordinator,
 permission, Work, or Session lifecycle code. Declaring an external backend
 service does not by itself make the ACP connection remote.
 
+Each backend is registered through one validated plugin contract. Its catalog
+entry owns identity, installation, native onboarding, process environment and
+ownership metadata; its Agent and Runtime drivers declare explicit boolean
+capabilities and are rejected at startup when incomplete or inconsistent.
+Backend child processes receive only portable operating-system variables and
+the selected plugin's declared credential namespace. Gateway identity,
+Realtime, memory, and other backend secrets never cross that boundary. A
+generic ACP command may opt in additional names explicitly through
+`QWEN_AUDIO_AGENT_ACP_FORWARD_ENV`.
+
+The HTTP/WebSocket application is constructed by an injectable composition
+root. Importing the application factory does not bind a port; CLI and Desktop
+use the thin bootstrap entry while tests and future clients may supply isolated
+Agent, task, conversation, configuration, and logging services.
+
 The shared adapter usually owns one ACP stdio child and stops it with Gateway.
 OpenCode, Qoder, Qwen Code, and Kimi Code run directly as ACP agents; OpenCode may also
 start its native local Session UI service. `OPENCODE_BASE_URL` currently names

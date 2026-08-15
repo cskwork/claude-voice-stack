@@ -240,6 +240,38 @@ test('waits for the managed OpenClaw Gateway before starting its ACP bridge', as
   assert.equal(starts, 1)
 })
 
+test('waits for managed backend readiness before dispatching the first task', async () => {
+  let available = false
+  let starts = 0
+  const expected = new Error('stop after readiness')
+  const client = {
+    ready: false,
+    stderr: '',
+    async start() {
+      starts += 1
+      throw expected
+    },
+    async close() {},
+  }
+  const adapter = new AcpBackendAdapter({
+    protocol: 'openclaw',
+    baseUrl: 'http://127.0.0.1:18789',
+    clientFactory: () => client,
+    backendAvailable: async () => available,
+    readinessPollMs: 1,
+    readinessTimeoutMs: 100,
+  })
+
+  const run = adapter.runCoordinator('first task', { ownerId: 'owner' })
+  await new Promise(resolve => setTimeout(resolve, 5))
+  assert.equal(starts, 0)
+  assert.equal(adapter.status().code, 'BACKEND_STARTING')
+
+  available = true
+  await assert.rejects(run, expected)
+  assert.equal(starts, 1)
+})
+
 test('backs off repeated health spawns after any local ACP startup failure', async () => {
   let starts = 0
   const missing = new Error('DeepSeek is not configured')

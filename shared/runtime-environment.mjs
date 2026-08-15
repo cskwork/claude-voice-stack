@@ -35,6 +35,7 @@ const USER_CONFIG_TEMPLATE = [
   '# Kimi Code 可复用原生登录，或设置官方 KIMI_MODEL_* 临时模型变量',
   '# DeepSeek（Harness Developer Preview）：DEEPSEEK_API_KEY=your-key',
   '# 通用 ACP：ACP_COMMAND=your-agent，ACP_ARGS=["--acp"]',
+  '# 通用 ACP 如需额外环境变量：QWEN_AUDIO_AGENT_ACP_FORWARD_ENV=NAME_A,NAME_B',
   '',
   '# 可选日志设置：默认 info、单文件 10 MiB、保留 5 份',
   '# QWEN_AUDIO_LOG_LEVEL=info',

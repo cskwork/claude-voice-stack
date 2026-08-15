@@ -6,6 +6,7 @@ import {
   normalizeBackendRuntimeProtocol,
 } from './backend-drivers/registry.mjs'
 import { serviceEndpointPort } from './backend-drivers/shared.mjs'
+import { backendEnvironment } from '../../../shared/backend-environment.mjs'
 
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1', '[::1]'])
 
@@ -107,12 +108,10 @@ function applyBackendAddress(env, backend) {
 }
 
 function spawnSpec(root, platform, env, driver) {
-  const childEnvironment = {
-    ...env,
-    QWEN_AUDIO_AGENT_ENV_LOADED: '1',
-    QWEN_AUDIO_AGENT_NODE: process.execPath,
-    ELECTRON_RUN_AS_NODE: '1',
-  }
+  const childEnvironment = backendEnvironment(driver.id, {
+    env,
+    additions: { ELECTRON_RUN_AS_NODE: '1' },
+  })
   return {
     command: process.execPath,
     args: [resolve(root, `scripts/${driver.managedScript}`)],
@@ -198,6 +197,7 @@ export async function startManagedBackend({
   if (backend.ownership !== 'owned') {
     throw new Error(`不支持的后台进程归属：${backend.ownership}`)
   }
+  driver.prepareEnvironment?.(env, backend)
   if (!isLocalBackend(backend.baseUrl)) {
     throw new Error(`Gateway 只能启动本机后台 Agent：${backend.baseUrl}`)
   }

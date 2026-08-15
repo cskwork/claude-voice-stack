@@ -32,6 +32,7 @@ import {
   clientVoiceCapabilities,
 } from './active-voice-clients.mjs'
 import { ReconnectBackoff } from './reconnect-backoff.mjs'
+import { realtimeConnectionStatus } from './realtime-connection-status.mjs'
 import { SleepController } from './sleep-controller.mjs'
 import { createSherpaWakeWordDetector } from './wake-word/sherpa-detector.mjs'
 import {
@@ -283,20 +284,13 @@ export function attachRealtimeGateway(server, {
     const voiceClient = {
       ws,
       descriptor,
-      realtimeStatus: () => ({
+      realtimeStatus: () => realtimeConnectionStatus({
         provider: sessionProvider,
-        state: realtimeBlockedError
-          ? 'unavailable'
-          : sleeping
-            ? 'sleeping'
-            : waking
-              ? 'waking'
-              : frontend?.ready
-              ? 'connected'
-              : connectPromise
-                ? 'connecting'
-                : 'disconnected',
-        ...(realtimeBlockedError ? { error: realtimeBlockedError } : {}),
+        blockedError: realtimeBlockedError,
+        sleeping,
+        waking,
+        ready: frontend?.ready === true,
+        connecting: Boolean(connectPromise),
       }),
       // Lets the arbitration evict this owner once its socket has died without
       // a clean close, so a stale holder never blocks a new voice claim.
@@ -1988,6 +1982,12 @@ export function attachRealtimeGateway(server, {
   })
 
   return {
+    close() {
+      for (const client of wss.clients) client.close()
+      return new Promise(resolveClose => {
+        wss.close(() => resolveClose())
+      })
+    },
     status() {
       const byType = { desktop: 0, cli: 0, web: 0 }
       const realtime = {

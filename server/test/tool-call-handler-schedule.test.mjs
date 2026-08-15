@@ -180,16 +180,18 @@ test('lists scheduled reminders and cancels the latest one without an id', async
   assert.equal(manager.get(reminderId, { ownerId: 'owner' }).status, 'cancelled')
 })
 
-test('scheduled tasks resolve the latest user context when they execute', async () => {
+test('scheduled tasks preserve identity and resolve current user context', async () => {
   let coordinatorInput
+  let coordinatorOptions
   const memories = [{ scope: 'user', content: '默认使用中文' }]
   const { outputs, manager, handler } = harness({
     memoryStore: {
       list: () => memories,
     },
     coordinator: {
-      run: async input => {
+      run: async (input, options) => {
         coordinatorInput = input
+        coordinatorOptions = options
         return { content: '完成', metadata: {} }
       },
     },
@@ -207,10 +209,14 @@ test('scheduled tasks resolve the latest user context when they execute', async 
   const taskId = outputs.at(-1)[1].reminder_id
   memories.push({ scope: 'memory', content: '用户正在维护语音项目' })
 
-  await manager.tasks.get(taskId).runner('检查构建状态', {
-    onEvent: () => {},
-    signal: new AbortController().signal,
-  })
+  const internal = manager.tasks.get(taskId)
+  internal.status = 'queued'
+  manager.drain()
+  await manager.wait(taskId)
 
   assert.deepEqual(coordinatorInput.userMemories, memories)
+  assert.equal(coordinatorOptions.ownerId, 'owner')
+  assert.equal(coordinatorOptions.sessionId, 'voice')
+  assert.equal(coordinatorOptions.turnId, 'turn-1')
+  assert.equal(coordinatorOptions.coordinationRunId, taskId)
 })

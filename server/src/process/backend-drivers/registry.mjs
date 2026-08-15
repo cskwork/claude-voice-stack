@@ -8,6 +8,28 @@ const drivers = new Map([
   openClawRuntimeDriver,
 ].map(driver => [driver.id, driver]))
 
+function validateRuntimeDriver(driver, definition) {
+  if (!driver || driver.id !== definition.id) {
+    throw new Error(`后台 Runtime Driver 标识不一致：${definition.id}`)
+  }
+  if (typeof driver.resolve !== 'function') {
+    throw new Error(`后台 Runtime Driver 缺少 resolve：${definition.id}`)
+  }
+  if (typeof driver.separateManagedProcess !== 'boolean') {
+    throw new Error(`后台 Runtime Driver 缺少进程归属声明：${definition.id}`)
+  }
+  if (
+    Boolean(driver.supportsExternalService)
+    !== Boolean(definition.supportsExternalService)
+  ) {
+    throw new Error(`后台 Runtime Driver 外部服务能力不一致：${definition.id}`)
+  }
+  if (driver.separateManagedProcess && !driver.managedScript) {
+    throw new Error(`后台 Runtime Driver 缺少 managedScript：${definition.id}`)
+  }
+  return driver
+}
+
 function managedProcessDriver(definition) {
   return {
     id: definition.id,
@@ -38,5 +60,5 @@ export function backendRuntimeDriver(protocol) {
     ? managedProcessDriver(definition)
     : null)
   if (!driver) throw new Error(`不支持的后台 Agent：${id}`)
-  return driver
+  return validateRuntimeDriver(driver, definition)
 }

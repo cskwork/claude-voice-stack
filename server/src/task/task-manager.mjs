@@ -15,6 +15,19 @@ const CANCELLABLE = new Set(['scheduled', 'queued', 'running', 'delegated', 'fin
 const TERMINAL = new Set(['completed', 'failed', 'cancelled'])
 const REPLAYABLE_REMINDER = new Set(['queued', 'running'])
 
+export function taskExecutionContext(task, { onEvent, signal }) {
+  return Object.freeze({
+    taskId: String(task.id),
+    ownerId: String(task.ownerId || ''),
+    sessionId: String(task.sessionId || 'main'),
+    turnId: task.turnId || null,
+    kind: String(task.kind || 'work'),
+    schedule: task.schedule ? Object.freeze({ ...task.schedule }) : null,
+    onEvent,
+    signal,
+  })
+}
+
 function publicResultMetadata(metadata) {
   if (!metadata || typeof metadata !== 'object') return null
   const source = metadata.presentation || metadata.decision?.presentation
@@ -153,13 +166,16 @@ export class TaskManager {
               })
             : null, // scheduled_task runner set from scheduledTaskRunner in start()
           resolve: null,
-          promise: Promise.resolve(publicTask(saved)),
+          promise: null,
           activity: Array.isArray(saved.activity) ? saved.activity : [],
           abortController: null,
           schedulerHeld: false,
           timeoutTimer: null,
           progressCheckTimer: null,
         }
+        task.promise = new Promise(resolve => {
+          task.resolve = resolve
+        })
         this.tasks.set(task.id, task)
         continue
       }
@@ -628,10 +644,10 @@ export class TaskManager {
         if (typeof task.runner !== 'function') {
           throw new Error('未配置后台 Agent 执行器')
         }
-        return task.runner(task.objective, {
+        return task.runner(task.objective, taskExecutionContext(task, {
           onEvent,
           signal: task.abortController.signal,
-        })
+        }))
       })
       .then(outcome => {
         if (

@@ -5,7 +5,10 @@ import {
   backendNames,
   resolveBackendOwnership,
 } from '../../shared/backend-catalog.mjs'
-import { backendDriver } from '../src/agent/backends/registry.mjs'
+import {
+  backendDriver,
+  createBackendProfile,
+} from '../src/agent/backends/registry.mjs'
 import {
   backendRuntimeDriver,
 } from '../src/process/backend-drivers/registry.mjs'
@@ -23,6 +26,44 @@ test('every advertised backend has Agent and Runtime drivers', () => {
       Boolean(definition.supportsExternalService),
     )
   }
+})
+
+test('every Agent driver publishes one validated capability contract', () => {
+  for (const protocol of backendNames()) {
+    const driver = backendDriver(protocol)
+    for (const capability of [
+      'delegation',
+      'permissions',
+      'backendUi',
+      'nativeSessionHistory',
+      'externalMcp',
+      'nativeDelegation',
+      'sessionMcp',
+    ]) {
+      assert.equal(typeof driver.capabilities[capability], 'boolean', (
+        `${protocol}.${capability}`
+      ))
+    }
+  }
+})
+
+test('profile construction applies the immutable driver capability contract', () => {
+  const profile = createBackendProfile('deepseek', {
+    root: '/repo',
+    directory: '/work',
+    sessionRoot: '/state',
+    permissionMode: 'native',
+  })
+  assert.deepEqual(profile.capabilities, {
+    delegation: false,
+    permissions: true,
+    backendUi: false,
+    nativeSessionHistory: false,
+    externalMcp: false,
+    nativeDelegation: false,
+    sessionMcp: false,
+  })
+  assert.equal(Object.isFrozen(profile.capabilities), true)
 })
 
 test('external ownership is available only to declared backend services', () => {

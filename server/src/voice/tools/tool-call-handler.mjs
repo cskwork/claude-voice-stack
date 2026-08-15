@@ -267,20 +267,25 @@ export class ToolCallHandler {
     // objective when the scheduled task fires. The coordinator singleton
     // and ownerId are safe to capture — they outlive the voice session.
     const coordinator = this.coordinator
-    const ownerId = this.ownerId
     const memoryService = this.memoryService
     const runner = type === 'task'
-      ? async (objective, { onEvent, signal }) => coordinator.run({
+      ? async (objective, context) => coordinator.run({
           originalRequest: objective,
           objective,
           conversationContext: [],
           // Resolve at execution time so a future task sees the user's latest
           // model and long-term memory, not a snapshot from when it was set.
-          userMemories: memoryService?.list(ownerId, { limit: 64 }) || [],
+          userMemories: memoryService?.list(
+            context.ownerId,
+            { limit: 64 },
+          ) || [],
         }, {
-          ownerId,
-          signal,
-          onEvent,
+          ownerId: context.ownerId,
+          sessionId: context.sessionId,
+          turnId: context.turnId,
+          coordinationRunId: context.taskId,
+          signal: context.signal,
+          onEvent: context.onEvent,
         })
       : null
 

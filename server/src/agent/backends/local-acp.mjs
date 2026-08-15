@@ -10,6 +10,15 @@ function localAcpBackend({
   return {
     id,
     label,
+    capabilities: {
+      delegation: true,
+      permissions: true,
+      backendUi: false,
+      nativeSessionHistory: true,
+      externalMcp: true,
+      nativeDelegation: false,
+      sessionMcp: true,
+    },
     createProfile(options) {
       return {
         label,
@@ -17,7 +26,7 @@ function localAcpBackend({
           command: clean(options.cliPath) || command,
           args: args(options),
           cwd: options.directory,
-          env: baseEnvironment(),
+          env: baseEnvironment(id),
         }),
         sessionConfigOptions: sessionConfigOptions?.(options) || [],
         externalMcp: true,

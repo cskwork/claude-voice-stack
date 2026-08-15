@@ -1,57 +1,5 @@
 import { backendDefinition } from './backend-catalog.mjs'
 
-// Configuration belongs to the backend onboarding adapter, not to the shared
-// UI. Most current agents expose a trusted terminal entry; future adapters can
-// return browser/form/instructions without teaching the UI product names.
-const configurationAdapters = new Map([
-  ['opencode', {
-    command: 'opencode auth login',
-    hint: '首次使用请完成 OpenCode 官方认证；配置百炼 API Key 与后台模型时可直接使用自动配置。',
-    probe: { kind: 'command', args: ['auth', 'list'], parser: 'credential-count' },
-  }],
-  ['openclaw', {
-    command: 'openclaw onboard',
-    hint: '首次使用请完成 OpenClaw 官方初始化与认证。',
-    probe: { kind: 'openclaw-state' },
-  }],
-  ['qoder', {
-    command: 'qodercli login',
-    hint: '首次使用请完成 Qoder 官方认证。',
-    probe: { kind: 'command', args: ['status'], parser: 'qoder-status' },
-  }],
-  ['qwen', {
-    command: 'qwen',
-    hint: '首次使用请启动 Qwen Code，并通过 /auth 完成认证。',
-  }],
-  ['kimi', {
-    command: 'kimi login',
-    hint: '首次使用请完成 Kimi Code 官方认证，或配置官方 KIMI_MODEL_* 模型变量。',
-  }],
-  ['hermes', {
-    command: 'hermes setup --portal',
-    hint: '首次使用请完成 Hermes 官方认证。',
-  }],
-  ['codebuddy', {
-    command: 'codebuddy',
-    hint: '首次使用请启动 CodeBuddy，并通过 /login 完成登录。',
-    probe: { kind: 'codebuddy-credentials' },
-  }],
-  ['codex', {
-    command: 'codex login',
-    hint: '首次使用请完成 Codex 官方认证。',
-    probe: { kind: 'command', args: ['login', 'status'], parser: 'codex-status' },
-  }],
-  ['claude', {
-    command: 'claude',
-    hint: '首次使用请完成 Claude Code 官方认证。',
-  }],
-  ['deepseek', {
-    command: 'dsh web',
-    hint: '请在 DeepSeek Web 的“设置 → Models”中为 deepseek-official 填写并保存 DEEPSEEK_API_KEY；仅打开 Web 不代表配置完成。',
-    probe: { kind: 'deepseek-credentials' },
-  }],
-])
-
 function clean(value) {
   return String(value || '').trim()
 }
@@ -76,7 +24,7 @@ export function backendOnboardingAdapter(id, {
 } = {}) {
   const definition = backendDefinition(id)
   const lifecycle = definition?.lifecycle || null
-  const adapter = configurationAdapters.get(definition?.id) || null
+  const adapter = definition?.onboarding || null
   const command = clean(adapter?.command)
   const automatic = usesAutomaticBailianConfiguration(definition?.id, env)
   const supportedPlatform = ['darwin', 'linux', 'win32'].includes(platform)

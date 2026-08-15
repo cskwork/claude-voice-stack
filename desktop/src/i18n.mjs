@@ -87,6 +87,7 @@ const ENGLISH = {
   '已导入皮肤': 'Imported skins',
   '正在应用…': 'Applying…',
   '配置已保存，Gateway 正在启动…': 'Settings saved. Gateway is starting…',
+  '正在启动…': 'Starting…',
   'Gateway 已启动，后台 Agent 正在连接…': 'Gateway started. Backend Agent is connecting…',
   '已应用，Gateway 已启动。': 'Applied. Gateway started.',
   '已应用。': 'Applied.',

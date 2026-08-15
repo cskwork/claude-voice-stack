@@ -247,6 +247,12 @@ test('keeps installation, configuration, and runtime phases separate', () => {
   assert.equal(backendRuntimePhase({ ready: true }, {
     connected: true,
   }), 'connected')
+  assert.equal(backendRuntimePhase({ ready: true }, {
+    connected: false,
+    status: 'starting',
+    code: 'BACKEND_STARTING',
+    error: 'OpenClaw Gateway 正在启动',
+  }), 'starting')
   assert.equal(backendRuntimePhase({ ready: true }, null), 'not-configured')
 })
 

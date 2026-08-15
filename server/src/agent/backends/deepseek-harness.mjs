@@ -4,6 +4,15 @@ import { baseEnvironment, processAcpConnection } from './shared.mjs'
 export const deepSeekHarnessBackendDriver = {
   id: 'deepseek',
   label: 'DeepSeek',
+  capabilities: {
+    delegation: false,
+    permissions: true,
+    backendUi: false,
+    nativeSessionHistory: false,
+    externalMcp: false,
+    nativeDelegation: false,
+    sessionMcp: false,
+  },
 
   createProfile({
     root,
@@ -20,7 +29,7 @@ export const deepSeekHarnessBackendDriver = {
         args: [resolve(root, 'scripts/deepseek-harness-acp.mjs')],
         cwd: directory,
         env: {
-          ...baseEnvironment(),
+          ...baseEnvironment('deepseek'),
           ELECTRON_RUN_AS_NODE: '1',
           DEEPSEEK_HARNESS_CONFIG: resolve(
             root,

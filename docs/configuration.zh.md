@@ -645,6 +645,7 @@ Gateway 时，或后续 CLI 运行时使用了冲突的已配置模型时，会�
 | `QODER_WORKSPACE` | 用户配置目录下的 `workspaces/qoder` |
 | `QWEN_AUDIO_AGENT_BACKEND_MODEL` | 空；使用后台 Agent 原有模型 |
 | `QWEN_AUDIO_AGENT_BACKEND_PERMISSION_MODE` | `native` |
+| `QWEN_AUDIO_AGENT_ACP_FORWARD_ENV` | 空；仅供通用 ACP 显式传递的环境变量名，逗号分隔 |
 | `QWEN_AUDIO_REALTIME_MODEL` | `qwen-audio-3.0-realtime-plus` |
 | `QWEN_AUDIO_REALTIME_PROVIDER` | `dashscope` |
 | `QWEN_AUDIO_REALTIME_VOICE` | 空；Audio 模型族的可选覆盖，未设置时运行时使用 `longanqian` |

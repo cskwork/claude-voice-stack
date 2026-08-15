@@ -387,6 +387,8 @@ async function runtimeStatus(target = appOrigin) {
           baseUrl: health.backend.baseUrl || null,
           model: health.backend.model || null,
           connected: health.backend.ok === true,
+          status: health.backend.status || null,
+          code: health.backend.code || null,
           error: health.backend.error || null,
         }
       : null,

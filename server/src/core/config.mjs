@@ -214,9 +214,6 @@ export const config = {
       token: (
         process.env.OPENCLAW_GATEWAY_TOKEN
         || process.env.AGENT_API_KEY
-        || (managedOpenClawBailian
-          ? process.env.QWEN_AUDIO_AGENT_AUTH_SECRET
-          : '')
         || ''
       ),
       tokenFile: (

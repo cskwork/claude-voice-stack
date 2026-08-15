@@ -7,6 +7,15 @@ import {
 export const genericAcpBackendDriver = {
   id: 'acp',
   label: 'ACP Agent',
+  capabilities: {
+    delegation: true,
+    permissions: true,
+    backendUi: false,
+    nativeSessionHistory: true,
+    externalMcp: true,
+    nativeDelegation: false,
+    sessionMcp: true,
+  },
 
   createProfile({
     directory,
@@ -28,7 +37,7 @@ export const genericAcpBackendDriver = {
         command,
         args: Array.isArray(args) ? args.map(String) : [],
         cwd: directory,
-        env: baseEnvironment(),
+        env: baseEnvironment('acp'),
       }),
       externalMcp: true,
       nativeDelegation: false,

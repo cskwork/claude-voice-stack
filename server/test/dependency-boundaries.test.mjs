@@ -11,7 +11,7 @@ const allowedDependencies = {
   app: new Set(['agent', 'app', 'conversation', 'core', 'task', 'voice']),
   process: new Set(['process', 'shared']),
   core: new Set(['core', 'shared']),
-  agent: new Set(['agent', 'core']),
+  agent: new Set(['agent', 'core', 'shared']),
   conversation: new Set(['conversation', 'core']),
   task: new Set(['agent', 'core', 'task']),
   voice: new Set(['conversation', 'core', 'shared', 'task', 'voice']),
