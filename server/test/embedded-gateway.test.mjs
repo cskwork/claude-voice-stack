@@ -40,6 +40,11 @@ test('PORT=0 binds a random port and reports the origin to the parent host', asy
 
     const response = await fetch(`${message.origin}/api/health`)
     const health = await response.json()
+    assert.equal(response.status, 200)
+    assert.equal(health.ok, true)
+    const liveResponse = await fetch(`${message.origin}/livez`)
+    assert.equal(liveResponse.status, 200)
+    assert.deepEqual(await liveResponse.json(), { ok: true, status: 'live' })
     assert.equal(
       health.realtimeModelProfile.id,
       'qwen3.5-omni-flash-realtime',

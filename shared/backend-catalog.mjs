@@ -17,7 +17,6 @@ const definitions = new Map([
     lifecycle: {
       installation: { steps: [{ kind: 'npm', package: 'opencode-ai@1.18.5', packageEnv: 'OPENCODE_PACKAGE' }] },
       configuration: { mode: 'bailian-or-backend-owned' },
-      authentication: { command: 'opencode auth login', hint: '首次使用请完成 OpenCode 官方认证；配置百炼 API Key 与后台模型时可直接使用自动配置。' },
     },
     baseUrlEnvironment: 'OPENCODE_BASE_URL',
     defaultBaseUrl: 'http://127.0.0.1:4096',
@@ -35,7 +34,6 @@ const definitions = new Map([
     lifecycle: {
       installation: { steps: [{ kind: 'npm', package: 'openclaw@2026.6.33', packageEnv: 'OPENCLAW_PACKAGE' }] },
       configuration: { mode: 'bailian-or-backend-owned' },
-      authentication: { command: 'openclaw onboard', hint: '首次使用请完成 OpenClaw 官方初始化与认证。' },
     },
     baseUrlEnvironment: 'OPENCLAW_BASE_URL',
     defaultBaseUrl: 'http://127.0.0.1:18789',
@@ -57,7 +55,6 @@ const definitions = new Map([
     lifecycle: {
       installation: { steps: [{ kind: 'npm', package: '@qoder-ai/qodercli@1.1.13', packageEnv: 'QODERCLI_PACKAGE' }] },
       configuration: { mode: 'backend-owned' },
-      authentication: { command: 'qodercli login', hint: '首次使用请完成 Qoder 官方认证。' },
     },
     supportsFullPermission: true,
   }],
@@ -74,7 +71,6 @@ const definitions = new Map([
     lifecycle: {
       installation: { steps: [{ kind: 'npm', package: '@qwen-code/qwen-code@0.21.6', packageEnv: 'QWEN_CODE_PACKAGE' }] },
       configuration: { mode: 'backend-owned' },
-      authentication: { command: 'qwen', hint: '首次使用请启动 Qwen Code，并通过 /auth 完成认证。' },
     },
     supportsFullPermission: true,
   }],
@@ -91,7 +87,6 @@ const definitions = new Map([
     lifecycle: {
       installation: { steps: [{ kind: 'npm', package: '@moonshot-ai/kimi-code@0.32.0', packageEnv: 'KIMI_CODE_PACKAGE' }] },
       configuration: { mode: 'backend-owned' },
-      authentication: { command: 'kimi login', hint: '首次使用请完成 Kimi Code 官方认证，或配置官方 KIMI_MODEL_* 模型变量。' },
     },
     supportsFullPermission: true,
   }],
@@ -112,7 +107,6 @@ const definitions = new Map([
         ],
       },
       configuration: { mode: 'backend-owned' },
-      authentication: { command: 'hermes setup --portal', hint: '首次使用请完成 Hermes 官方认证。' },
     },
     supportsFullPermission: true,
   }],
@@ -128,7 +122,6 @@ const definitions = new Map([
     lifecycle: {
       installation: { steps: [{ kind: 'npm', package: '@tencent-ai/codebuddy-code@2.132.0', packageEnv: 'CODEBUDDY_PACKAGE' }] },
       configuration: { mode: 'backend-owned' },
-      authentication: { command: 'codebuddy', hint: '首次使用请启动 CodeBuddy，并通过 /login 完成登录。' },
     },
     supportsFullPermission: true,
   }],
@@ -152,7 +145,6 @@ const definitions = new Map([
         ],
       },
       configuration: { mode: 'backend-owned' },
-      authentication: { command: 'codex login', hint: '首次使用请完成 Codex 官方认证。' },
     },
     supportsFullPermission: true,
   }],
@@ -176,7 +168,6 @@ const definitions = new Map([
         ],
       },
       configuration: { mode: 'backend-owned' },
-      authentication: { command: 'claude', hint: '首次使用请完成 Claude Code 官方认证。' },
     },
     supportsFullPermission: true,
   }],
@@ -196,6 +187,7 @@ const definitions = new Map([
     },
     lifecycle: {
       installation: {
+        verifyInstalledPackages: true,
         // Keep the ACP executable package last. If an earlier Developer
         // Preview component fails, setup remains visibly incomplete and a
         // retry fills the whole composition instead of skipping it.
@@ -228,10 +220,6 @@ const definitions = new Map([
         ],
       },
       configuration: { mode: 'backend-owned' },
-      authentication: {
-        command: 'dsh web',
-        hint: '首次使用请启动 DeepSeek，并在模型设置中配置 API Key。',
-      },
     },
     supportsFullPermission: true,
   }],
@@ -246,7 +234,6 @@ const definitions = new Map([
     lifecycle: {
       installation: null,
       configuration: { mode: 'user-managed' },
-      authentication: null,
     },
     supportsFullPermission: false,
   }],

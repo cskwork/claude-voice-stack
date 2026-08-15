@@ -3,15 +3,16 @@ import { resolveDashScopeRealtimeModelProfile } from '../../shared/realtime-mode
 export function realtimeStatusLabel(provider) {
   return provider === 'speech-to-speech'
     ? 'Speech-to-Speech'
-    : 'Qwen Audio'
+    : 'DashScope'
 }
 
 export function realtimeModelStatusLabel(model) {
   const value = String(model || '').trim()
   if (!value) return ''
-  if (value === 'qwen-audio-3.0-realtime-plus') return 'plus'
-  if (value === 'qwen-audio-3.0-realtime-flash') return 'flash'
-  return resolveDashScopeRealtimeModelProfile(value).label
+  const profile = resolveDashScopeRealtimeModelProfile(value)
+  return profile.family === 'unknown'
+    ? profile.label
+    : profile.label.replace(/\s+Realtime\b/i, '')
 }
 
 export function realtimeModelRuntimeStatus(health, expectedModel = '') {

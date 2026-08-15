@@ -21,6 +21,7 @@ function compactReport(report) {
       issues: item.issues,
       backend: compactComponent(item.backend),
       adapter: compactComponent(item.adapter),
+      packages: item.packages,
       authentication: item.authentication,
     })),
   }

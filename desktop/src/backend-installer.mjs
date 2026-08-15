@@ -19,7 +19,7 @@ export function createBackendInstaller({
     support(id) {
       return installSupport(id, { env: currentEnvironment(), platform })
     },
-    async install(id, { onProgress = () => {}, inspect } = {}) {
+    async install(id, { onProgress = () => {}, inspect, signal } = {}) {
       if (pending.has(id)) {
         throw new Error('该后台 Agent 正在安装中，请等待完成')
       }
@@ -29,6 +29,7 @@ export function createBackendInstaller({
           env: currentEnvironment(),
           platform,
           onProgress,
+          signal,
           ...(inspect ? { inspect } : {}),
           confirmStep: step => confirmScript(step),
         })

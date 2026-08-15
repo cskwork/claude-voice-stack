@@ -1,26 +1,25 @@
 import { backendDefinition } from './backend-catalog.mjs'
+import {
+  backendOnboardingAdapter,
+  resolveBackendOnboarding,
+} from './backend-onboarding.mjs'
 
 export function backendLifecycleSpec(id) {
   const definition = backendDefinition(id)
-  return definition?.lifecycle || null
+  const lifecycle = definition?.lifecycle
+  if (!lifecycle) return null
+  const action = backendOnboardingAdapter(id, { env: {} }).configuration.action
+  return {
+    ...lifecycle,
+    // Compatibility for external consumers of the pre-onboarding shape.
+    authentication: action
+      ? { command: action.command, hint: action.hint }
+      : null,
+  }
 }
 
-export function backendConfigurationSupport(id) {
-  return backendLifecycleSpec(id)?.configuration || { mode: 'user-managed' }
-}
-
-function clean(value) {
-  return String(value || '').trim()
-}
-
-function usesAutomaticBailianConfiguration(id, env) {
-  const model = clean(env.QWEN_AUDIO_AGENT_BACKEND_MODEL).toLowerCase()
-  return (
-    ['opencode', 'openclaw'].includes(id)
-    && Boolean(clean(env.DASHSCOPE_API_KEY))
-    && Boolean(model)
-    && model !== 'auto'
-  )
+export function backendConfigurationSupport(id, options) {
+  return backendOnboardingAdapter(id, options).configuration
 }
 
 // 认证由后台 Agent 自己完成。这里仅描述是否存在可信的官方入口；
@@ -29,16 +28,15 @@ export function backendAuthenticationSupport(id, {
   env = process.env,
   platform = process.platform,
 } = {}) {
-  const definition = backendDefinition(id)
-  const spec = definition ? backendLifecycleSpec(definition.id) : null
-  const command = clean(spec?.authentication?.command)
-  if (!command || usesAutomaticBailianConfiguration(definition?.id, env)) {
+  const action = backendOnboardingAdapter(id, { env, platform })
+    .configuration.action
+  if (!action) {
     return { required: false, supported: false }
   }
   return {
     required: true,
-    supported: ['darwin', 'linux', 'win32'].includes(platform),
-    command,
+    supported: true,
+    command: action.command,
   }
 }
 
@@ -47,22 +45,16 @@ export function resolveBackendLifecycle(item, {
   configuration,
   authentication,
 } = {}) {
-  const installed = item?.ready === true
-  let state = 'not-installed'
-  if (installed && authentication?.required === true) {
-    state = 'authentication-required'
-  } else if (installed) {
-    state = 'installed'
-  }
-  return {
-    state,
-    installation: {
-      ...installation,
-      status: installed ? 'installed' : 'not-installed',
+  // Compatibility wrapper for callers still reading lifecycle/authentication.
+  const onboarding = resolveBackendOnboarding(item, {
+    installation,
+    configuration: {
+      ...configuration,
+      required: authentication?.required === true,
+      status: authentication?.status || 'unknown',
+      actionAvailable: authentication?.actionAvailable === true,
+      action: configuration?.action || null,
     },
-    configuration,
-    authentication,
-    // “已就绪”是运行时事实，不能由安装或认证状态推断。
-    readiness: { status: 'not-connected' },
-  }
+  })
+  return { ...onboarding, authentication }
 }

@@ -32,8 +32,8 @@ export function backendOptionStates(report) {
     selectable: true,
     installable: false,
     requiresConfirmation: false,
-    authenticationRequired: false,
-    authenticatable: false,
+    configurationRequired: false,
+    configurable: false,
     reason: '',
     title: '',
   }]
@@ -41,8 +41,8 @@ export function backendOptionStates(report) {
     if (item.id === 'acp') continue
     const ready = item.ready === true
     const install = item.install || {}
-    const authentication = item.authentication || install.authentication || {}
-    const authenticationRequired = authentication.required === true
+    const configuration = item.onboarding?.configuration || {}
+    const configurationRequired = configuration.required === true
     states.push({
       id: item.id,
       label: item.label || item.id,
@@ -54,21 +54,22 @@ export function backendOptionStates(report) {
       // 后台由 installSupport 标记 supported:false，自然不显示按钮。
       installable: !ready && install.supported === true,
       requiresConfirmation: install.requiresConfirmation === true,
-      authenticationRequired,
-      authenticatable: (
+      configurationRequired,
+      configurable: (
         ready
-        && authentication.supported === true
-        && authentication.actionAvailable !== false
-        && authentication.status !== 'authenticated'
+        && configuration.action != null
+        && configuration.actionAvailable !== false
+        && configuration.status !== 'authenticated'
       ),
-      authenticationLabel: '登录',
-      lifecycleState: item.lifecycle?.state || (
-        authenticationRequired ? 'authentication-required' : (
+      configurationLabel: configuration.action?.label || '配置',
+      configurationHint: configuration.action?.hint || '',
+      onboardingState: item.onboarding?.state || (
+        configurationRequired ? 'configuration-required' : (
           ready ? 'installed' : 'not-installed'
         )
       ),
-      statusLabel: authenticationRequired
-        ? '待登录'
+      statusLabel: configurationRequired
+        ? '待配置'
         : ready ? '已安装' : shortReason(item.issues),
       reason: ready ? '' : shortReason(item.issues),
       title: ready
@@ -88,8 +89,22 @@ export function backendRuntimeReady(state, {
 } = {}) {
   return Boolean(
     state?.ready === true
-    && state.authenticationRequired !== true
+    && state.configurationRequired !== true
     && state.id === selectedBackend
     && runtimeBackend?.connected === true,
   )
+}
+
+// Installation/configuration comes from the onboarding contract, while the
+// live connection comes from Gateway. Keep the precedence here so every UI
+// surface describes an installed-but-unconfigured backend consistently
+// instead of presenting the expected ACP startup failure as "unavailable".
+export function backendRuntimePhase(state, runtimeBackend) {
+  if (state?.ready === true && state.configurationRequired === true) {
+    return 'configuration-required'
+  }
+  if (!runtimeBackend) return 'not-configured'
+  if (runtimeBackend.connected === true) return 'connected'
+  if (runtimeBackend.error) return 'connection-failed'
+  return 'disconnected'
 }

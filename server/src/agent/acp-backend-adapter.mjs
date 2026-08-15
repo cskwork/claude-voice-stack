@@ -27,7 +27,10 @@ import {
 
 const MAX_SESSION_RESULTS = 100
 const MAX_DELEGATION_RESULT_CHARS = 12_000
-const HEALTH_SPAWN_FAILURE_BACKOFF_MS = 10_000
+// Health endpoints are polled frequently by desktop and web clients. A local
+// ACP process that cannot start (missing credentials, invalid configuration,
+// missing executable, etc.) must not be respawned on every probe.
+const HEALTH_FAILURE_BACKOFF_MS = 30_000
 
 export { acpBackendProfile } from './acp-backend-profile.mjs'
 
@@ -35,8 +38,20 @@ function clean(value) {
   return String(value || '').trim()
 }
 
-function isMissingExecutable(error) {
-  return error?.code === 'ENOENT' || error?.cause?.code === 'ENOENT'
+function backendFailureCode(error) {
+  const code = clean(error?.code || error?.cause?.code).toUpperCase()
+  const message = clean(error?.message || error).toLowerCase()
+  if (code === 'ENOENT') return 'NOT_INSTALLED'
+  if (/api key|credential|not configured|未配置|凭据/.test(message)) {
+    return 'CONFIG_REQUIRED'
+  }
+  if (/unauth|not logged in|login|认证|登录/.test(message)) {
+    return 'AUTH_REQUIRED'
+  }
+  if (/protocol version|协议版本/.test(message)) return 'PROTOCOL_MISMATCH'
+  if (/timeout|timed out|超时/.test(message)) return 'START_TIMEOUT'
+  if (/exited|退出/.test(message)) return 'PROCESS_EXITED'
+  return 'START_FAILED'
 }
 
 function explicitModel(value) {
@@ -204,7 +219,16 @@ export class AcpBackendAdapter {
     this.activeCoordinatorTurns = new Set()
     this.delegatedWorkRuns = new Map()
     this.pendingCoordinatorFacts = new Map()
-    this.lastSpawnFailure = null
+    this.lastHealthFailure = null
+    this.runtimeHealth = {
+      ok: false,
+      status: 'stopped',
+      code: 'NOT_STARTED',
+      protocol: this.protocol,
+      ownership: this.ownership,
+      transport: 'acp',
+      acpConnection: this.profile.acpConnection?.kind || null,
+    }
     this.nativeDelegationAdapter = nativeDelegationAdapter || null
     this.backendAvailable = client ? null : backendAvailable
     this.client = client || clientFactory({
@@ -247,13 +271,62 @@ export class AcpBackendAdapter {
     }
   }
 
+  status() {
+    if (this.runtimeHealth.ok && this.client.ready === false) {
+      return {
+        ...this.runtimeHealth,
+        ok: false,
+        status: 'stopped',
+        code: 'PROCESS_EXITED',
+        error: `${this.label} ACP 进程已退出`,
+      }
+    }
+    if (!this.lastHealthFailure) return { ...this.runtimeHealth }
+    const elapsed = Date.now() - this.lastHealthFailure.at
+    return {
+      ...this.runtimeHealth,
+      retryAfterMs: Math.max(0, HEALTH_FAILURE_BACKOFF_MS - elapsed),
+    }
+  }
+
+  markRuntimeReady(initialized) {
+    this.lastHealthFailure = null
+    this.runtimeHealth = {
+      ok: true,
+      status: 'ready',
+      code: 'READY',
+      protocol: this.protocol,
+      ownership: this.ownership,
+      transport: 'acp',
+      acpConnection: this.profile.acpConnection?.kind || null,
+      agentInfo: initialized?.agentInfo || null,
+      capabilities: initialized?.agentCapabilities || {},
+    }
+  }
+
+  markRuntimeFailure(error) {
+    const result = {
+      ok: false,
+      status: 'failed',
+      code: backendFailureCode(error),
+      protocol: this.protocol,
+      ownership: this.ownership,
+      transport: 'acp',
+      acpConnection: this.profile.acpConnection?.kind || null,
+      error: `${error.message}${
+        clean(this.client.stderr) ? `：${clean(this.client.stderr)}` : ''
+      }`,
+    }
+    this.runtimeHealth = result
+    this.lastHealthFailure = { at: Date.now(), result }
+  }
+
   async health() {
     if (
-      this.lastSpawnFailure
-      && Date.now() - this.lastSpawnFailure.at
-        < HEALTH_SPAWN_FAILURE_BACKOFF_MS
+      this.lastHealthFailure
+      && Date.now() - this.lastHealthFailure.at < HEALTH_FAILURE_BACKOFF_MS
     ) {
-      return this.lastSpawnFailure.result
+      return this.status()
     }
     try {
       if (
@@ -262,41 +335,31 @@ export class AcpBackendAdapter {
         && this.backendAvailable
         && !await this.backendAvailable(this.baseUrl)
       ) {
-        return {
+        this.runtimeHealth = {
           ok: false,
+          status: 'starting',
+          code: 'BACKEND_STARTING',
           protocol: this.protocol,
           ownership: this.ownership,
           transport: 'acp',
           acpConnection: this.profile.acpConnection?.kind || null,
           error: this.profile.readinessMessage,
         }
+        return this.status()
+      }
+      this.runtimeHealth = {
+        ...this.runtimeHealth,
+        ok: false,
+        status: 'starting',
+        code: 'STARTING',
+        error: '',
       }
       const initialized = await this.client.start()
-      this.lastSpawnFailure = null
-      return {
-        ok: true,
-        protocol: this.protocol,
-        ownership: this.ownership,
-        transport: 'acp',
-        acpConnection: this.profile.acpConnection?.kind || null,
-        agentInfo: initialized.agentInfo || null,
-        capabilities: initialized.agentCapabilities || {},
-      }
+      this.markRuntimeReady(initialized)
+      return this.status()
     } catch (error) {
-      const result = {
-        ok: false,
-        protocol: this.protocol,
-        ownership: this.ownership,
-        transport: 'acp',
-        acpConnection: this.profile.acpConnection?.kind || null,
-        error: `${error.message}${
-          clean(this.client.stderr) ? `：${clean(this.client.stderr)}` : ''
-        }`,
-      }
-      if (isMissingExecutable(error)) {
-        this.lastSpawnFailure = { at: Date.now(), result }
-      }
-      return result
+      this.markRuntimeFailure(error)
+      return this.status()
     }
   }
 
@@ -1281,6 +1344,14 @@ export class AcpBackendAdapter {
     signal,
     onEvent,
   } = {}) {
+    if (typeof this.client.start === 'function') {
+      try {
+        this.markRuntimeReady(await this.client.start())
+      } catch (error) {
+        this.markRuntimeFailure(error)
+        throw error
+      }
+    }
     const key = coordinatorKey(ownerId, this.protocol)
     const initial = await this.serialize(
       `coordinator:${key}`,
@@ -1540,5 +1611,13 @@ export class AcpBackendAdapter {
       this.client.close(),
     ])
     await this.builtinMcpLifecycle.close()
+    this.lastHealthFailure = null
+    this.runtimeHealth = {
+      ...this.runtimeHealth,
+      ok: false,
+      status: 'stopped',
+      code: 'STOPPED',
+      error: '',
+    }
   }
 }

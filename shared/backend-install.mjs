@@ -11,8 +11,18 @@ import { spawn, spawnSync } from 'node:child_process'
 import { accessSync, constants } from 'node:fs'
 import { resolve, win32 } from 'node:path'
 import { homedir } from 'node:os'
+import {
+  commandDirectory,
+  mergeSearchPath,
+  pathDelimiter,
+} from './path-environment.mjs'
 import { inspectBackendAuthentication } from './backend-auth-status.mjs'
 import { backendDefinition } from './backend-catalog.mjs'
+import {
+  backendConfigurationAction,
+  backendOnboardingAdapter,
+  resolveBackendOnboarding,
+} from './backend-onboarding.mjs'
 import {
   backendAuthenticationSupport,
   backendConfigurationSupport,
@@ -21,16 +31,24 @@ import {
 } from './backend-lifecycle.mjs'
 import { findExecutable, inspectBackendSetups } from './backend-setup.mjs'
 
+const DEFAULT_STEP_TIMEOUT_MS = 10 * 60 * 1000
+const MAX_INSTALL_OUTPUT_CHARS = 64 * 1024
+
 function clean(value) {
   return String(value || '').trim()
 }
 
+function environmentPath(env) {
+  const key = Object.keys(env).find(name => name.toLowerCase() === 'path')
+  return key ? String(env[key] || '') : ''
+}
+
 function specSteps(id, platform) {
-  const lifecycle = backendLifecycleSpec(id)
-  const spec = lifecycle?.installation
-  if (!spec) return { lifecycle, spec: null, steps: [] }
+  const onboarding = backendOnboardingAdapter(id, { platform })
+  const spec = onboarding.installation
+  if (!spec) return { lifecycle: backendLifecycleSpec(id), spec: null, steps: [] }
   return {
-    lifecycle,
+    lifecycle: backendLifecycleSpec(id),
     spec,
     steps: spec.steps.filter(step => (
       !step.platforms || step.platforms.includes(platform)
@@ -145,10 +163,21 @@ export function withBackendLifecycle(report, {
         { env, platform },
       )
       const install = installSupport(item.id, { env, platform })
+      const configuration = {
+        ...backendConfigurationSupport(item.id, { env, platform }),
+        required: authentication.required === true,
+        status: authentication.status,
+        actionAvailable: authentication.actionAvailable === true,
+        action: backendConfigurationAction(item.id, { env, platform }),
+      }
       return {
         ...item,
         install,
         authentication,
+        onboarding: resolveBackendOnboarding(item, {
+          installation: install,
+          configuration,
+        }),
         ...(definition?.supportsExternalService
           ? {
               externalService: {
@@ -162,7 +191,7 @@ export function withBackendLifecycle(report, {
           : {}),
         lifecycle: resolveBackendLifecycle(item, {
           installation: install,
-          configuration: backendConfigurationSupport(item.id),
+          configuration,
           authentication,
         }),
       }
@@ -175,16 +204,17 @@ export const withInstallSupport = withBackendLifecycle
 
 // 构建 npm 子进程的运行环境。从 npmCommand 提取所在目录，确保 node.exe
 // 也在 PATH 中（npm 的 postinstall 等钩子会启动 node 子进程）。
-function npmRunEnv(baseEnv, npmCommand) {
+function npmRunEnv(baseEnv, npmCommand, platform = process.platform) {
   const env = { ...baseEnv, npm_config_yes: 'true' }
   if (!npmCommand) return env
 
-  const npmDir = win32.dirname(npmCommand)
+  const npmDir = commandDirectory(npmCommand, platform)
   const currentPath = env.PATH || ''
+  const delimiter = pathDelimiter(platform)
 
   // 剔除 PATH 中直接包含可执行文件名的异常条目（如 C:\tools\nodejs\npm.cmd），
   // 用正确的目录替代。
-  const cleaned = currentPath.split(';').map(entry => {
+  const cleaned = currentPath.split(delimiter).map(entry => {
     const trimmed = entry.trim()
     if (!trimmed) return ''
     // 如果条目以 .cmd / .exe 结尾（文件路径），替换为 npm 所在目录
@@ -196,46 +226,96 @@ function npmRunEnv(baseEnv, npmCommand) {
   }).filter(Boolean)
 
   // 确保 npm 所在目录在最前面
-  const dirPath = [npmDir, ...cleaned.filter(d => d !== npmDir)].join(';')
-  env.PATH = dirPath
+  env.PATH = mergeSearchPath(cleaned.join(delimiter), npmDir, { platform })
   return env
 }
 
 function runStep(command, args, {
   env,
+  platform,
   spawnImpl,
   onOutput,
+  signal,
+  timeoutMs,
+  killImpl,
+  treeSpawnImpl,
 }) {
   return new Promise(resolvePromise => {
+    if (signal?.aborted) {
+      resolvePromise({ code: -1, aborted: true, output: '' })
+      return
+    }
     let child
-    const outputChunks = []
+    let output = ''
     try {
       child = spawnImpl(command, args, {
         env: { ...env },
         windowsHide: true,
-        shell: process.platform === 'win32',
+        shell: platform === 'win32',
+        detached: platform !== 'win32',
       })
     } catch (error) {
       resolvePromise({ code: -1, error })
       return
     }
     let settled = false
+    let timer
+    const stop = () => {
+      if (platform === 'win32' && Number.isInteger(child?.pid)) {
+        try {
+          const killer = treeSpawnImpl('taskkill', [
+            '/pid', String(child.pid), '/t', '/f',
+          ], {
+            windowsHide: true,
+            stdio: 'ignore',
+          })
+          killer.once?.('error', () => child?.kill?.('SIGTERM'))
+          killer.unref?.()
+          return
+        } catch {
+          // Fall back to terminating the direct child.
+        }
+      }
+      if (platform !== 'win32' && Number.isInteger(child?.pid)) {
+        try {
+          killImpl(-child.pid, 'SIGTERM')
+          return
+        } catch {
+          // The process may have exited or may not be a group leader.
+        }
+      }
+      child?.kill?.('SIGTERM')
+    }
     const finish = result => {
       if (settled) return
       settled = true
-      result.output = outputChunks.join('')
+      clearTimeout(timer)
+      signal?.removeEventListener('abort', abort)
+      result.output = output
       resolvePromise(result)
     }
+    const appendOutput = (stream, chunk) => {
+      output = `${output}[${stream}] ${String(chunk)}`
+        .slice(-MAX_INSTALL_OUTPUT_CHARS)
+      onOutput(stream, chunk)
+    }
+    const abort = () => {
+      stop()
+      finish({ code: -1, aborted: true })
+    }
     child.stdout?.on('data', chunk => {
-      outputChunks.push(`[stdout] ${String(chunk)}`)
-      onOutput('stdout', chunk)
+      appendOutput('stdout', chunk)
     })
     child.stderr?.on('data', chunk => {
-      outputChunks.push(`[stderr] ${String(chunk)}`)
-      onOutput('stderr', chunk)
+      appendOutput('stderr', chunk)
     })
     child.once('error', error => finish({ code: -1, error }))
     child.once('close', code => finish({ code: code ?? -1 }))
+    signal?.addEventListener('abort', abort, { once: true })
+    timer = setTimeout(() => {
+      stop()
+      finish({ code: -1, timeout: true })
+    }, timeoutMs)
   })
 }
 
@@ -248,8 +328,15 @@ function reportItem(report, id) {
 
 // 某些组件在检测报告中已就绪。报告缺少组件级细节时
 // 保守起见不跳过（执行全部步骤）。
-function stepComponentReady(step, item) {
+function stepComponentReady(step, item, env) {
   if (!item || typeof item !== 'object') return false
+  if (Array.isArray(item.packages) && step.kind === 'npm') {
+    const packageSpec = stepPackage(step, env)
+    const separator = packageSpec.lastIndexOf('@')
+    const name = separator > 0 ? packageSpec.slice(0, separator) : packageSpec
+    const observed = item.packages.find(entry => entry.name === name)
+    if (observed) return observed.ready === true
+  }
   const component = step.component === 'adapter' ? item.adapter : item.backend
   if (!component || typeof component !== 'object') return false
   return component.ready === true
@@ -257,9 +344,9 @@ function stepComponentReady(step, item) {
 
 // 通过 PowerShell 的 Get-Command 定位 npm.cmd。
 // 传入 searchPath 作为 PowerShell 进程的 PATH，确保 powershell.exe 自身可被找到。
-function findNpmWithPowerShell(searchPath) {
+function findNpmWithPowerShell(searchPath, env) {
   try {
-    const psEnv = { ...process.env, PATH: searchPath || process.env.PATH }
+    const psEnv = { ...env, PATH: searchPath || env.PATH || '' }
     const result = spawnSync('powershell.exe', [
       '-Command',
       'Get-Command npm -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source',
@@ -277,7 +364,7 @@ function findNpmWithPowerShell(searchPath) {
 // 处理 PATH 条目本身就是目标文件的情况（如 C:\tools\nodejs\npm.cmd）。
 function findNpmDirectly(searchPath) {
   if (!searchPath) return ''
-  const targets = process.platform === 'win32' ? ['npm.cmd', 'npm'] : ['npm']
+  const targets = ['npm.cmd', 'npm']
   for (const entry of searchPath.split(';')) {
     const trimmed = entry.trim()
     if (!trimmed) continue
@@ -305,16 +392,16 @@ function findNpmDirectly(searchPath) {
 }
 
 // 终极兜底：扫描硬编码常见目录 + PATH 中所有目录，检查 npm.cmd 是否存在。
-function findNpmByScanningDirectories(searchPath) {
+function findNpmByScanningDirectories(searchPath, env) {
   const hardcoded = [
     'C:\\Program Files\\nodejs\\npm.cmd',
     'C:\\Program Files (x86)\\nodejs\\npm.cmd',
-    `${process.env.LOCALAPPDATA || ''}\\Programs\\nodejs\\npm.cmd`,
-    `${process.env.LOCALAPPDATA || ''}\\Volta\\npm.cmd`,
-    `${process.env.APPDATA || ''}\\npm\\npm.cmd`,
-    `${process.env.APPDATA || ''}\\nvm\\npm.cmd`,
-    `${process.env.USERPROFILE || process.env.HOME || ''}\\AppData\\Roaming\\npm\\npm.cmd`,
-    `${process.env.NVM_SYMLINK || ''}\\npm.cmd`,
+    `${env.LOCALAPPDATA || ''}\\Programs\\nodejs\\npm.cmd`,
+    `${env.LOCALAPPDATA || ''}\\Volta\\npm.cmd`,
+    `${env.APPDATA || ''}\\npm\\npm.cmd`,
+    `${env.APPDATA || ''}\\nvm\\npm.cmd`,
+    `${env.USERPROFILE || env.HOME || ''}\\AppData\\Roaming\\npm\\npm.cmd`,
+    `${env.NVM_SYMLINK || ''}\\npm.cmd`,
   ].filter(Boolean)
 
   const candidates = [...hardcoded]
@@ -344,8 +431,8 @@ function findNpmByScanningDirectories(searchPath) {
 // 已装、仅缺 ACP 适配器时跳过本体步骤）；逐步运行安装命令（script 步骤
 // 先经 confirmStep 确认），全部成功后重新检测该后台的可用状态。
 // 返回 { ok, report?, loginHint?, alreadyInstalled?, error? }；
-// error.code 取值：UNSUPPORTED / NPM_MISSING / DECLINED / STEP_FAILED /
-// VERIFY_FAILED。
+// error.code 取值：UNSUPPORTED / NPM_MISSING / DECLINED / CANCELLED /
+// STEP_TIMEOUT / STEP_FAILED / VERIFY_FAILED。
 export async function installBackend(id, {
   env = process.env,
   platform = process.platform,
@@ -355,6 +442,10 @@ export async function installBackend(id, {
   onProgress = () => {},
   inspect = async options => inspectBackendSetups(options),
   inspectAuthentication = inspectBackendAuthentication,
+  signal,
+  stepTimeoutMs = DEFAULT_STEP_TIMEOUT_MS,
+  killImpl = process.kill,
+  treeSpawnImpl = spawn,
 } = {}) {
   const support = installSupport(id, { env, platform })
   if (!support.supported) {
@@ -369,11 +460,13 @@ export async function installBackend(id, {
   // 归一化 PATH 键名（Windows 上 process.env 可能使用 Path 而非 PATH）
   const resolvedEnv = env.PATH
     ? env
-    : { ...env, PATH: process.env.PATH || env.Path || '' }
+    : { ...env, PATH: environmentPath(env) }
 
   const before = await inspect({ env: resolvedEnv, platform, backend: definition.id })
   const beforeItem = reportItem(before, definition.id)
-  const pending = steps.filter(step => !stepComponentReady(step, beforeItem))
+  const pending = steps.filter(step => (
+    !stepComponentReady(step, beforeItem, resolvedEnv)
+  ))
   if (!pending.length && beforeItem?.ready === true) {
     const observed = await observedAuthentication(beforeItem, definition.id, {
       env: resolvedEnv,
@@ -385,10 +478,15 @@ export async function installBackend(id, {
       observed,
       { env: resolvedEnv, platform },
     )
+    const configurationHint = backendOnboardingAdapter(definition.id, {
+      env: resolvedEnv,
+      platform,
+    }).configuration.action?.hint
     return {
       ok: true,
       report: before,
-      loginHint: backendLifecycleSpec(definition.id).authentication?.hint,
+      configurationHint,
+      loginHint: configurationHint,
       authentication,
       alreadyInstalled: true,
     }
@@ -403,8 +501,8 @@ export async function installBackend(id, {
     if (!npmCommand && platform === 'win32') {
       const searchPath = resolvedEnv.PATH || ''
       npmCommand = findNpmDirectly(searchPath)
-        || findNpmWithPowerShell(searchPath)
-        || findNpmByScanningDirectories(searchPath)
+        || findNpmWithPowerShell(searchPath, resolvedEnv)
+        || findNpmByScanningDirectories(searchPath, resolvedEnv)
     }
 
     if (!npmCommand) {
@@ -450,8 +548,13 @@ export async function installBackend(id, {
     }
     const result = step.kind === 'npm'
       ? await runStep(npmCommand, npmStepArgs(step, env), {
-        env: npmRunEnv(resolvedEnv, npmCommand),
+        env: npmRunEnv(resolvedEnv, npmCommand, platform),
+        platform,
         spawnImpl,
+        signal,
+        timeoutMs: stepTimeoutMs,
+        killImpl,
+        treeSpawnImpl,
         onOutput: (stream, chunk) => onProgress({
           step: index,
           phase: 'output',
@@ -462,7 +565,12 @@ export async function installBackend(id, {
       : platform === 'win32'
         ? await runStep('powershell.exe', ['-ExecutionPolicy', 'Bypass', '-Command', step.command], {
           env: resolvedEnv,
+          platform,
           spawnImpl,
+          signal,
+          timeoutMs: stepTimeoutMs,
+          killImpl,
+          treeSpawnImpl,
           onOutput: (stream, chunk) => onProgress({
             step: index,
             phase: 'output',
@@ -472,7 +580,12 @@ export async function installBackend(id, {
         })
         : await runStep('/bin/sh', ['-c', step.command], {
           env: resolvedEnv,
+          platform,
           spawnImpl,
+          signal,
+          timeoutMs: stepTimeoutMs,
+          killImpl,
+          treeSpawnImpl,
           onOutput: (stream, chunk) => onProgress({
             step: index,
             phase: 'output',
@@ -480,6 +593,21 @@ export async function installBackend(id, {
             chunk: String(chunk),
           }),
         })
+    if (result.aborted) {
+      return {
+        ok: false,
+        error: { code: 'CANCELLED', message: '安装已取消' },
+      }
+    }
+    if (result.timeout) {
+      return {
+        ok: false,
+        error: {
+          code: 'STEP_TIMEOUT',
+          message: `安装命令执行超时：${display}`,
+        },
+      }
+    }
     if (result.code !== 0) {
       const outputTail = (result.output || '').trimEnd()
       return {
@@ -496,7 +624,7 @@ export async function installBackend(id, {
       // npm install -g 成功后，把全局 bin 目录加入 resolvedEnv.PATH，
       // 否则后续验证步骤找不到刚安装的二进制。
       const prefixResult = spawnSync(npmCommand, ['config', 'get', 'prefix'], {
-        env: npmRunEnv(resolvedEnv, npmCommand),
+        env: npmRunEnv(resolvedEnv, npmCommand, platform),
         encoding: 'utf8',
       })
       const rawPrefix = (prefixResult.stdout || '').trim()
@@ -507,8 +635,11 @@ export async function installBackend(id, {
         : platform === 'win32'
           ? resolve(homedir(), 'AppData', 'Roaming', 'npm')
           : '/usr/local/bin'
-      const sep = platform === 'win32' ? ';' : ':'
-      resolvedEnv.PATH = [npmGlobalBin, resolvedEnv.PATH].filter(Boolean).join(sep)
+      resolvedEnv.PATH = mergeSearchPath(
+        resolvedEnv.PATH,
+        npmGlobalBin,
+        { platform },
+      )
     }
     onProgress({ step: index, phase: 'done', title: stepTitle(step, index) })
   }
@@ -536,10 +667,15 @@ export async function installBackend(id, {
     observed,
     { env, platform },
   )
+  const configurationHint = backendOnboardingAdapter(definition.id, {
+    env: resolvedEnv,
+    platform,
+  }).configuration.action?.hint
   return {
     ok: true,
     report,
-    loginHint: backendLifecycleSpec(definition.id).authentication?.hint,
+    configurationHint,
+    loginHint: configurationHint,
     authentication,
   }
 }

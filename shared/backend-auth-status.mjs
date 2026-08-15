@@ -3,39 +3,31 @@ import { existsSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { readdir } from 'node:fs/promises'
 import { join } from 'node:path'
+import { backendOnboardingAdapter } from './backend-onboarding.mjs'
 
 const ANSI_PATTERN = /\x1b\[[0-?]*[ -/]*[@-~]/g
 const MAX_OUTPUT = 256 * 1024
 
-const STATUS_SPECS = {
-  opencode: {
-    args: ['auth', 'list'],
-    parse(output) {
-      const count = output.match(/(\d+)\s+credentials?/i)?.[1]
-      return count === undefined ? 'unknown' : Number(count) > 0
-        ? 'authenticated'
-        : 'unauthenticated'
-    },
+const STATUS_PARSERS = {
+  'credential-count'(output) {
+    const count = output.match(/(\d+)\s+credentials?/i)?.[1]
+    return count === undefined ? 'unknown' : Number(count) > 0
+      ? 'authenticated'
+      : 'unauthenticated'
   },
-  qoder: {
-    args: ['status'],
-    parse(output) {
-      if (/^(?:Username|Email):\s*\S+/im.test(output)) return 'authenticated'
-      return /not (?:logged in|authenticated)|please (?:log in|login|sign in)/i.test(output)
-        ? 'unauthenticated'
-        : 'unknown'
-    },
+  'qoder-status'(output) {
+    if (/^(?:Username|Email):\s*\S+/im.test(output)) return 'authenticated'
+    return /not (?:logged in|authenticated)|please (?:log in|login|sign in)/i.test(output)
+      ? 'unauthenticated'
+      : 'unknown'
   },
-  codex: {
-    args: ['login', 'status'],
-    parse(output) {
-      if (/logged in/i.test(output) && !/not logged in/i.test(output)) {
-        return 'authenticated'
-      }
-      return /not logged in|not authenticated/i.test(output)
-        ? 'unauthenticated'
-        : 'unknown'
-    },
+  'codex-status'(output) {
+    if (/logged in/i.test(output) && !/not logged in/i.test(output)) {
+      return 'authenticated'
+    }
+    return /not logged in|not authenticated/i.test(output)
+      ? 'unauthenticated'
+      : 'unknown'
   },
 }
 
@@ -110,6 +102,7 @@ async function deepSeekCredentialStatus({ env, readFileImpl = readFile }) {
 
 function runStatus(command, args, {
   env,
+  platform = process.platform,
   spawnImpl = spawn,
   timeoutMs = 8_000,
 } = {}) {
@@ -129,7 +122,7 @@ function runStatus(command, args, {
         env,
         windowsHide: true,
         stdio: ['ignore', 'pipe', 'pipe'],
-        shell: process.platform === 'win32',
+        shell: platform === 'win32',
       })
     } catch (error) {
       resolve({ ok: false, output: '', error })
@@ -161,7 +154,9 @@ export async function inspectBackendAuthentication(id, {
   pathExists = existsSync,
   readCredentialFile = readFile,
 } = {}) {
-  if (id === 'deepseek') {
+  const probe = backendOnboardingAdapter(id, { env, platform })
+    .configuration.probe
+  if (probe?.kind === 'deepseek-credentials') {
     return {
       status: await deepSeekCredentialStatus({
         env,
@@ -169,17 +164,18 @@ export async function inspectBackendAuthentication(id, {
       }),
     }
   }
-  if (id === 'codebuddy') {
+  if (probe?.kind === 'codebuddy-credentials') {
     const files = await listCodeBuddyCredentials({ env, platform })
     // CodeBuddy 没有只读的 login status 命令。凭证目录为空可以确认未登录，
     // 但文件存在也可能只是过期或卸载后残留，不能据此宣称已登录。
     return { status: files.length ? 'unknown' : 'unauthenticated' }
   }
-  if (id === 'openclaw') {
+  if (probe?.kind === 'openclaw-state') {
     return { status: openClawInitializationStatus({ env, pathExists }) }
   }
-  const spec = STATUS_SPECS[id]
-  if (!spec || !command) return { status: 'unknown' }
-  const result = await run(command, spec.args, { env })
-  return { status: spec.parse(cleanOutput(result.output)) }
+  if (probe?.kind !== 'command' || !command) return { status: 'unknown' }
+  const parse = STATUS_PARSERS[probe.parser]
+  if (!parse) return { status: 'unknown' }
+  const result = await run(command, probe.args || [], { env, platform })
+  return { status: parse(cleanOutput(result.output)) }
 }

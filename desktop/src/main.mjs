@@ -17,13 +17,14 @@ import {
   readFileSync,
   writeFileSync,
 } from 'node:fs'
-import { dirname, join, resolve, win32 } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { parseEnv } from 'node:util'
 import {
   loadRuntimeEnvironment,
   userConfigDirectory,
 } from '../../shared/runtime-environment.mjs'
+import { mergeSearchPath } from '../../shared/path-environment.mjs'
 import { createLogger } from '../../shared/logger.mjs'
 import {
   desktopOrbUrl,
@@ -32,6 +33,10 @@ import {
   isSameOrigin,
   validateAppUrl,
 } from './security.mjs'
+import {
+  desktopTranslator,
+  effectiveDesktopLanguage,
+} from './i18n.mjs'
 import {
   readGatewayHealth,
 } from '../../shared/gateway-client.mjs'
@@ -63,7 +68,7 @@ import {
 import {
   createBackendInstaller,
 } from './backend-installer.mjs'
-import { openBackendAuthentication } from './backend-authentication.mjs'
+import { openBackendConfiguration } from './backend-configuration.mjs'
 import {
   parseSettings,
   realtimeSettingsConfigured,
@@ -163,6 +168,11 @@ const initialSettings = parseSettings(
   readFileSync(runtimeEnvironment.configPath, 'utf8'),
   process.env,
 )
+let desktopLanguage = initialSettings.language
+const desktopText = (text, params) => desktopTranslator(
+  desktopLanguage,
+  app.getLocale(),
+)(text, params)
 let configuredGatewayOrigin = validateAppUrl(initialSettings.gatewayUrl)
 let appOrigin = configuredGatewayOrigin
 let setupRequired = (
@@ -445,6 +455,7 @@ async function loadQwenAudioAgent(window) {
       orbSkin: effectiveOrbSkin(settings.orbSkin),
       autoHideSeconds: settings.autoHideSeconds,
       wakeWordEnabled: settings.wakeWordEnabled,
+      language: effectiveDesktopLanguage(settings.language, app.getLocale()),
     }))
     clearTimeout(reconnectTimer)
     reconnectTimer = null
@@ -472,32 +483,33 @@ function showDesktop(reason = 'tray') {
 }
 
 function createTray() {
-  if (tray) return tray
-  const iconPath = resolve(
-    sourceRoot,
-    process.platform === 'darwin'
-      ? 'desktop/build/trayTemplate.png'
-      : 'desktop/build/icon.png',
-  )
-  let icon = nativeImage.createFromPath(iconPath)
-  if (process.platform !== 'darwin' && !icon.isEmpty()) {
-    icon = icon.resize({ width: 18, height: 18 })
+  if (!tray) {
+    const iconPath = resolve(
+      sourceRoot,
+      process.platform === 'darwin'
+        ? 'desktop/build/trayTemplate.png'
+        : 'desktop/build/icon.png',
+    )
+    let icon = nativeImage.createFromPath(iconPath)
+    if (process.platform !== 'darwin' && !icon.isEmpty()) {
+      icon = icon.resize({ width: 18, height: 18 })
+    }
+    if (process.platform === 'darwin') icon.setTemplateImage(true)
+    tray = new Tray(icon)
+    tray.setToolTip('Qwen Audio Agent')
   }
-  if (process.platform === 'darwin') icon.setTemplateImage(true)
-  tray = new Tray(icon)
-  tray.setToolTip('Qwen Audio Agent')
   tray.setContextMenu(Menu.buildFromTemplate([
     {
-      label: '显示悬浮球',
+      label: desktopText('显示悬浮球'),
       click: () => showDesktop('tray'),
     },
     {
-      label: '设置…',
+      label: desktopText('设置…'),
       click: () => showSettings(),
     },
     { type: 'separator' },
     {
-      label: '退出 Qwen Audio Agent',
+      label: desktopText('退出 Qwen Audio Agent'),
       click: () => app.quit(),
     },
   ]))
@@ -572,19 +584,23 @@ function createWindow() {
 }
 
 function createSettingsWindow() {
-  const { height: workAreaHeight } = screen
+  const { width: workAreaWidth, height: workAreaHeight } = screen
     .getDisplayNearestPoint(screen.getCursorScreenPoint())
     .workAreaSize
+  const settingsWindowWidth = Math.max(
+    460,
+    Math.min(600, workAreaWidth - 48),
+  )
   const settingsWindowHeight = Math.max(
     600,
     Math.min(800, workAreaHeight - 48),
   )
   const window = new BrowserWindow({
-    width: 520,
+    width: settingsWindowWidth,
     height: settingsWindowHeight,
     minWidth: 460,
     minHeight: 600,
-    title: '设置',
+    title: desktopText('设置'),
     backgroundColor: '#f4f5f6',
     autoHideMenuBar: true,
     show: false,
@@ -782,11 +798,11 @@ ipcMain.on('qwen-audio-agent:open-external', async (event, value) => {
   if (target.protocol !== 'https:') return
   const { response } = await dialog.showMessageBox(settingsWindow, {
     type: 'question',
-    buttons: ['打开', '取消'],
+    buttons: [desktopText('打开'), desktopText('取消')],
     defaultId: 0,
     cancelId: 1,
-    title: '打开外部链接',
-    message: `即将在浏览器中打开：${target.href}`,
+    title: desktopText('打开外部链接'),
+    message: desktopText('即将在浏览器中打开：{url}', { url: target.href }),
   })
   if (response === 0) void shell.openExternal(target.href)
 })
@@ -858,13 +874,10 @@ ipcMain.handle('qwen-audio-agent:set-node-path', async (event, nodePath) => {
 
   // 立即生效：直接操作 PATH，不依赖 spawnSync（打包后可能不可用）
   process.env.QWEN_AUDIO_AGENT_NODE_PATH = trimmed
-  const { delimiter } = win32
-  const existing = (process.env.PATH || '').split(delimiter).filter(Boolean)
-  const normalized = existing.map(d => win32.normalize(d).toLowerCase())
-  const newNormalized = win32.normalize(trimmed).toLowerCase()
-  if (!normalized.includes(newNormalized)) {
-    process.env.PATH = [...existing, trimmed].join(delimiter)
-  }
+  process.env.PATH = mergeSearchPath(process.env.PATH, trimmed, {
+    platform: process.platform,
+    prepend: false,
+  })
 
   // 再跑 expandProcessPath 利用 where/reg 补充其他路径（失败不影响已设置的路径）
   try {
@@ -929,7 +942,6 @@ function backendDetectionEnvironment() {
     result.PATH = result.Path
   }
   delete result.Path
-  console.error('[backendDetection] result.PATH:', String(result.PATH || '(empty)').substring(0, 80))
   return result
 }
 
@@ -942,23 +954,11 @@ function runBackendDetection() {
       if (result.path) {
         // 合并 Worker 检测到的 PATH 到进程环境，只添加新目录，
         // 不替换已有目录（保留 System32 等系统路径）。
-        const current = new Set(String(process.env.PATH || '')
-          .split(';')
-          .map(p => p.trim().toLowerCase())
-          .filter(Boolean))
-        const additions = []
-        for (const entry of result.path.split(';')) {
-          const trimmed = entry.trim()
-          if (trimmed && !current.has(trimmed.toLowerCase())) {
-            current.add(trimmed.toLowerCase())
-            additions.push(trimmed)
-          }
-        }
-        if (additions.length > 0) {
-          process.env.PATH = [...additions, String(process.env.PATH || '')]
-            .filter(Boolean)
-            .join(';')
-        }
+        process.env.PATH = mergeSearchPath(
+          process.env.PATH,
+          result.path,
+          { platform: process.platform },
+        )
       }
       return withBackendLifecycle(result.report, {
         env: backendDetectionEnvironment(),
@@ -998,9 +998,12 @@ const backendInstaller = createBackendInstaller({
     if (!settingsWindow || settingsWindow.isDestroyed()) return false
     const { response } = await dialog.showMessageBox(settingsWindow, {
       type: 'warning',
-      message: '即将执行官方安装脚本',
-      detail: `该后台 Agent 没有 npm 安装包，主进程将执行官方安装脚本：\n\n${step.command}\n\n请确认你信任该脚本来源后再继续。`,
-      buttons: ['执行', '取消'],
+      message: desktopText('即将执行官方安装脚本'),
+      detail: desktopText(
+        '该后台 Agent 没有 npm 安装包，主进程将执行官方安装脚本：\n\n{command}\n\n请确认你信任该脚本来源后再继续。',
+        { command: step.command },
+      ),
+      buttons: [desktopText('执行'), desktopText('取消')],
       defaultId: 1,
       cancelId: 1,
       noLink: true,
@@ -1049,18 +1052,21 @@ ipcMain.handle('qwen-audio-agent:backend-install', async (event, payload) => {
   })
 })
 
-ipcMain.handle('qwen-audio-agent:backend-authenticate', async (event, payload) => {
+ipcMain.handle('qwen-audio-agent:backend-configure', async (event, payload) => {
   if (!settingsWindow || event.sender !== settingsWindow.webContents) {
-    throw new Error('无权启动后台 Agent 登录')
+    throw new Error('无权启动后台 Agent 配置')
   }
   const id = typeof payload === 'string' ? payload : payload?.backend
   const definition = backendDefinition(id)
   if (!definition) throw new Error(`不支持的后台：${String(id || '')}`)
-  await openBackendAuthentication(definition.id, {
+  const result = await openBackendConfiguration(definition.id, {
     env: backendDetectionEnvironment(),
   })
-  logger.info('backend.authentication_opened', { backend: definition.id })
-  return { ok: true }
+  logger.info('backend.configuration_opened', {
+    backend: definition.id,
+    action: result.action?.kind,
+  })
+  return result
 })
 
 ipcMain.handle('qwen-audio-agent:updater-status', event => {
@@ -1153,6 +1159,7 @@ ipcMain.handle('qwen-audio-agent:settings-save', async (event, settings) => {
   const wakeWordChanged = (
     previous.wakeWordEnabled !== normalized.wakeWordEnabled
   )
+  const languageChanged = previous.language !== normalized.language
   const gatewayRuntimeChanged = (
     gatewayChanged
     || apiKeyChanged
@@ -1203,6 +1210,11 @@ ipcMain.handle('qwen-audio-agent:settings-save', async (event, settings) => {
     throw error
   }
   chmodSync(runtimeEnvironment.configPath, 0o600)
+  desktopLanguage = normalized.language
+  createTray()
+  if (settingsWindow && !settingsWindow.isDestroyed()) {
+    settingsWindow.setTitle(desktopText('设置'))
+  }
   logger.info('settings.applied', {
     realtimeProvider: normalized.realtimeProvider,
     backend: normalized.agentProtocol,
@@ -1220,6 +1232,7 @@ ipcMain.handle('qwen-audio-agent:settings-save', async (event, settings) => {
       autoHide: autoHideChanged,
       wakeShortcut: wakeShortcutChanged,
       wakeWord: wakeWordChanged,
+      language: languageChanged,
     },
   })
   let restarted = false
@@ -1250,7 +1263,7 @@ ipcMain.handle('qwen-audio-agent:settings-save', async (event, settings) => {
   process.env.QWEN_AUDIO_ORB_SKIN = normalized.orbSkin
   await ensureDesktopUi()
   const desktopRendererChanged = (
-    (restarted || gatewayChanged || orbSkinChanged || autoHideChanged)
+    (restarted || gatewayChanged || orbSkinChanged || autoHideChanged || languageChanged)
     && mainWindow
     && !mainWindow.isDestroyed()
   )
@@ -1277,12 +1290,12 @@ ipcMain.handle('qwen-audio-agent:skin-import', async event => {
     throw new Error('无权导入皮肤')
   }
   const selection = await dialog.showOpenDialog(settingsWindow, {
-    title: '导入皮肤',
+    title: desktopText('导入皮肤'),
     // macOS 支持同时选文件与文件夹；其余平台选 zip 或皮肤包里的 pet.json。
     properties: process.platform === 'darwin'
       ? ['openFile', 'openDirectory']
       : ['openFile'],
-    filters: [{ name: '皮肤包', extensions: ['zip', 'json'] }],
+    filters: [{ name: desktopText('皮肤包'), extensions: ['zip', 'json'] }],
   })
   if (selection.canceled || !selection.filePaths.length) return null
   const imported = await importSkin({

@@ -108,6 +108,15 @@ export class AcpProcessClient {
     return this.initializeResult?.agentInfo || null
   }
 
+  get ready() {
+    return Boolean(
+      this.initializeResult
+      && this.context
+      && this.child?.exitCode == null
+      && this.child?.signalCode == null
+    )
+  }
+
   appendStderr(chunk) {
     this.stderr = cleanProcessOutput(
       `${this.stderr}${String(chunk || '')}`,
@@ -235,13 +244,25 @@ export class AcpProcessClient {
       }).catch(() => {})
       return this.initializeResult
     } catch (error) {
-      processLogger.error('acp.initialization_failed', { error })
-      connection.close(error)
+      // stdout may close a tick before the child 'exit' event. In that race
+      // the ACP SDK reports only "connection closed" even though the native
+      // backend already wrote an actionable explanation to stderr. Preserve
+      // that backend-owned diagnostic without teaching the client any
+      // product-specific error strings.
+      const stderr = cleanProcessOutput(
+        this.stderr,
+        this.sanitizeProcessOutput,
+      )
+      const failure = stderr && !(error instanceof AgentError)
+        ? processError(this.label, '初始化失败', stderr)
+        : error
+      processLogger.error('acp.initialization_failed', { error: failure })
+      connection.close(failure)
       await this.stopProcessTree(child)
       this.connection = null
       this.context = null
       this.initializeResult = null
-      throw error
+      throw failure
     }
   }
 
@@ -582,7 +603,9 @@ export class AcpProcessClient {
       }
       killer.once?.('error', () => finish(false))
       killer.once?.('exit', code => finish(code === 0))
-      killer.unref?.()
+      // The returned Promise is part of the shutdown contract. Keep taskkill
+      // referenced until it reports exit; a pending Promise alone does not
+      // keep the Node 22 event loop alive on Windows.
     })
   }
 

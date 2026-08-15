@@ -192,6 +192,16 @@ test('accepts fenced JSON and records no-change decisions', async () => {
   assert.equal(events.at(-1).reason, 'no_change')
 })
 
+test('accepts a valid JSON patch followed by provider commentary', async () => {
+  const events = []
+  const { instance } = extractor({
+    audit: { record: event => events.push(event) },
+    llmCall: async () => '{"changes":[]}\n记忆整理完成。',
+  })
+  await instance.maybeRun({ ownerId: OWNER, sessionId: SESSION })
+  assert.equal(events.at(-1).reason, 'no_change')
+})
+
 test('stays disabled without a model, skips quiet sessions and debounces runs', async () => {
   const disabled = extractor({ llmCall: null })
   assert.equal(disabled.instance.maybeRun({ ownerId: OWNER, sessionId: SESSION }), null)

@@ -77,6 +77,10 @@ export class AgentClient {
     }
   }
 
+  status() {
+    return this.adapter.status()
+  }
+
   runCoordinator(message, options = {}) {
     return this.adapter.runCoordinator(message, options)
   }
@@ -171,8 +175,16 @@ export const agent = {
     : Promise.resolve({
         enabled: false,
         ok: true,
+      status: 'not_configured',
+    }),
+  status: () => config.agentProtocol
+    ? requireAgent().status()
+    : {
+        enabled: false,
+        ok: true,
         status: 'not_configured',
-      }),
+        code: 'NOT_CONFIGURED',
+      },
   runCoordinator: (message, options = {}) =>
     requireAgent().runCoordinator(message, options),
   respondPermission: (id, decision, options = {}) =>

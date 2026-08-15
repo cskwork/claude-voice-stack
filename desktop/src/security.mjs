@@ -44,6 +44,7 @@ export function desktopOrbUrl(value, {
   orbSkin,
   autoHideSeconds,
   wakeWordEnabled = false,
+  language = '',
 } = {}) {
   const url = new URL(value)
   url.searchParams.set('desktop', 'orb')
@@ -57,5 +58,6 @@ export function desktopOrbUrl(value, {
     url.searchParams.set('autoHideSeconds', String(autoHideSeconds))
   }
   if (wakeWordEnabled) url.searchParams.set('wakeWordEnabled', 'true')
+  if (language) url.searchParams.set('lang', language)
   return url.href
 }

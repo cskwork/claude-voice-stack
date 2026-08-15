@@ -15,6 +15,7 @@ import {
   DEFAULT_SPEECH_TO_SPEECH_REALTIME_URL,
   normalizeRealtimeProvider,
 } from '../../shared/realtime-provider-catalog.mjs'
+import { normalizeDesktopLanguage } from './i18n.mjs'
 
 const DEFAULTS = {
   gatewayUrl: 'http://127.0.0.1:3101',
@@ -37,6 +38,7 @@ const DEFAULTS = {
   backendUrl: '',
   backendCredential: '',
   nodePath: '',
+  language: 'auto',
 }
 
 const SETTING_KEYS = {
@@ -58,6 +60,7 @@ const SETTING_KEYS = {
   backendModel: 'QWEN_AUDIO_AGENT_BACKEND_MODEL',
   backendOwnership: 'QWEN_AUDIO_AGENT_BACKEND_OWNERSHIP',
   nodePath: 'QWEN_AUDIO_AGENT_NODE_PATH',
+  language: 'QWEN_AUDIO_DESKTOP_LANGUAGE',
 }
 
 function configured(values, key, fallback) {
@@ -325,6 +328,11 @@ export function parseSettings(content = '', fallback = {}) {
       'QWEN_AUDIO_AGENT_NODE_PATH',
       fallback.QWEN_AUDIO_AGENT_NODE_PATH || DEFAULTS.nodePath,
     ) || '').trim(),
+    language: normalizeDesktopLanguage(configured(
+      values,
+      'QWEN_AUDIO_DESKTOP_LANGUAGE',
+      fallback.QWEN_AUDIO_DESKTOP_LANGUAGE || DEFAULTS.language,
+    )),
   }
 }
 
@@ -414,6 +422,7 @@ export function normalizeSettings(settings = {}) {
     nodePath: String(
       settings.nodePath ?? DEFAULTS.nodePath,
     ).trim(),
+    language: normalizeDesktopLanguage(settings.language),
   }
 }
 

@@ -14,21 +14,21 @@ import {
 } from '../../shared/realtime-provider-catalog.mjs'
 
 test('uses compact realtime provider labels in the desktop status card', () => {
-  assert.equal(realtimeStatusLabel('dashscope'), 'Qwen Audio')
+  assert.equal(realtimeStatusLabel('dashscope'), 'DashScope')
   assert.equal(
     realtimeStatusLabel('speech-to-speech'),
     'Speech-to-Speech',
   )
 })
 
-test('shortens known Qwen Audio realtime model names', () => {
+test('uses consistent product and version labels for known realtime models', () => {
   assert.equal(
     realtimeModelStatusLabel('qwen-audio-3.0-realtime-plus'),
-    'plus',
+    'Qwen Audio 3.0 Plus',
   )
   assert.equal(
     realtimeModelStatusLabel('qwen-audio-3.0-realtime-flash'),
-    'flash',
+    'Qwen Audio 3.0 Flash',
   )
   assert.equal(realtimeModelStatusLabel('custom-model'), 'custom-model')
 })
@@ -36,13 +36,13 @@ test('shortens known Qwen Audio realtime model names', () => {
 test('uses the shared profile label and reports runtime model mismatch', () => {
   assert.equal(
     realtimeModelStatusLabel(DASHSCOPE_OMNI_PLUS_REALTIME_MODEL),
-    'Qwen3.5 Omni Plus Realtime',
+    'Qwen3.5 Omni Plus',
   )
   assert.deepEqual(realtimeModelRuntimeStatus({
     realtimeModel: DASHSCOPE_OMNI_PLUS_REALTIME_MODEL,
     realtimeModelProfile: { id: DASHSCOPE_OMNI_PLUS_REALTIME_MODEL },
   }, 'qwen-audio-3.0-realtime-plus'), {
-    label: 'Qwen3.5 Omni Plus Realtime',
+    label: 'Qwen3.5 Omni Plus',
     mismatch: true,
   })
 })
