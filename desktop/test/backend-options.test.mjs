@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   backendOptionStates,
+  backendRuntimePhase,
   backendRuntimeReady,
 } from '../src/backend-options.mjs'
 
@@ -226,6 +227,27 @@ test('never reports an uninstalled backend ready from a stale runtime alone', ()
     selectedBackend: 'codebuddy',
     runtimeBackend: { connected: true },
   }), false)
+})
+
+test('keeps installation, configuration, and runtime phases separate', () => {
+  assert.equal(backendRuntimePhase({
+    ready: true,
+    configurationRequired: true,
+  }, {
+    connected: false,
+    error: 'ACP connection closed',
+  }), 'configuration-required')
+  assert.equal(backendRuntimePhase({
+    ready: true,
+    configurationRequired: false,
+  }, {
+    connected: false,
+    error: 'native backend failed',
+  }), 'connection-failed')
+  assert.equal(backendRuntimePhase({ ready: true }, {
+    connected: true,
+  }), 'connected')
+  assert.equal(backendRuntimePhase({ ready: true }, null), 'not-configured')
 })
 
 test('classifies issue texts into short reasons', () => {

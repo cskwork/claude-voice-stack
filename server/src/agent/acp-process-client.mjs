@@ -244,13 +244,25 @@ export class AcpProcessClient {
       }).catch(() => {})
       return this.initializeResult
     } catch (error) {
-      processLogger.error('acp.initialization_failed', { error })
-      connection.close(error)
+      // stdout may close a tick before the child 'exit' event. In that race
+      // the ACP SDK reports only "connection closed" even though the native
+      // backend already wrote an actionable explanation to stderr. Preserve
+      // that backend-owned diagnostic without teaching the client any
+      // product-specific error strings.
+      const stderr = cleanProcessOutput(
+        this.stderr,
+        this.sanitizeProcessOutput,
+      )
+      const failure = stderr && !(error instanceof AgentError)
+        ? processError(this.label, '初始化失败', stderr)
+        : error
+      processLogger.error('acp.initialization_failed', { error: failure })
+      connection.close(failure)
       await this.stopProcessTree(child)
       this.connection = null
       this.context = null
       this.initializeResult = null
-      throw error
+      throw failure
     }
   }
 

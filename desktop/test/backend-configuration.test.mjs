@@ -5,6 +5,7 @@ import {
   configurationLaunch,
   openBackendConfiguration,
 } from '../src/backend-configuration.mjs'
+import { backendNames } from '../../shared/backend-catalog.mjs'
 
 test('builds native terminal launches for macOS and Windows', () => {
   assert.equal(
@@ -14,6 +15,22 @@ test('builds native terminal launches for macOS and Windows', () => {
   const windows = configurationLaunch('codex', { env: {}, platform: 'win32' })
   assert.equal(windows.command, 'cmd.exe')
   assert.ok(windows.args.includes('codex login'))
+})
+
+test('maps every backend-owned configuration action on every desktop OS', () => {
+  for (const platform of ['darwin', 'linux', 'win32']) {
+    for (const id of backendNames()) {
+      const launch = configurationLaunch(id, { env: {}, platform })
+      if (id === 'acp') {
+        assert.equal(launch, null)
+        continue
+      }
+      assert.ok(launch, `${platform}:${id}`)
+      assert.equal(launch.action.kind, 'terminal', `${platform}:${id}`)
+      assert.ok(launch.action.command, `${platform}:${id}`)
+      assert.ok(launch.action.hint, `${platform}:${id}`)
+    }
+  }
 })
 
 test('falls back across common Linux terminal emulators', async () => {

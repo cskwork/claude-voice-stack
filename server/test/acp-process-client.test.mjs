@@ -108,6 +108,19 @@ test('starts a POSIX ACP backend in a dedicated process group', async () => {
   assert.deepEqual(options.stdio, ['pipe', 'pipe', 'pipe'])
 })
 
+test('preserves native stderr when ACP closes during initialization', async () => {
+  const client = new AcpProcessClient({
+    label: 'Native Agent',
+    command: process.execPath,
+    args: ['-e', "process.stderr.write('native configuration required\\n')"],
+  })
+
+  await assert.rejects(
+    client.start(),
+    /Native Agent ACP .*native configuration required/,
+  )
+})
+
 test('escalates from SIGTERM to SIGKILL for a surviving POSIX process group', async () => {
   const signals = []
   let alive = true

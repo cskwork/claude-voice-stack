@@ -94,3 +94,17 @@ export function backendRuntimeReady(state, {
     && runtimeBackend?.connected === true,
   )
 }
+
+// Installation/configuration comes from the onboarding contract, while the
+// live connection comes from Gateway. Keep the precedence here so every UI
+// surface describes an installed-but-unconfigured backend consistently
+// instead of presenting the expected ACP startup failure as "unavailable".
+export function backendRuntimePhase(state, runtimeBackend) {
+  if (state?.ready === true && state.configurationRequired === true) {
+    return 'configuration-required'
+  }
+  if (!runtimeBackend) return 'not-configured'
+  if (runtimeBackend.connected === true) return 'connected'
+  if (runtimeBackend.error) return 'connection-failed'
+  return 'disconnected'
+}

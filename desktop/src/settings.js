@@ -1,5 +1,6 @@
 import {
   backendOptionStates,
+  backendRuntimePhase,
   backendRuntimeReady,
 } from './backend-options.mjs'
 import {
@@ -7,6 +8,10 @@ import {
   realtimeModelStatusLabel,
   realtimeStatusLabel,
 } from './realtime-status.mjs'
+import {
+  DEFAULT_DASHSCOPE_REALTIME_MODEL,
+  listDashScopeRealtimeModelProfiles,
+} from '../../shared/realtime-model-catalog.mjs'
 import { updaterButtonState, updaterStatusText } from './update-status.mjs'
 import { createRealtimeVoiceDrafts } from './realtime-voice-settings.mjs'
 import {
@@ -90,6 +95,7 @@ let settings
 let skins = []
 let runtime
 let backendReport = null
+let pendingBackendConfiguration = ''
 let appliedFingerprint = ''
 let applying = false
 let refreshingRuntime = false
@@ -100,6 +106,37 @@ let realtimeVoiceDrafts = createRealtimeVoiceDrafts()
 const defaultWakeShortcut = 'CommandOrControl+Shift+Space'
 const defaultRealtimeBaseUrl = 'wss://dashscope.aliyuncs.com/api-ws/v1/realtime'
 const macPlatform = /Mac|iPhone|iPad/.test(navigator.platform)
+
+function renderRealtimeModelOptions(selectedModel) {
+  const profiles = listDashScopeRealtimeModelProfiles()
+  const families = [
+    ['omni', 'Qwen Omni'],
+    ['audio', 'Qwen Audio'],
+  ]
+  const children = families.map(([family, label]) => {
+    const group = document.createElement('optgroup')
+    group.label = label
+    for (const profile of profiles.filter(item => item.family === family)) {
+      const option = document.createElement('option')
+      option.value = profile.id
+      option.textContent = profile.label
+      group.append(option)
+    }
+    return group
+  })
+  const known = profiles.some(profile => profile.id === selectedModel)
+  if (selectedModel && !known) {
+    const custom = document.createElement('optgroup')
+    custom.label = t('自定义')
+    const option = document.createElement('option')
+    option.value = selectedModel
+    option.textContent = selectedModel
+    custom.append(option)
+    children.push(custom)
+  }
+  realtimeModel.replaceChildren(...children)
+  realtimeModel.value = selectedModel || DEFAULT_DASHSCOPE_REALTIME_MODEL
+}
 
 function selectSettingsTab(value, { focus = false } = {}) {
   const selected = settingsTabs.some(tab => tab.dataset.settingsTab === value)
@@ -659,14 +696,20 @@ backendList.addEventListener('click', event => {
   if (!configuration || configuration.disabled) return
   event.preventDefault()
   window.qwenAudioAgentDesktop.configureBackend(configuration.dataset.backend)
-    .then(result => showMessage(
-      result?.action?.hint
-        ? t(result.action.hint)
-        : t('已打开 {backend} 配置入口。', {
-            backend: backendLabel(configuration.dataset.backend),
-          }),
-      'notice',
-    ))
+    .then(result => {
+      // The backend owns its native configuration flow. We only remember that
+      // it was opened and re-run the shared read-only probe when the user
+      // returns; no backend credentials or completion callbacks cross layers.
+      pendingBackendConfiguration = configuration.dataset.backend
+      showMessage(
+        result?.action?.hint
+          ? t(result.action.hint)
+          : t('已打开 {backend} 配置入口。', {
+              backend: backendLabel(configuration.dataset.backend),
+            }),
+        'notice',
+      )
+    })
     .catch(error => showMessage(
       friendlyError(error, t('无法打开配置入口')),
       'error',
@@ -841,7 +884,16 @@ function renderRuntime() {
   }
   const label = runtime.backend.label
     || backendLabel(runtime.backend.protocol)
-  if (!runtime.backend.connected && runtime.backend.error) {
+  const state = backendOptionStates(backendReport).find(option => (
+    option.id === runtime.backend.protocol
+  ))
+  const phase = backendRuntimePhase(state, runtime.backend)
+  if (phase === 'configuration-required') {
+    setBackendStatus(`${label} · ${t('待配置')}`, false)
+    currentBackend.title = state?.configurationHint || ''
+    return
+  }
+  if (phase === 'connection-failed') {
     const reason = String(runtime.backend.error).trim()
     setBackendStatus(t('{label} 未连接：{reason}', {
       label,
@@ -897,13 +949,27 @@ async function detectBackendOptions(force = false) {
       force ? { force: true } : undefined,
     )
     renderBackendOptions(selectedBackend() || settings?.agentProtocol)
+    renderRuntime()
     updateApplyState()
+    return backendReport
   } catch (error) {
     showMessage(friendlyError(error, t('检测后台 Agent 失败')), 'error')
+    return null
   } finally {
     refreshBackends.disabled = false
   }
 }
+
+window.addEventListener('focus', () => {
+  if (!pendingBackendConfiguration || installingBackend) return
+  const id = pendingBackendConfiguration
+  void detectBackendOptions(true).then(report => {
+    if (!report) return
+    const state = backendOptionStates(report)
+      .find(option => option.id === id)
+    if (!state?.configurationRequired) pendingBackendConfiguration = ''
+  })
+})
 
 refreshBackends.addEventListener('click', () => {
   void detectBackendOptions(true)
@@ -970,8 +1036,9 @@ function render() {
   dashscopeApiKey.value = settings.dashscopeApiKey || ''
   realtimeBaseUrl.value = settings.realtimeBaseUrl || defaultRealtimeBaseUrl
   renderBackendOptions(settings.agentProtocol || 'none')
-  realtimeModel.value = settings.realtimeModel
-    || 'qwen-audio-3.0-realtime-plus'
+  renderRealtimeModelOptions(
+    settings.realtimeModel || DEFAULT_DASHSCOPE_REALTIME_MODEL,
+  )
   realtimeVoiceDrafts = createRealtimeVoiceDrafts(settings)
   renderRealtimeVoice()
   speechToSpeechRealtimeUrl.value = settings.speechToSpeechRealtimeUrl || ''
@@ -1025,6 +1092,7 @@ for (const control of [
       renderUpdater(updaterState)
       renderBackendOptions(selectedBackend())
       renderSkinOptions(orbSkinSelect.value)
+      renderRealtimeModelOptions(realtimeModel.value)
       renderRuntime()
     }
     updateApplyState()

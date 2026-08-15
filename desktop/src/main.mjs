@@ -584,15 +584,19 @@ function createWindow() {
 }
 
 function createSettingsWindow() {
-  const { height: workAreaHeight } = screen
+  const { width: workAreaWidth, height: workAreaHeight } = screen
     .getDisplayNearestPoint(screen.getCursorScreenPoint())
     .workAreaSize
+  const settingsWindowWidth = Math.max(
+    460,
+    Math.min(600, workAreaWidth - 48),
+  )
   const settingsWindowHeight = Math.max(
     600,
     Math.min(800, workAreaHeight - 48),
   )
   const window = new BrowserWindow({
-    width: 520,
+    width: settingsWindowWidth,
     height: settingsWindowHeight,
     minWidth: 460,
     minHeight: 600,
