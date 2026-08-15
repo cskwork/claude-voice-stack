@@ -36,6 +36,15 @@ function promptRetryDelay({ error, attempt }) {
 export const openClawBackendDriver = {
   id: 'openclaw',
   label: 'OpenClaw',
+  capabilities: {
+    delegation: true,
+    permissions: true,
+    backendUi: true,
+    nativeSessionHistory: true,
+    externalMcp: false,
+    nativeDelegation: true,
+    sessionMcp: false,
+  },
 
   createProfile({
     root,
@@ -67,7 +76,7 @@ export const openClawBackendDriver = {
           : [resolve(root, 'scripts/openclaw.mjs'), ...bridgeArgs],
         cwd: directory,
         env: {
-          ...baseEnvironment(),
+          ...baseEnvironment('openclaw'),
           ELECTRON_RUN_AS_NODE: '1',
           ...(token ? { OPENCLAW_GATEWAY_TOKEN: token } : {}),
           // Keep the ACP bridge's device identity separate from the user's

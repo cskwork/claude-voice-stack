@@ -28,6 +28,15 @@ function acceptsResumedSession({ session, role, coordinatorAgent }) {
 export const openCodeBackendDriver = {
   id: 'opencode',
   label: 'OpenCode',
+  capabilities: {
+    delegation: true,
+    permissions: true,
+    backendUi: true,
+    nativeSessionHistory: true,
+    externalMcp: true,
+    nativeDelegation: false,
+    sessionMcp: true,
+  },
 
   createProfile({ root, directory }) {
     return {
@@ -36,7 +45,7 @@ export const openCodeBackendDriver = {
         command: process.execPath,
         args: [resolve(root, 'scripts/opencode.mjs'), 'acp'],
         cwd: directory,
-        env: { ...baseEnvironment(), ELECTRON_RUN_AS_NODE: '1' },
+        env: { ...baseEnvironment('opencode'), ELECTRON_RUN_AS_NODE: '1' },
       }),
       externalMcp: true,
       nativeDelegation: false,

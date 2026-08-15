@@ -4,6 +4,15 @@ import { baseEnvironment, clean, processAcpConnection } from './shared.mjs'
 export const claudeBackendDriver = {
   id: 'claude',
   label: 'Claude Code',
+  capabilities: {
+    delegation: true,
+    permissions: true,
+    backendUi: false,
+    nativeSessionHistory: true,
+    externalMcp: true,
+    nativeDelegation: false,
+    sessionMcp: true,
+  },
 
   createProfile({
     root,
@@ -18,7 +27,7 @@ export const claudeBackendDriver = {
         args: [resolve(root, 'scripts/claude-code-acp.mjs')],
         cwd: directory,
         env: {
-          ...baseEnvironment(),
+          ...baseEnvironment('claude'),
           ELECTRON_RUN_AS_NODE: '1',
           ...(clean(cliPath)
             ? { CLAUDE_CODE_ACP_BIN: clean(cliPath) }

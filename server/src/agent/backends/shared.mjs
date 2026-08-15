@@ -1,4 +1,5 @@
 import { createConnection } from 'node:net'
+import { backendEnvironment } from '../../../../shared/backend-environment.mjs'
 
 function serviceEndpointPort(target) {
   if (target.port) return Number(target.port)
@@ -50,13 +51,8 @@ export function endpointAvailable(value, timeoutMs = 300) {
   })
 }
 
-export function baseEnvironment(configDirectory = '') {
-  return {
-    ...process.env,
-    QWEN_AUDIO_AGENT_ENV_LOADED: '1',
-    QWEN_AUDIO_AGENT_NODE: process.execPath,
-    ...(configDirectory ? { QODER_CONFIG_DIR: configDirectory } : {}),
-  }
+export function baseEnvironment(protocol, additions = {}) {
+  return backendEnvironment(protocol, { additions })
 }
 
 export function websocketUrl(httpUrl) {

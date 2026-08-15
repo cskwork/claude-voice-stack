@@ -6,6 +6,15 @@ const CODEX_PROVIDER = 'qwen-audio-agent'
 export const codexBackendDriver = {
   id: 'codex',
   label: 'Codex',
+  capabilities: {
+    delegation: true,
+    permissions: true,
+    backendUi: false,
+    nativeSessionHistory: true,
+    externalMcp: true,
+    nativeDelegation: false,
+    sessionMcp: true,
+  },
 
   createProfile({
     root,
@@ -22,7 +31,7 @@ export const codexBackendDriver = {
         args: [resolve(root, 'scripts/codex-acp.mjs')],
         cwd: directory,
         env: {
-          ...baseEnvironment(),
+          ...baseEnvironment('codex'),
           ELECTRON_RUN_AS_NODE: '1',
           ...(clean(cliPath) ? { CODEX_ACP_BIN: clean(cliPath) } : {}),
           ...(clean(modelUrl)

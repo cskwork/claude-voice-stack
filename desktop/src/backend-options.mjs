@@ -105,6 +105,12 @@ export function backendRuntimePhase(state, runtimeBackend) {
   }
   if (!runtimeBackend) return 'not-configured'
   if (runtimeBackend.connected === true) return 'connected'
+  if (
+    runtimeBackend.status === 'starting'
+    || ['NOT_STARTED', 'STARTING', 'BACKEND_STARTING'].includes(
+      runtimeBackend.code,
+    )
+  ) return 'starting'
   if (runtimeBackend.error) return 'connection-failed'
   return 'disconnected'
 }

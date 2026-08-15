@@ -720,6 +720,7 @@ them to the configuration file:
 | `QODER_WORKSPACE` | `workspaces/qoder` under the user config directory |
 | `QWEN_AUDIO_AGENT_BACKEND_MODEL` | Empty; uses the backend Agent's original model |
 | `QWEN_AUDIO_AGENT_BACKEND_PERMISSION_MODE` | `native` |
+| `QWEN_AUDIO_AGENT_ACP_FORWARD_ENV` | Empty; comma-separated opt-in environment names for generic ACP only |
 | `QWEN_AUDIO_REALTIME_MODEL` | `qwen-audio-3.0-realtime-plus` |
 | `QWEN_AUDIO_REALTIME_PROVIDER` | `dashscope` |
 | `QWEN_AUDIO_REALTIME_VOICE` | Empty; optional Audio-family override, otherwise runtime uses `longanqian` |

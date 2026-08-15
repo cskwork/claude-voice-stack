@@ -23,7 +23,7 @@ export class ReminderScheduler {
     this.timer = null
 
     // Re-arm whenever a new scheduled task is created or cancelled.
-    this.taskManager.subscribe(event => {
+    this.unsubscribe = this.taskManager.subscribe(event => {
       if (event.type === 'task.scheduled' || event.type === 'task.cancelled') {
         this.reschedule()
       }
@@ -33,6 +33,13 @@ export class ReminderScheduler {
   start() {
     this.restoreOverdue()
     this.reschedule()
+  }
+
+  close() {
+    clearTimeout(this.timer)
+    this.timer = null
+    this.unsubscribe?.()
+    this.unsubscribe = null
   }
 
   /**

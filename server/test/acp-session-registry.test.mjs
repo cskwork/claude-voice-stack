@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import {
+  existsSync,
   mkdtempSync,
   readFileSync,
   rmSync,
@@ -46,6 +47,55 @@ test('preserves legacy coordinator records while persisting project directories'
       reloaded.get('qoder:owner:backend').sessionId,
       'coordinator',
     )
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test('quarantines a corrupt Session index before accepting new state', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'qwaudio-acp-corrupt-'))
+  const filePath = join(directory, 'acp-sessions.json')
+  const warnings = []
+  try {
+    writeFileSync(filePath, '{not-json')
+    const registry = new AcpSessionRegistry({
+      filePath,
+      onWarning: warning => warnings.push(warning),
+    })
+    assert.equal(registry.get('missing'), null)
+    assert.equal(warnings.length, 1)
+    assert.ok(warnings[0].quarantinePath)
+    assert.equal(existsSync(warnings[0].quarantinePath), true)
+    assert.equal(registry.health().ok, false)
+
+    registry.set('qoder:owner:backend', {
+      sessionId: 'new-session',
+      cwd: '/work',
+    })
+    assert.equal(
+      JSON.parse(readFileSync(filePath, 'utf8')).coordinators[
+        'qoder:owner:backend'
+      ].sessionId,
+      'new-session',
+    )
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test('quarantines an unsupported Session index version', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'qwaudio-acp-version-'))
+  const filePath = join(directory, 'acp-sessions.json')
+  try {
+    writeFileSync(filePath, JSON.stringify({
+      version: 999,
+      coordinators: {},
+      projects: {},
+    }))
+    const registry = new AcpSessionRegistry({ filePath, onWarning: () => {} })
+    assert.equal(registry.get('missing'), null)
+    assert.equal(registry.health().ok, false)
+    assert.equal(existsSync(filePath), false)
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }

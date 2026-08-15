@@ -18,9 +18,22 @@ const definitions = new Map([
       installation: { steps: [{ kind: 'npm', package: 'opencode-ai@1.18.5', packageEnv: 'OPENCODE_PACKAGE' }] },
       configuration: { mode: 'bailian-or-backend-owned' },
     },
+    onboarding: {
+      command: 'opencode auth login',
+      hint: '首次使用请完成 OpenCode 官方认证；配置百炼 API Key 与后台模型时可直接使用自动配置。',
+      probe: { kind: 'command', args: ['auth', 'list'], parser: 'credential-count' },
+    },
     baseUrlEnvironment: 'OPENCODE_BASE_URL',
     defaultBaseUrl: 'http://127.0.0.1:4096',
     supportsFullPermission: true,
+    environment: {
+      names: [
+        'DASHSCOPE_API_KEY',
+        'QWEN_AUDIO_AGENT_OPENCODE_ISOLATE_USER_CONFIG',
+        'QWEN_AUDIO_AGENT_OPENCODE_XDG_CONFIG_HOME',
+      ],
+      prefixes: ['OPENCODE_'],
+    },
   }],
   ['openclaw', {
     id: 'openclaw',
@@ -35,6 +48,11 @@ const definitions = new Map([
       installation: { steps: [{ kind: 'npm', package: 'openclaw@2026.6.33', packageEnv: 'OPENCLAW_PACKAGE' }] },
       configuration: { mode: 'bailian-or-backend-owned' },
     },
+    onboarding: {
+      command: 'openclaw onboard',
+      hint: '首次使用请完成 OpenClaw 官方初始化与认证。',
+      probe: { kind: 'openclaw-state' },
+    },
     baseUrlEnvironment: 'OPENCLAW_BASE_URL',
     defaultBaseUrl: 'http://127.0.0.1:18789',
     supportsExternalService: true,
@@ -42,6 +60,18 @@ const definitions = new Map([
       credentialEnvironment: 'OPENCLAW_GATEWAY_TOKEN',
     },
     supportsFullPermission: false,
+    environment: {
+      names: [
+        'DASHSCOPE_API_KEY',
+        'AGENT_API_KEY',
+        'QWAUDIO_CONFIG_DIR',
+        'QWEN_AUDIO_AGENT_OPENCLAW_MODEL',
+        'QWEN_AUDIO_AGENT_OPENCLAW_MODEL_ID',
+        'QWEN_AUDIO_AGENT_OPENCLAW_STATE_DIR',
+        'QWEN_AUDIO_AGENT_OPENCLAW_WORKSPACE',
+      ],
+      prefixes: ['OPENCLAW_'],
+    },
   }],
   ['qoder', {
     id: 'qoder',
@@ -56,7 +86,13 @@ const definitions = new Map([
       installation: { steps: [{ kind: 'npm', package: '@qoder-ai/qodercli@1.1.13', packageEnv: 'QODERCLI_PACKAGE' }] },
       configuration: { mode: 'backend-owned' },
     },
+    onboarding: {
+      command: 'qodercli login',
+      hint: '首次使用请完成 Qoder 官方认证。',
+      probe: { kind: 'command', args: ['status'], parser: 'qoder-status' },
+    },
     supportsFullPermission: true,
+    environment: { prefixes: ['QODER_', 'QODERCLI_'] },
   }],
   ['qwen', {
     id: 'qwen',
@@ -72,7 +108,15 @@ const definitions = new Map([
       installation: { steps: [{ kind: 'npm', package: '@qwen-code/qwen-code@0.21.6', packageEnv: 'QWEN_CODE_PACKAGE' }] },
       configuration: { mode: 'backend-owned' },
     },
+    onboarding: {
+      command: 'qwen',
+      hint: '首次使用请启动 Qwen Code，并通过 /auth 完成认证。',
+    },
     supportsFullPermission: true,
+    environment: {
+      names: ['DASHSCOPE_API_KEY', 'OPENAI_API_KEY', 'OPENAI_BASE_URL'],
+      prefixes: ['QWEN_CODE_'],
+    },
   }],
   ['kimi', {
     id: 'kimi',
@@ -88,7 +132,12 @@ const definitions = new Map([
       installation: { steps: [{ kind: 'npm', package: '@moonshot-ai/kimi-code@0.32.0', packageEnv: 'KIMI_CODE_PACKAGE' }] },
       configuration: { mode: 'backend-owned' },
     },
+    onboarding: {
+      command: 'kimi login',
+      hint: '首次使用请完成 Kimi Code 官方认证，或配置官方 KIMI_MODEL_* 模型变量。',
+    },
     supportsFullPermission: true,
+    environment: { prefixes: ['KIMI_'] },
   }],
   ['hermes', {
     id: 'hermes',
@@ -108,7 +157,12 @@ const definitions = new Map([
       },
       configuration: { mode: 'backend-owned' },
     },
+    onboarding: {
+      command: 'hermes setup --portal',
+      hint: '首次使用请完成 Hermes 官方认证。',
+    },
     supportsFullPermission: true,
+    environment: { prefixes: ['HERMES_'] },
   }],
   ['codebuddy', {
     id: 'codebuddy',
@@ -123,7 +177,13 @@ const definitions = new Map([
       installation: { steps: [{ kind: 'npm', package: '@tencent-ai/codebuddy-code@2.132.0', packageEnv: 'CODEBUDDY_PACKAGE' }] },
       configuration: { mode: 'backend-owned' },
     },
+    onboarding: {
+      command: 'codebuddy',
+      hint: '首次使用请启动 CodeBuddy，并通过 /login 完成登录。',
+      probe: { kind: 'codebuddy-credentials' },
+    },
     supportsFullPermission: true,
+    environment: { prefixes: ['CODEBUDDY_'] },
   }],
   ['codex', {
     id: 'codex',
@@ -146,7 +206,16 @@ const definitions = new Map([
       },
       configuration: { mode: 'backend-owned' },
     },
+    onboarding: {
+      command: 'codex login',
+      hint: '首次使用请完成 Codex 官方认证。',
+      probe: { kind: 'command', args: ['login', 'status'], parser: 'codex-status' },
+    },
     supportsFullPermission: true,
+    environment: {
+      names: ['DASHSCOPE_API_KEY', 'OPENAI_API_KEY', 'OPENAI_BASE_URL'],
+      prefixes: ['CODEX_'],
+    },
   }],
   ['claude', {
     id: 'claude',
@@ -169,7 +238,15 @@ const definitions = new Map([
       },
       configuration: { mode: 'backend-owned' },
     },
+    onboarding: {
+      command: 'claude',
+      hint: '首次使用请完成 Claude Code 官方认证。',
+    },
     supportsFullPermission: true,
+    environment: {
+      names: ['ANTHROPIC_API_KEY', 'ANTHROPIC_BASE_URL', 'CLAUDE_API_KEY'],
+      prefixes: ['CLAUDE_'],
+    },
   }],
   ['deepseek', {
     id: 'deepseek',
@@ -221,7 +298,16 @@ const definitions = new Map([
       },
       configuration: { mode: 'backend-owned' },
     },
+    onboarding: {
+      command: 'dsh web',
+      hint: '请在 DeepSeek Web 的“设置 → Models”中为 deepseek-official 填写并保存 DEEPSEEK_API_KEY；仅打开 Web 不代表配置完成。',
+      probe: { kind: 'deepseek-credentials' },
+    },
     supportsFullPermission: true,
+    environment: {
+      names: ['DEEPSEEK_API_KEY'],
+      prefixes: ['DEEPSEEK_', 'DSH_'],
+    },
   }],
   ['acp', {
     id: 'acp',
@@ -236,6 +322,10 @@ const definitions = new Map([
       configuration: { mode: 'user-managed' },
     },
     supportsFullPermission: false,
+    environment: {
+      prefixes: ['ACP_'],
+      explicitListEnvironment: 'QWEN_AUDIO_AGENT_ACP_FORWARD_ENV',
+    },
   }],
 ])
 

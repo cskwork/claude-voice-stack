@@ -283,6 +283,17 @@ Gateway 是唯一的核心产品服务。后台生命周期由共享的 `owned/e
 未来的远程 ACP bridge 可以新增另一种连接类型，而无需修改协调、权限、Work 或
 Session 生命周期代码。声明外部后台服务，并不意味着 ACP 连接也自动变成远程连接。
 
+每个后台通过一份经过校验的 Plugin 契约注册。目录项统一拥有身份、安装、原生配置
+入口、进程环境和归属元数据；Agent Driver 与 Runtime Driver 必须显式声明完整的布尔
+能力，缺失或互相矛盾时在启动阶段直接拒绝。后台子进程只接收跨平台运行所需的系统
+变量和当前 Plugin 声明的凭证命名空间，Gateway 身份、Realtime、Memory 以及其他
+后台的密钥不会跨过该边界。通用 ACP 命令如确有需要，可通过
+`QWEN_AUDIO_AGENT_ACP_FORWARD_ENV` 显式列出额外变量名。
+
+HTTP/WebSocket 应用由可注入的组合根构造。导入应用工厂不会监听端口；CLI 和桌面版
+使用轻量 bootstrap，而测试及未来客户端可以注入彼此隔离的 Agent、任务、会话、
+配置和日志服务。
+
 共享适配器通常拥有一个 ACP stdio 子进程，并随 Gateway 一起停止。OpenCode、Qoder、
 Qwen Code 和 Kimi Code 直接作为 ACP Agent 运行；OpenCode 还可以额外启动其原生本地 Session
 UI 服务。当前 `OPENCODE_BASE_URL` 表示这个 UI 服务地址，不是远程 ACP 执行端点，

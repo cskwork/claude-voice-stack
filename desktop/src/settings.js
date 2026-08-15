@@ -826,7 +826,11 @@ function updateApplyState() {
 
 function setBackendStatus(text, connected) {
   currentBackend.textContent = text
-  currentBackend.className = `connection-status ${connected ? 'connected' : 'disconnected'}`
+  currentBackend.className = `connection-status ${
+    connected === 'checking'
+      ? 'checking'
+      : connected ? 'connected' : 'disconnected'
+  }`
 }
 
 function setRealtimeStatus(text, state) {
@@ -891,6 +895,11 @@ function renderRuntime() {
   if (phase === 'configuration-required') {
     setBackendStatus(`${label} · ${t('待配置')}`, false)
     currentBackend.title = state?.configurationHint || ''
+    return
+  }
+  if (phase === 'starting') {
+    setBackendStatus(`${label} · ${t('正在启动…')}`, 'checking')
+    currentBackend.title = String(runtime.backend.error || '')
     return
   }
   if (phase === 'connection-failed') {

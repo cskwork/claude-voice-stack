@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto'
 import {
   applyLocalAddress,
   localManagedBackend,
@@ -34,5 +35,18 @@ export const openClawRuntimeDriver = {
       baseUrlEnvironment: this.baseUrlEnvironment,
       portEnvironment: 'OPENCLAW_PORT',
     })
+  },
+
+  prepareEnvironment(env, backend) {
+    const managedBailian = backend.ownership === 'owned'
+      && !String(env.OPENCLAW_CONFIG_PATH || '').trim()
+      && Boolean(String(env.DASHSCOPE_API_KEY || '').trim())
+      && Boolean(String(env.QWEN_AUDIO_AGENT_BACKEND_MODEL || '').trim())
+      && String(env.QWEN_AUDIO_AGENT_BACKEND_MODEL).trim().toLowerCase() !== 'auto'
+    if (managedBailian && !String(env.OPENCLAW_GATEWAY_TOKEN || '').trim()) {
+      // Gateway transport authentication is independent from the local user
+      // identity signing secret and remains private to this backend plugin.
+      env.OPENCLAW_GATEWAY_TOKEN = randomBytes(32).toString('hex')
+    }
   },
 }

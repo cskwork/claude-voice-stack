@@ -111,6 +111,8 @@ test('Gateway-owned backend moves away from occupied ports', async () => {
     OPENCLAW_BASE_URL: 'http://127.0.0.1:18789',
     DASHSCOPE_API_KEY: 'test-key',
     QWEN_AUDIO_AGENT_BACKEND_MODEL: 'qwen-plus',
+    QWEN_AUDIO_AGENT_AUTH_SECRET: 'must-not-reach-openclaw',
+    SPEECH_TO_SPEECH_AUTH_TOKEN: 'must-not-reach-openclaw',
   }
   const calls = []
   const child = childProcess()
@@ -132,6 +134,11 @@ test('Gateway-owned backend moves away from occupied ports', async () => {
   assert.equal(calls[0][0], process.execPath)
   assert.equal(calls[0][1][0], resolve('/repo', 'scripts/openclaw-gateway.mjs'))
   assert.equal(calls[0][2].env.QWEN_AUDIO_AGENT_ENV_LOADED, '1')
+  assert.equal(calls[0][2].env.DASHSCOPE_API_KEY, 'test-key')
+  assert.equal(calls[0][2].env.QWEN_AUDIO_AGENT_AUTH_SECRET, undefined)
+  assert.equal(calls[0][2].env.SPEECH_TO_SPEECH_AUTH_TOKEN, undefined)
+  assert.equal(env.OPENCLAW_GATEWAY_TOKEN.length, 64)
+  assert.notEqual(env.OPENCLAW_GATEWAY_TOKEN, env.QWEN_AUDIO_AGENT_AUTH_SECRET)
   runtime.close()
   assert.deepEqual(signals, [[-4242, 'SIGTERM']])
 })

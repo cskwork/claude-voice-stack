@@ -206,7 +206,7 @@ test('restore recovers scheduled tasks with reminder runner rebuilt', () => {
   assert.equal(typeof internal.runner, 'function')
 })
 
-test('restore recovers scheduled_task with null runner (set from scheduledTaskRunner)', () => {
+test('restored scheduled_task receives its complete persisted execution context', async () => {
   const future = Date.now() + 60_000
   const saved = [{
     id: 'work_restored_task',
@@ -239,8 +239,12 @@ test('restore recovers scheduled_task with null runner (set from scheduledTaskRu
   }]
 
   const store = { load: () => saved, save: () => {} }
+  let receivedContext
   const manager = new TaskManager({ store })
-  manager.configureScheduledTaskRunner(trivialRunner)
+  manager.configureScheduledTaskRunner(async (objective, context) => {
+    receivedContext = context
+    return trivialRunner(objective)
+  })
 
   const task = manager.get('work_restored_task')
   assert.equal(task.status, 'scheduled')
@@ -248,6 +252,18 @@ test('restore recovers scheduled_task with null runner (set from scheduledTaskRu
   // Runner is null until start() sets it from scheduledTaskRunner
   const internal = manager.tasks.get('work_restored_task')
   assert.equal(internal.runner, null)
+  internal.status = 'queued'
+  manager.drain()
+  const completed = await manager.wait('work_restored_task')
+  assert.equal(completed.status, 'completed')
+  assert.equal(receivedContext.taskId, 'work_restored_task')
+  assert.equal(receivedContext.ownerId, 'owner')
+  assert.equal(receivedContext.sessionId, 'voice')
+  assert.equal(receivedContext.turnId, 'turn-1')
+  assert.equal(receivedContext.kind, 'scheduled_task')
+  assert.deepEqual(receivedContext.schedule, saved[0].schedule)
+  assert.ok(receivedContext.signal instanceof AbortSignal)
+  assert.equal(typeof receivedContext.onEvent, 'function')
 })
 
 test('createScheduled does not call drain (scheduled tasks wait)', async () => {

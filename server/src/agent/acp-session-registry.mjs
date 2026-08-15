@@ -1,17 +1,23 @@
-import {
-  mkdirSync,
-  readFileSync,
-  renameSync,
-  writeFileSync,
-} from 'node:fs'
 import { logger } from '../core/logger.mjs'
-import { dirname } from 'node:path'
+import { VersionedJsonStore } from '../core/versioned-json-store.mjs'
 
 const VERSION = 1
 
 export class AcpSessionRegistry {
-  constructor({ filePath = null } = {}) {
+  constructor({
+    filePath = null,
+    onWarning = warning => logger.warn(
+      'acp.session_index_persistence_warning',
+      { warning },
+    ),
+  } = {}) {
     this.filePath = filePath
+    this.store = new VersionedJsonStore({
+      filePath,
+      version: VERSION,
+      label: 'ACP Session 索引',
+      onWarning,
+    })
     this.loaded = false
     this.coordinators = {}
     this.projects = {}
@@ -20,24 +26,21 @@ export class AcpSessionRegistry {
   load() {
     if (this.loaded) return
     this.loaded = true
-    if (!this.filePath) return
-    try {
-      const parsed = JSON.parse(readFileSync(this.filePath, 'utf8'))
-      if (
-        parsed?.version === VERSION
-        && parsed.coordinators
-        && typeof parsed.coordinators === 'object'
-      ) {
-        this.coordinators = parsed.coordinators
-        this.projects = parsed.projects && typeof parsed.projects === 'object'
-          ? parsed.projects
-          : {}
-      }
-    } catch (error) {
-      if (error.code !== 'ENOENT') {
-        logger.warn('acp.session_index_read_failed', { error })
-      }
-    }
+    const parsed = this.store.load({
+      fallback: () => ({ coordinators: {}, projects: {} }),
+      validate: value => Boolean(
+        value.coordinators
+        && typeof value.coordinators === 'object'
+        && !Array.isArray(value.coordinators)
+        && (value.projects === undefined || (
+          value.projects
+          && typeof value.projects === 'object'
+          && !Array.isArray(value.projects)
+        )),
+      ),
+    })
+    this.coordinators = parsed.coordinators
+    this.projects = parsed.projects || {}
   }
 
   get(key) {
@@ -91,17 +94,13 @@ export class AcpSessionRegistry {
   }
 
   save() {
-    if (!this.filePath) return
-    mkdirSync(dirname(this.filePath), { recursive: true })
-    const temporary = `${this.filePath}.${process.pid}.tmp`
-    writeFileSync(temporary, `${JSON.stringify({
-      version: VERSION,
+    this.store.save({
       coordinators: this.coordinators,
       projects: this.projects,
-    }, null, 2)}\n`, {
-      encoding: 'utf8',
-      mode: 0o600,
     })
-    renameSync(temporary, this.filePath)
+  }
+
+  health() {
+    return this.store.health()
   }
 }

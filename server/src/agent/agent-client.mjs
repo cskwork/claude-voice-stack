@@ -1,7 +1,10 @@
 import { config } from '../core/config.mjs'
 import { AgentError } from './backend-adapter.mjs'
 import { AcpBackendAdapter } from './acp-backend-adapter.mjs'
-import { backendDriver } from './backends/registry.mjs'
+import {
+  backendDriver,
+  createBackendProfile,
+} from './backends/registry.mjs'
 
 export { AgentError }
 
@@ -33,7 +36,7 @@ export class AgentClient {
       model: model ?? backend.model,
       coordinatorAgent: coordinatorAgent ?? backend.coordinatorAgent,
     }
-    const profile = driver.createProfile({
+    const profile = createBackendProfile(protocol, {
       protocol,
       root: config.root,
       ownership,

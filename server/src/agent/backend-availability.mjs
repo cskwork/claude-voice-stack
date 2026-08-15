@@ -8,6 +8,7 @@ export class BackendAvailability {
   constructor({
     probe,
     ttlMs = 15_000,
+    retryMs = 500,
     now = () => Date.now(),
   } = {}) {
     if (typeof probe !== 'function') {
@@ -15,10 +16,14 @@ export class BackendAvailability {
     }
     this.probe = probe
     this.ttlMs = ttlMs
+    this.retryMs = retryMs
     this.now = now
     this.last = null
+    this.transient = false
     this.checkedAt = 0
     this.refreshing = null
+    this.retryTimer = null
+    this.closed = false
   }
 
   // Synchronous view. `known: false` means no probe has completed yet — the
@@ -26,7 +31,16 @@ export class BackendAvailability {
   snapshot() {
     if (this.now() - this.checkedAt >= this.ttlMs) this.refresh()
     if (!this.last) return { configured: true, ok: true, known: false }
-    return { ...this.last, known: true }
+    return { ...this.last, known: !this.transient }
+  }
+
+  scheduleRetry() {
+    if (this.closed || this.retryTimer || !this.transient) return
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = null
+      this.refresh()
+    }, this.retryMs)
+    this.retryTimer.unref?.()
   }
 
   // Background refresh; concurrent callers share one probe and the promise
@@ -40,6 +54,7 @@ export class BackendAvailability {
           configured: result?.configured !== false,
           ok: result?.ok === true,
         }
+        this.transient = result?.transient === true
       })
       .catch(() => {
         // A failing probe is itself evidence the backend is unreachable.
@@ -47,11 +62,19 @@ export class BackendAvailability {
           configured: this.last?.configured !== false,
           ok: false,
         }
+        this.transient = false
       })
       .finally(() => {
         this.checkedAt = this.now()
         this.refreshing = null
+        this.scheduleRetry()
       })
     return this.refreshing
+  }
+
+  close() {
+    this.closed = true
+    clearTimeout(this.retryTimer)
+    this.retryTimer = null
   }
 }
