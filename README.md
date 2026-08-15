@@ -26,6 +26,8 @@ tells you:
 
 ## News
 
+- **2026-08-15 · [v1.10.1](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.10.1)**
+  🐛 Fixed known issues; 🖥️ improved desktop usability.
 - **2026-08-13 · [v1.10.0](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.10.0)**
   🐋 Added experimental DeepSeek Harness backend support with one-click installation.
 - **2026-08-13 · [v1.9.1](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.9.1)**
@@ -75,11 +77,13 @@ https://github.com/user-attachments/assets/42022655-36d1-46b2-9c26-ff0765284000
 ### Core Features
 
 - Full-duplex realtime voice interaction, natural interruption, and sustained multi-turn conversation
+- DashScope Qwen Audio and Qwen3.5 Omni Realtime model selection from one shared model catalog
 - One-click selection of your preferred coding Agent, reusing existing tools, MCP, and Skills
 - Frontend conversation and background tasks run in parallel; ask about progress or cancel at any time
 - Create multiple independent tasks executed asynchronously by the backend Agent, with continuous status tracking
 - Task results automatically return to the current conversation, supporting follow-up questions and modifications
 - WebUI, terminal TUI, and desktop floating orb (macOS / Windows / Linux)
+- Desktop auto-sleep disconnects cloud Realtime without stopping submitted tasks; wake with a configurable shortcut or the local wake word
 - Per-user long-term personalization and cross-session memory
 
 ## Architecture
@@ -141,7 +145,7 @@ qwenaudio config
 
 ```dotenv
 DASHSCOPE_API_KEY=your-key
-# Voice frontend model: Omni Flash/Plus or Audio Flash/Plus (Plus is default)
+# Voice frontend model: Omni Flash/Plus or Audio Flash/Plus (Audio Plus is default)
 QWEN_AUDIO_REALTIME_MODEL=qwen-audio-3.0-realtime-plus
 # Backend Agent: optional, leave empty or set to none for frontend-only mode
 AGENT_PROTOCOL=openclaw
@@ -174,7 +178,11 @@ platform notes, see [quick start](docs/getting-started/quickstart.md),
 ## Desktop App
 
 The desktop app provides a floating voice orb that stays on your desktop,
-with a built-in Gateway, auto-hide, shortcut recall, and voice wake word.
+with a built-in Gateway, automatic idle sleep, a configurable wake shortcut,
+and a local voice wake word. Sleep disconnects the Realtime frontend while
+keeping the app, Gateway, backend Agent, and submitted tasks alive; it is not
+the same as quitting or restarting the desktop app. Completed tasks can wake
+the app and return their results to the conversation.
 Download the installer for your platform from the releases page, or build
 from source:
 
@@ -190,8 +198,12 @@ For visuals, orb behavior, and build instructions, see the [desktop documentatio
 
 `AGENT_PROTOCOL` is optional. Leave empty for frontend-only mode; when set,
 it reuses the installed Agent's user-level models, tools, MCP, Skills, and
-authentication. OpenCode and OpenClaw support one-click install with Bailian
-configuration.
+authentication. The CLI and desktop app share one onboarding contract: reuse
+an existing Agent when available, install only missing components when the
+user requests one-click installation, and keep installation, configuration,
+and runtime readiness as separate states. Configuration stays backend-owned;
+the desktop app opens the Agent's native setup entry instead of copying or
+rewriting its credentials.
 
 ```bash
 qwenaudio setup   # View available backend Agents
