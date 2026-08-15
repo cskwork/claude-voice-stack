@@ -255,6 +255,39 @@ test('adds only the missing DeepSeek Harness CLI after an ACP-only install', asy
   ]])
 })
 
+test('installs only a missing DeepSeek runtime package from package verification', async () => {
+  const calls = []
+  let inspection = 0
+  const packageName = '@deepseek-ai/dsh-llm-deepseek'
+  const result = await installBackend('deepseek', {
+    env: { DEEPSEEK_API_KEY: 'test-key' },
+    platform: 'darwin',
+    spawnImpl: fakeSpawn(calls),
+    find: () => '/usr/local/bin/npm',
+    inspect: async () => {
+      inspection += 1
+      return {
+        backends: [{
+          id: 'deepseek',
+          ready: inspection > 1,
+          backend: { ready: true },
+          adapter: { ready: true },
+          packages: [{ name: packageName, ready: inspection > 1 }],
+          issues: [],
+        }],
+      }
+    },
+  })
+  assert.equal(result.ok, true)
+  assert.deepEqual(calls, [[
+    '/usr/local/bin/npm',
+    [
+      'install', '-g', '--registry=https://registry.npmjs.org/',
+      '@deepseek-ai/dsh-llm-deepseek@0.1.0-rc.6',
+    ],
+  ]])
+})
+
 test('runs multi-step installs in order and stops on failure', async () => {
   const calls = []
   const failed = await installBackend('codex', {
@@ -302,6 +335,81 @@ test('streams output chunks through the progress callback', async () => {
     output.map(event => [event.stream, event.chunk]),
     [['stdout', 'added 1 package\n'], ['stderr', 'warn\n']],
   )
+})
+
+test('times out and terminates a stalled install step', async () => {
+  const child = new EventEmitter()
+  child.stdout = new EventEmitter()
+  child.stderr = new EventEmitter()
+  child.pid = 4321
+  const killed = []
+  const result = await installBackend('opencode', {
+    env: {},
+    platform: 'darwin',
+    spawnImpl: () => child,
+    killImpl: (pid, signal) => killed.push([pid, signal]),
+    stepTimeoutMs: 5,
+    find: () => '/usr/local/bin/npm',
+    inspect: async () => readyReport('opencode'),
+  })
+  assert.equal(result.ok, false)
+  assert.equal(result.error.code, 'STEP_TIMEOUT')
+  assert.deepEqual(killed, [[-4321, 'SIGTERM']])
+})
+
+test('cancels a running install step through AbortSignal', async () => {
+  const child = new EventEmitter()
+  child.stdout = new EventEmitter()
+  child.stderr = new EventEmitter()
+  child.kill = signal => child.emit('killed', signal)
+  const controller = new AbortController()
+  let reportSpawned
+  const spawned = new Promise(resolve => { reportSpawned = resolve })
+  const killed = new Promise(resolve => child.once('killed', resolve))
+  const installing = installBackend('opencode', {
+    env: {},
+    platform: 'win32',
+    spawnImpl: () => {
+      reportSpawned()
+      return child
+    },
+    signal: controller.signal,
+    find: () => 'C:\\Node\\npm.cmd',
+    inspect: async () => readyReport('opencode'),
+  })
+  await spawned
+  controller.abort()
+  assert.equal(await killed, 'SIGTERM')
+  const result = await installing
+  assert.equal(result.ok, false)
+  assert.equal(result.error.code, 'CANCELLED')
+})
+
+test('terminates the complete npm process tree on Windows', async () => {
+  const child = new EventEmitter()
+  child.stdout = new EventEmitter()
+  child.stderr = new EventEmitter()
+  child.pid = 7654
+  const treeCalls = []
+  const treeKiller = new EventEmitter()
+  treeKiller.unref = () => {}
+  const result = await installBackend('opencode', {
+    env: { PATH: 'C:\\Node' },
+    platform: 'win32',
+    spawnImpl: () => child,
+    treeSpawnImpl: (command, args) => {
+      treeCalls.push([command, args])
+      return treeKiller
+    },
+    stepTimeoutMs: 5,
+    find: () => 'C:\\Node\\npm.cmd',
+    inspect: async () => readyReport('opencode'),
+  })
+  assert.equal(result.error.code, 'STEP_TIMEOUT')
+  assert.deepEqual(treeCalls, [[
+    'taskkill',
+    ['/pid', '7654', '/t', '/f'],
+  ]])
 })
 
 test('script steps run only after confirmation', async () => {
@@ -362,6 +470,30 @@ test('resolves npm.cmd on Windows', async () => {
   })
   assert.equal(result.ok, true)
   assert.equal(found[0], 'npm.cmd')
+})
+
+test('normalizes a Windows Path key without borrowing the host PATH', async () => {
+  const observed = []
+  let inspection = 0
+  const result = await installBackend('opencode', {
+    env: { Path: 'C:\\Node;C:\\Windows' },
+    platform: 'win32',
+    spawnImpl: (_command, _args, options) => {
+      observed.push(options.env.PATH)
+      return fakeChild(0)
+    },
+    find: () => 'C:\\Node\\npm.cmd',
+    inspect: async options => {
+      observed.push(options.env.PATH)
+      inspection += 1
+      return inspection > 1
+        ? readyReport('opencode')
+        : { backends: [{ id: 'opencode', ready: false }] }
+    },
+  })
+  assert.equal(result.ok, true)
+  assert.ok(observed.every(path => path.includes('C:\\Node')))
+  assert.ok(observed.every(path => !path.includes('/usr/')))
 })
 
 test('fails verification when the backend stays unavailable', async () => {

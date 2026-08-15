@@ -108,6 +108,15 @@ export class AcpProcessClient {
     return this.initializeResult?.agentInfo || null
   }
 
+  get ready() {
+    return Boolean(
+      this.initializeResult
+      && this.context
+      && this.child?.exitCode == null
+      && this.child?.signalCode == null
+    )
+  }
+
   appendStderr(chunk) {
     this.stderr = cleanProcessOutput(
       `${this.stderr}${String(chunk || '')}`,

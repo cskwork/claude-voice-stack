@@ -9,6 +9,12 @@ import {
 } from './realtime-status.mjs'
 import { updaterButtonState, updaterStatusText } from './update-status.mjs'
 import { createRealtimeVoiceDrafts } from './realtime-voice-settings.mjs'
+import {
+  desktopTranslator,
+  effectiveDesktopLanguage,
+  localizeDesktopDocument,
+  localizeDesktopError,
+} from './i18n.mjs'
 
 const form = document.querySelector('#settings-form')
 const gatewayUrl = document.querySelector('#gateway-url')
@@ -20,6 +26,7 @@ const wakeShortcut = document.querySelector('#wake-shortcut')
 const recordWakeShortcut = document.querySelector('#record-wake-shortcut')
 const resetWakeShortcut = document.querySelector('#reset-wake-shortcut')
 const wakeWordEnabled = document.querySelector('#wake-word-enabled')
+const desktopLanguage = document.querySelector('#desktop-language')
 const dashscopeApiKey = document.querySelector('#dashscope-api-key')
 const realtimeBaseUrl = document.querySelector('#realtime-base-url')
 const realtimeVoice = document.querySelector('#realtime-voice')
@@ -66,6 +73,18 @@ const openLogs = document.querySelector('#open-logs')
 const submit = form.querySelector('button[type="submit"]')
 const settingsTabs = [...document.querySelectorAll('[data-settings-tab]')]
 const settingsPanels = [...document.querySelectorAll('[data-settings-panel]')]
+
+let translate = desktopTranslator('auto', navigator.language)
+const t = (text, params) => translate(text, params)
+
+function applyLanguage(value) {
+  translate = desktopTranslator(value, navigator.language)
+  const effective = effectiveDesktopLanguage(value, navigator.language)
+  localizeDesktopDocument(document, translate, effective)
+  document.title = t('设置')
+}
+
+applyLanguage('auto')
 
 let settings
 let skins = []
@@ -115,8 +134,8 @@ selectSettingsTab(localStorage.getItem('qwen-audio-agent.settings-tab'))
 function renderWakeShortcutStatus(registered) {
   recordWakeShortcut.classList.toggle('invalid', registered === false)
   recordWakeShortcut.title = registered === false
-    ? '这个显示快捷键已被其他应用占用，点击重新设置'
-    : '点击后按下新的快捷键'
+    ? t('这个显示快捷键已被其他应用占用，点击重新设置')
+    : t('点击后按下新的快捷键')
 }
 
 function wakeShortcutLabel(value) {
@@ -138,7 +157,7 @@ function wakeShortcutLabel(value) {
 
 function renderWakeShortcut() {
   recordWakeShortcut.textContent = recordingWakeShortcut
-    ? '请按快捷键…'
+    ? t('请按快捷键…')
     : wakeShortcutLabel(wakeShortcut.value)
   recordWakeShortcut.classList.toggle('recording', recordingWakeShortcut)
   resetWakeShortcut.hidden = wakeShortcut.value === defaultWakeShortcut
@@ -194,7 +213,7 @@ recordWakeShortcut.addEventListener('click', async () => {
     renderWakeShortcut()
     updateApplyState()
   } catch (error) {
-    showMessage(friendlyError(error, '无法开始录制显示快捷键'), 'error')
+    showMessage(friendlyError(error, t('无法开始录制显示快捷键')), 'error')
   }
 })
 
@@ -223,7 +242,7 @@ window.addEventListener('keydown', event => {
   if (['Meta', 'Control', 'Alt', 'Shift'].includes(event.key)) return
   const shortcut = capturedWakeShortcut(event)
   if (!shortcut) {
-    showMessage('请使用 Command/Ctrl 或 Alt 组合键，也可以直接使用 F1–F24。', 'error')
+    showMessage(t('请使用 Command/Ctrl 或 Alt 组合键，也可以直接使用 F1–F24。'), 'error')
     return
   }
   wakeShortcut.value = shortcut
@@ -240,10 +259,10 @@ window.addEventListener('keydown', event => {
 function renderUpdater(status) {
   if (!status) return
   updaterState = status
-  updaterStatus.textContent = updaterStatusText(status)
+  updaterStatus.textContent = localizeUpdaterStatus(status)
   updaterStatus.title = status.phase === 'error' ? status.message : ''
   const button = updaterButtonState(status)
-  checkUpdates.textContent = button.label
+  checkUpdates.textContent = t(button.label)
   checkUpdates.disabled = button.disabled
 }
 
@@ -262,7 +281,7 @@ checkUpdates.addEventListener('click', () => {
 
 openLogs.addEventListener('click', () => {
   window.qwenAudioAgentDesktop.openLogs().catch(error => {
-    showMessage(friendlyError(error, '无法打开日志目录'), 'error')
+    showMessage(friendlyError(error, t('无法打开日志目录')), 'error')
   })
 })
 
@@ -277,10 +296,27 @@ function showMessage(text, kind = '') {
 }
 
 function friendlyError(error, fallback) {
-  return String(error?.message || fallback).replace(
+  const text = String(error?.message || fallback).replace(
     /^Error invoking remote method '[^']+': Error:\s*/,
     '',
   )
+  return localizeDesktopError(text, t)
+}
+
+function localizeUpdaterStatus(status) {
+  if (effectiveDesktopLanguage(desktopLanguage?.value, navigator.language) !== 'en') {
+    return updaterStatusText(status)
+  }
+  const version = status?.currentVersion || ''
+  if (status?.phase === 'checking') return `${version} · Checking for updates…`
+  if (status?.phase === 'downloading') {
+    const percent = status.percent > 0 ? ` ${status.percent}%` : ''
+    return `Version ${status.updateVersion} found, downloading${percent}…`
+  }
+  if (status?.phase === 'downloaded') return `Version ${status.updateVersion} is ready`
+  if (status?.phase === 'current') return `${version} · Up to date`
+  if (status?.phase === 'error') return `${version} · ${status.message || 'Update check failed'}`
+  return version
 }
 
 function truncate(text, max = 80) {
@@ -338,7 +374,7 @@ function renderBackendOptions(currentValue) {
       requiresConfirmation: false,
       configurationRequired: false,
       configurable: false,
-      reason: '当前不可用',
+      reason: t('当前不可用'),
       title: '',
     })
   }
@@ -349,13 +385,15 @@ function renderBackendOptions(currentValue) {
     runtimeBackend: runtime?.backend,
   })
   backendPickerName.textContent = selectedState?.id === 'none'
-    ? '无后台 Agent'
+    ? t('无后台 Agent')
     : selectedState?.label || backendLabel(selected)
+  backendPickerName.title = backendPickerName.textContent
   backendPickerStatus.textContent = selectedState?.id === 'none'
     ? ''
     : selectedRuntimeReady
-      ? '已就绪'
-      : selectedState?.statusLabel || selectedState?.reason || ''
+      ? t('已就绪')
+      : t(selectedState?.statusLabel || selectedState?.reason || '')
+  backendPickerStatus.title = backendPickerStatus.textContent
   backendPickerStatus.className = selectedRuntimeReady
     ? 'ready'
     : selectedState?.configurationRequired ? 'attention' : ''
@@ -402,6 +440,7 @@ function renderBackendOptions(currentValue) {
     const name = document.createElement('span')
     name.className = 'backend-name'
     name.textContent = state.label
+    name.title = state.label
     row.append(name)
 
     const runtimeReady = backendRuntimeReady(state, {
@@ -411,8 +450,8 @@ function renderBackendOptions(currentValue) {
     if (installingBackend === state.id) {
       const progress = document.createElement('span')
       progress.className = 'backend-progress'
-      progress.textContent = installProgressText || '正在安装…'
-      progress.title = installProgressText
+      progress.textContent = installProgressText || t('正在安装…')
+      progress.title = progress.textContent
       row.append(progress)
     } else if (state.id !== 'none') {
       const status = document.createElement('span')
@@ -424,8 +463,9 @@ function renderBackendOptions(currentValue) {
           )
       }`
       status.textContent = runtimeReady
-        ? '已就绪'
-        : state.statusLabel || state.reason
+        ? t('已就绪')
+        : t(state.statusLabel || state.reason)
+      status.title = status.textContent
       row.append(status)
     }
 
@@ -435,10 +475,10 @@ function renderBackendOptions(currentValue) {
       button.type = 'button'
       button.dataset.backend = state.id
       button.disabled = Boolean(installingBackend)
-      button.textContent = '安装'
+      button.textContent = t('安装')
       button.title = state.requiresConfirmation
-        ? '该后台需要通过官方脚本安装，执行前会再次确认'
-        : '一键安装到本机'
+        ? t('该后台需要通过官方脚本安装，执行前会再次确认')
+        : t('一键安装到本机')
       row.append(button)
     }
     if (state.configurable && !runtimeReady) {
@@ -447,16 +487,18 @@ function renderBackendOptions(currentValue) {
       button.type = 'button'
       button.dataset.backend = state.id
       button.disabled = Boolean(installingBackend)
-      button.textContent = state.configurationLabel || '配置'
-      button.title = '打开该 Agent 自己提供的配置入口'
+      button.textContent = t(state.configurationLabel || '配置')
+      button.title = t(
+        state.configurationHint || '打开该 Agent 自己提供的配置入口',
+      )
       row.append(button)
     }
     return row
     }))
   }
   appendGroup('', standalone)
-  appendGroup('已安装', installed)
-  appendGroup('可安装', available)
+  appendGroup(t('已安装'), installed)
+  appendGroup(t('可安装'), available)
   backendList.replaceChildren(...children)
   backendPickerEmpty.hidden = visibleStates.length > 0
   renderBackendConnection()
@@ -465,7 +507,7 @@ function renderBackendOptions(currentValue) {
 // npm 缺失时的引导：错误文案 + 指定路径入口 + Node.js 下载链接。
 function showNodejsInstallGuidance(text, backendId) {
   showMessage(
-    text || '未找到 npm，请先安装 Node.js（自带 npm）后重试。',
+    text || t('未找到 npm，请先安装 Node.js（自带 npm）后重试。'),
     'error',
   )
   // 记住是哪个后台 Agent 需要安装，路径确认后自动重试
@@ -475,7 +517,7 @@ function showNodejsInstallGuidance(text, backendId) {
     const specifyBtn = document.createElement('button')
     specifyBtn.type = 'button'
     specifyBtn.className = 'message-link'
-    specifyBtn.textContent = '指定 Node.js 路径'
+    specifyBtn.textContent = t('指定 Node.js 路径')
     specifyBtn.addEventListener('click', () => {
       nodePathRow.hidden = false
       nodePathInput.focus()
@@ -486,7 +528,7 @@ function showNodejsInstallGuidance(text, backendId) {
   const link = document.createElement('button')
   link.type = 'button'
   link.className = 'message-link'
-  link.textContent = '下载 Node.js'
+  link.textContent = t('下载 Node.js')
   link.addEventListener('click', () => {
     window.qwenAudioAgentDesktop.openExternal('https://nodejs.org/')
   })
@@ -496,7 +538,7 @@ function showNodejsInstallGuidance(text, backendId) {
 async function installBackendRow(id) {
   if (installingBackend) return
   installingBackend = id
-  installProgressText = '正在安装…'
+  installProgressText = t('正在安装…')
   showMessage('')
   renderBackendOptions(selectedBackend())
   try {
@@ -507,20 +549,20 @@ async function installBackendRow(id) {
       if (result?.error?.code === 'NPM_MISSING') {
         showNodejsInstallGuidance(result.error.message, id)
       } else if (result?.error?.code !== 'DECLINED') {
-        showMessage(result?.error?.message || '安装失败', 'error')
+        showMessage(result?.error?.message || t('安装失败'), 'error')
       }
       return
     }
     showMessage(
       result.authentication?.required
-        ? `${backendLabel(id)} 已安装，请完成配置。`
+        ? t('{backend} 已安装，请完成配置。', { backend: backendLabel(id) })
         : result.alreadyInstalled
-          ? `${backendLabel(id)} 已安装。`
-          : `${backendLabel(id)} 安装成功。`,
+          ? t('{backend} 已安装。', { backend: backendLabel(id) })
+          : t('{backend} 安装成功。', { backend: backendLabel(id) }),
       'success',
     )
   } catch (error) {
-    showMessage(friendlyError(error, '安装失败'), 'error')
+    showMessage(friendlyError(error, t('安装失败')), 'error')
   } finally {
     installingBackend = ''
     installProgressText = ''
@@ -533,9 +575,9 @@ async function installBackendRow(id) {
 window.qwenAudioAgentDesktop.onBackendInstallProgress(progress => {
   if (!progress || progress.backend !== installingBackend) return
   if (progress.phase === 'start') {
-    installProgressText = progress.title || '正在安装…'
+    installProgressText = progress.title || t('正在安装…')
   } else if (progress.phase === 'skip') {
-    installProgressText = `${progress.title || '步骤'} 已就绪，跳过`
+    installProgressText = `${progress.title || t('步骤')} ${t('已就绪，跳过')}`
   } else if (progress.phase === 'output') {
     const line = String(progress.chunk || '')
       .split('\n')
@@ -544,7 +586,7 @@ window.qwenAudioAgentDesktop.onBackendInstallProgress(progress => {
       .pop()
     if (line) installProgressText = truncate(line, 60)
   } else if (progress.phase === 'done') {
-    installProgressText = `${progress.title || '步骤'} 完成`
+    installProgressText = `${progress.title || t('步骤')} ${t('完成')}`
   }
   const target = backendList.querySelector(
     '.backend-row.installing .backend-progress',
@@ -617,18 +659,22 @@ backendList.addEventListener('click', event => {
   if (!configuration || configuration.disabled) return
   event.preventDefault()
   window.qwenAudioAgentDesktop.configureBackend(configuration.dataset.backend)
-    .then(() => showMessage(
-      `已打开 ${backendLabel(configuration.dataset.backend)} 配置入口。`,
+    .then(result => showMessage(
+      result?.action?.hint
+        ? t(result.action.hint)
+        : t('已打开 {backend} 配置入口。', {
+            backend: backendLabel(configuration.dataset.backend),
+          }),
       'notice',
     ))
     .catch(error => showMessage(
-      friendlyError(error, '无法打开配置入口'),
+      friendlyError(error, t('无法打开配置入口')),
       'error',
     ))
 })
 
 function backendLabel(value) {
-  if (!value || value === 'none') return '未配置'
+  if (!value || value === 'none') return t('未配置')
   if (value === 'opencode') return 'OpenCode'
   if (value === 'openclaw') return 'OpenClaw'
   if (value === 'qoder') return 'Qoder'
@@ -698,6 +744,7 @@ function formSettings() {
     backendUrl: backendUrl.value,
     backendCredential: backendCredential.value,
     nodePath: nodePathInput.value.trim(),
+    language: desktopLanguage.value,
   }
 }
 
@@ -722,6 +769,7 @@ function fingerprint(value) {
     backendUrl: value.backendUrl,
     backendCredential: value.backendCredential,
     nodePath: value.nodePath,
+    language: value.language,
   })
 }
 
@@ -747,29 +795,29 @@ function setRealtimeStatus(text, state) {
 
 function renderRuntime() {
   if (!runtime?.gatewayConnected) {
-    currentGateway.textContent = '未连接'
+    currentGateway.textContent = t('未连接')
     currentGateway.className = 'connection-status disconnected'
-    setRealtimeStatus('Gateway 未连接', 'disconnected')
-    setBackendStatus('未连接', false)
+    setRealtimeStatus(t('Gateway 未连接'), 'disconnected')
+    setBackendStatus(t('未连接'), false)
     return
   }
 
-  currentGateway.textContent = '已连接'
+  currentGateway.textContent = t('已连接')
   currentGateway.className = 'connection-status connected'
   const realtimeLabel = realtimeStatusLabel(runtime.realtimeProvider)
   const realtimeModelLabel = realtimeModelStatusLabel(runtime.realtimeModel)
   if (!runtime.voiceConfigured) {
-    setRealtimeStatus(`${realtimeLabel} · 配置不完整`, 'disconnected')
+    setRealtimeStatus(`${realtimeLabel} · ${t('配置不完整')}`, 'disconnected')
   } else {
     const state = realtimeConnectionStatus(
       runtime.realtimeConnection?.byProvider?.[runtime.realtimeProvider],
     )
     const stateLabel = {
-      connected: '已连接',
-      connecting: '正在连接',
-      unavailable: '连接失败',
-      disconnected: '连接异常',
-      configured: '已配置',
+      connected: t('已连接'),
+      connecting: t('正在连接'),
+      unavailable: t('连接失败'),
+      disconnected: t('连接异常'),
+      configured: t('已配置'),
     }[state]
     setRealtimeStatus(
       [
@@ -788,14 +836,17 @@ function renderRuntime() {
     )
   }
   if (!runtime.backend) {
-    setBackendStatus('未配置', false)
+    setBackendStatus(t('未配置'), false)
     return
   }
   const label = runtime.backend.label
     || backendLabel(runtime.backend.protocol)
   if (!runtime.backend.connected && runtime.backend.error) {
     const reason = String(runtime.backend.error).trim()
-    setBackendStatus(`${label} 未连接：${truncate(reason)}`, false)
+    setBackendStatus(t('{label} 未连接：{reason}', {
+      label,
+      reason: truncate(reason),
+    }), false)
     currentBackend.title = reason
     return
   }
@@ -823,13 +874,13 @@ async function refreshRuntime() {
       // 启动失败已被自动重启等机制恢复，清掉残留的错误提示，
       // 避免“显示报错”与“实际已连接”并存。
       startupError = null
-      showMessage('Gateway 已自动恢复。', 'success')
+      showMessage(t('Gateway 已自动恢复。'), 'success')
     } else if (
       runtime.gatewayConnected
       && (!runtime.backend || runtime.backend.connected)
       && message.className === 'notice'
     ) {
-      showMessage('配置已应用，Gateway 已启动。', 'success')
+      showMessage(t('配置已应用，Gateway 已启动。'), 'success')
     }
   } catch {
     // A Gateway restart can briefly invalidate one poll. The next poll
@@ -848,7 +899,7 @@ async function detectBackendOptions(force = false) {
     renderBackendOptions(selectedBackend() || settings?.agentProtocol)
     updateApplyState()
   } catch (error) {
-    showMessage(friendlyError(error, '检测后台 Agent 失败'), 'error')
+    showMessage(friendlyError(error, t('检测后台 Agent 失败')), 'error')
   } finally {
     refreshBackends.disabled = false
   }
@@ -868,8 +919,8 @@ function updateRemoveSkinState() {
 function renderSkinOptions(selected) {
   orbSkinSelect.textContent = ''
   const groups = [
-    { label: '内置', type: 'theme' },
-    { label: '已导入皮肤', type: 'sprite' },
+    { label: t('内置'), type: 'theme' },
+    { label: t('已导入皮肤'), type: 'sprite' },
   ]
   for (const group of groups) {
     const items = skins.filter(skin => skin.type === group.type)
@@ -888,7 +939,7 @@ function renderSkinOptions(selected) {
   if (selected && !skins.some(skin => skin.id === selected)) {
     const missing = document.createElement('option')
     missing.value = selected
-    missing.textContent = `${selected}（缺失）`
+    missing.textContent = `${selected}${t('（缺失）')}`
     orbSkinSelect.append(missing)
   }
   orbSkinSelect.value = selected || 'fluid'
@@ -904,12 +955,16 @@ function render() {
     const custom = document.createElement('option')
     custom.value = hideValue
     custom.dataset.custom = 'true'
-    custom.textContent = `自定义 · ${hideValue} 秒`
+    custom.textContent = effectiveDesktopLanguage(desktopLanguage.value, navigator.language) === 'en'
+      ? `Custom · ${hideValue} seconds`
+      : `自定义 · ${hideValue} 秒`
     autoHideSeconds.append(custom)
   }
   autoHideSeconds.value = hideValue
   wakeShortcut.value = settings.wakeShortcut
   wakeWordEnabled.checked = settings.wakeWordEnabled || false
+  desktopLanguage.value = settings.language || 'auto'
+  applyLanguage(desktopLanguage.value)
   recordingWakeShortcut = false
   renderWakeShortcut()
   dashscopeApiKey.value = settings.dashscopeApiKey || ''
@@ -949,6 +1004,7 @@ for (const control of [
   nodePathInput,
   ...realtimeProviderInputs,
   wakeWordEnabled,
+  desktopLanguage,
 ]) {
   control.addEventListener('input', () => {
     showMessage('')
@@ -962,6 +1018,14 @@ for (const control of [
     }
     if (control === realtimeModel) {
       renderRealtimeVoice()
+    }
+    if (control === desktopLanguage) {
+      applyLanguage(control.value)
+      renderWakeShortcut()
+      renderUpdater(updaterState)
+      renderBackendOptions(selectedBackend())
+      renderSkinOptions(orbSkinSelect.value)
+      renderRuntime()
     }
     updateApplyState()
   })
@@ -983,10 +1047,12 @@ importSkinButton.addEventListener('click', async () => {
       { id: imported.id, type: 'sprite', displayName: imported.displayName },
     ]
     renderSkinOptions(imported.id)
-    showMessage(`已导入皮肤 ${imported.displayName}，点击应用后生效。`, 'notice')
+    showMessage(t('已导入皮肤 {skin}，点击应用后生效。', {
+      skin: imported.displayName,
+    }), 'notice')
     updateApplyState()
   } catch (error) {
-    showMessage(friendlyError(error, '导入皮肤失败'), 'error')
+    showMessage(friendlyError(error, t('导入皮肤失败')), 'error')
   } finally {
     importSkinButton.disabled = false
     updateRemoveSkinState()
@@ -1003,10 +1069,12 @@ removeSkinButton.addEventListener('click', async () => {
     skins = skins.filter(item => item.id !== id)
     // 删掉的可能正是当前皮肤：回到内置外观，由用户点应用持久化。
     renderSkinOptions('fluid')
-    showMessage(`已删除皮肤 ${skin.displayName}，点击应用后生效。`, 'notice')
+    showMessage(t('已删除皮肤 {skin}，点击应用后生效。', {
+      skin: skin.displayName,
+    }), 'notice')
     updateApplyState()
   } catch (error) {
-    showMessage(friendlyError(error, '删除皮肤失败'), 'error')
+    showMessage(friendlyError(error, t('删除皮肤失败')), 'error')
   } finally {
     updateRemoveSkinState()
   }
@@ -1016,26 +1084,28 @@ removeSkinButton.addEventListener('click', async () => {
 applyNodePath.addEventListener('click', async () => {
   const path = nodePathInput.value.trim()
   if (!path) {
-    showMessage('请填写 Node.js 安装目录', 'error')
+    showMessage(t('请填写 Node.js 安装目录'), 'error')
     return
   }
   applyNodePath.disabled = true
-  showMessage('正在保存路径…')
+  showMessage(t('正在保存路径…'))
   const retryId = pendingNodePathBackend
   pendingNodePathBackend = ''
   try {
     await window.qwenAudioAgentDesktop.setNodePath(path)
     nodePathRow.hidden = true
-    showMessage('路径已保存，正在重新检测…')
+    showMessage(t('路径已保存，正在重新检测…'))
     await detectBackendOptions(true)
     // 自动重试之前失败的安装
     if (retryId) {
-      showMessage(`正在重新安装 ${backendLabel(retryId)}…`)
+      showMessage(t('正在重新安装 {backend}…', {
+        backend: backendLabel(retryId),
+      }))
       await installBackendRow(retryId)
     }
   } catch (err) {
     showMessage(
-      err?.message || '保存失败，请重试',
+      err?.message || t('保存失败，请重试'),
       'error',
     )
   } finally {
@@ -1047,7 +1117,7 @@ form.addEventListener('submit', async event => {
   event.preventDefault()
   applying = true
   updateApplyState()
-  showMessage('正在应用…')
+  showMessage(t('正在应用…'))
   try {
     const result = await window.qwenAudioAgentDesktop.saveSettings(formSettings())
     settings = result.settings
@@ -1055,12 +1125,12 @@ form.addEventListener('submit', async event => {
     renderWakeShortcutStatus(result.wakeShortcutRegistered)
     render()
     if (!runtime.gatewayConnected) {
-      showMessage('配置已保存，Gateway 正在启动…', 'notice')
+      showMessage(t('配置已保存，Gateway 正在启动…'), 'notice')
     } else if (runtime.backend && !runtime.backend.connected) {
-      showMessage('Gateway 已启动，后台 Agent 正在连接…', 'notice')
+      showMessage(t('Gateway 已启动，后台 Agent 正在连接…'), 'notice')
     } else {
       showMessage(
-        result.restarted ? '已应用，Gateway 已启动。' : '已应用。',
+        t(result.restarted ? '已应用，Gateway 已启动。' : '已应用。'),
         'success',
       )
     }
@@ -1071,7 +1141,7 @@ form.addEventListener('submit', async event => {
     ) {
       renderWakeShortcutStatus(false)
     }
-    showMessage(friendlyError(error, '应用失败'), 'error')
+    showMessage(friendlyError(error, t('应用失败')), 'error')
   } finally {
     applying = false
     updateApplyState()
@@ -1087,12 +1157,14 @@ window.qwenAudioAgentDesktop.loadSettings().then(value => {
   void detectBackendOptions()
   if (value.runtimeError) {
     startupError = value.runtimeError
-    showMessage(`当前配置启动失败：${value.runtimeError}`, 'error')
+    showMessage(t('当前配置启动失败：{error}', {
+      error: localizeDesktopError(value.runtimeError, t),
+    }), 'error')
   } else if (value.setupRequired) {
-    showMessage('首次使用，请配置语音引擎并选择后台 Agent。', 'notice')
+    showMessage(t('首次使用，请配置语音引擎并选择后台 Agent。'), 'notice')
   }
 }).catch(error => {
-  showMessage(friendlyError(error, '读取设置失败'), 'error')
+  showMessage(friendlyError(error, t('读取设置失败')), 'error')
   submit.disabled = true
 })
 

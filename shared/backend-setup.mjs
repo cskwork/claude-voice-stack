@@ -105,18 +105,23 @@ function versionAtLeast(actual, minimum) {
   return true
 }
 
-function defaultReadVersion(command) {
+function defaultReadVersion(command, { env, platform }) {
   const result = spawnSync(command, ['--version'], {
-      encoding: 'utf8',
-      timeout: 5000,
-      shell: process.platform === 'win32',
+    env,
+    encoding: 'utf8',
+    timeout: 5000,
+    shell: platform === 'win32',
     windowsHide: true,
   })
   if (result.status !== 0) return ''
   return clean(result.stdout || result.stderr).split(/\r?\n/)[0]
 }
 
-function defaultReadVersionAsync(command, timeoutMs = 5_000) {
+function defaultReadVersionAsync(command, {
+  env,
+  platform,
+  timeoutMs = 5_000,
+}) {
   return new Promise(resolvePromise => {
     let output = ''
     let settled = false
@@ -129,8 +134,9 @@ function defaultReadVersionAsync(command, timeoutMs = 5_000) {
     let child
     try {
       child = spawn(command, ['--version'], {
+        env,
         windowsHide: true,
-        shell: process.platform === 'win32',
+        shell: platform === 'win32',
         stdio: ['ignore', 'pipe', 'pipe'],
       })
     } catch {
@@ -147,6 +153,37 @@ function defaultReadVersionAsync(command, timeoutMs = 5_000) {
     }, timeoutMs)
     timer.unref?.()
   })
+}
+
+function packageIdentity(packageSpec) {
+  const value = clean(packageSpec)
+  const separator = value.lastIndexOf('@')
+  if (separator <= 0) return { name: value, version: '' }
+  return {
+    name: value.slice(0, separator),
+    version: value.slice(separator + 1),
+  }
+}
+
+function defaultReadGlobalPackages(command, { env, platform }) {
+  if (!command) return { known: false, packages: {} }
+  const result = spawnSync(command, ['list', '-g', '--depth=0', '--json'], {
+    env,
+    encoding: 'utf8',
+    timeout: 5_000,
+    shell: platform === 'win32',
+    windowsHide: true,
+  })
+  try {
+    const parsed = JSON.parse(result.stdout || '{}')
+    return {
+      known: Boolean(parsed.dependencies),
+      packages: Object.fromEntries(Object.entries(parsed.dependencies || {})
+        .map(([name, details]) => [name, clean(details?.version)])),
+    }
+  } catch {
+    return { known: false, packages: {} }
+  }
 }
 
 function explicitRuntime(id, env, find) {
@@ -308,6 +345,7 @@ function inspectBackend(id, {
   platform,
   find,
   readVersion,
+  readGlobalPackages,
   selected,
 }) {
   const definition = backendDefinition(id)
@@ -410,14 +448,48 @@ function inspectBackend(id, {
   const adapter = backend.ready || spec.inspectAdapterIndependently
     ? inspectAdapter(spec, env, find)
     : { ready: spec.integration !== 'adapter', source: spec.integration }
-  const issues = [backend.issue, adapter.issue].filter(Boolean)
+  let packages = []
+  let packageSetReady = true
+  if (
+    definition.lifecycle?.installation?.verifyInstalledPackages
+    && (backend.ready || adapter.ready)
+  ) {
+    const npm = find(platform === 'win32' ? 'npm.cmd' : 'npm') || find('npm')
+    const installed = readGlobalPackages(npm)
+    packages = definition.lifecycle.installation.steps
+      .filter(step => step.kind === 'npm')
+      .map(step => {
+        const expected = packageIdentity(
+          clean(env[step.packageEnv]) || step.package,
+        )
+        const actualVersion = installed.packages[expected.name] || ''
+        return {
+          name: expected.name,
+          expectedVersion: expected.version,
+          version: actualVersion,
+          ready: !installed.known || (
+            Boolean(actualVersion)
+            && (!expected.version || actualVersion === expected.version)
+          ),
+        }
+      })
+    packageSetReady = packages.every(item => item.ready)
+  }
+  const packageIssue = packageSetReady
+    ? ''
+    : `缺少或版本不匹配的运行组件：${packages
+      .filter(item => !item.ready)
+      .map(item => item.name)
+      .join('、')}`
+  const issues = [backend.issue, adapter.issue, packageIssue].filter(Boolean)
   return {
     id,
     label: definition.label,
     selected: id === selected,
-    ready: backend.ready && adapter.ready,
+    ready: backend.ready && adapter.ready && packageSetReady,
     backend,
     adapter,
+    packages,
     integration: spec.integration,
     configuration: id === 'acp'
       ? 'command-managed'
@@ -433,7 +505,11 @@ export function inspectBackendSetups({
   platform = process.platform,
   backend = '',
   find = command => findExecutable(command, { env, platform }),
-  readVersion = defaultReadVersion,
+  readVersion = command => defaultReadVersion(command, { env, platform }),
+  readGlobalPackages = command => defaultReadGlobalPackages(command, {
+    env,
+    platform,
+  }),
 } = {}) {
   const selected = clean(backend || env.AGENT_PROTOCOL).toLowerCase()
   const ids = backend ? [clean(backend).toLowerCase()] : backendNames()
@@ -445,6 +521,7 @@ export function inspectBackendSetups({
       platform,
       find,
       readVersion,
+      readGlobalPackages,
       selected,
     })),
   }
@@ -455,7 +532,11 @@ export async function inspectBackendSetupsAsync({
   platform = process.platform,
   backend = '',
   find = command => findExecutable(command, { env, platform }),
-  readVersion = defaultReadVersionAsync,
+  readVersion = command => defaultReadVersionAsync(command, { env, platform }),
+  readGlobalPackages = command => defaultReadGlobalPackages(command, {
+    env,
+    platform,
+  }),
 } = {}) {
   const preliminary = inspectBackendSetups({
     env,
@@ -463,6 +544,7 @@ export async function inspectBackendSetupsAsync({
     backend,
     find,
     readVersion: () => '',
+    readGlobalPackages: () => ({ known: false, packages: {} }),
   })
   const commands = [...new Set(preliminary.backends
     .filter(item => (
@@ -478,12 +560,23 @@ export async function inspectBackendSetupsAsync({
     command,
     await readVersion(command),
   ])))
+  const needsPackageInspection = preliminary.backends.some(item => (
+    backendDefinition(item.id)?.lifecycle?.installation?.verifyInstalledPackages
+    && (item.backend.ready || item.adapter.ready)
+  ))
+  const npm = needsPackageInspection
+    ? find(platform === 'win32' ? 'npm.cmd' : 'npm') || find('npm')
+    : ''
+  const installedPackages = needsPackageInspection
+    ? readGlobalPackages(npm)
+    : { known: false, packages: {} }
   return inspectBackendSetups({
     env,
     platform,
     backend,
     find,
     readVersion: command => versions.get(command) || '',
+    readGlobalPackages: () => installedPackages,
   })
 }
 

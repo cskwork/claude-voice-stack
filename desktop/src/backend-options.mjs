@@ -62,6 +62,7 @@ export function backendOptionStates(report) {
         && configuration.status !== 'authenticated'
       ),
       configurationLabel: configuration.action?.label || '配置',
+      configurationHint: configuration.action?.hint || '',
       onboardingState: item.onboarding?.state || (
         configurationRequired ? 'configuration-required' : (
           ready ? 'installed' : 'not-installed'

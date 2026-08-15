@@ -10,6 +10,7 @@ function inspector({
   env = {},
   commands = {},
   versions = {},
+  globalPackages,
   backend = '',
 } = {}) {
   return inspectBackendSetups({
@@ -18,6 +19,9 @@ function inspector({
     backend,
     find: command => commands[command] || '',
     readVersion: command => versions[command] || '',
+    ...(globalPackages
+      ? { readGlobalPackages: () => ({ known: true, packages: globalPackages }) }
+      : {}),
   })
 }
 
@@ -217,6 +221,29 @@ test('requires both the DeepSeek Harness CLI and ACP runtime', () => {
   }).backends[0]
   assert.equal(missingAcp.ready, false)
   assert.match(missingAcp.issues[0], /dsh-acp-demo/)
+})
+
+test('requires every pinned DeepSeek runtime package', () => {
+  const item = inspector({
+    backend: 'deepseek',
+    commands: {
+      dsh: '/bin/dsh',
+      'dsh-acp-demo': '/bin/dsh-acp-demo',
+      npm: '/bin/npm',
+    },
+    globalPackages: {
+      '@deepseek-ai/dsh': '0.1.0-rc.6',
+      '@deepseek-ai/dsh-acp-demo': '0.1.0-rc.6',
+    },
+  }).backends[0]
+  assert.equal(item.backend.ready, true)
+  assert.equal(item.adapter.ready, true)
+  assert.equal(item.ready, false)
+  assert.match(item.issues[0], /dsh-llm-deepseek/)
+  assert.equal(
+    item.packages.find(entry => entry.name === '@deepseek-ai/dsh-llm-deepseek').ready,
+    false,
+  )
 })
 
 test('honors explicit package and binary runtime requirements', () => {

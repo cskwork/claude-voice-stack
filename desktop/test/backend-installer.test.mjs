@@ -27,6 +27,7 @@ test('wires progress, inspection and script confirmation through', async () => {
       seen.id = id
       seen.env = options.env
       seen.platform = options.platform
+      seen.signal = options.signal
       options.onProgress({ phase: 'start' })
       seen.confirmed = await options.confirmStep({ command: 'curl …' })
       seen.hasInspect = typeof options.inspect === 'function'
@@ -34,9 +35,11 @@ test('wires progress, inspection and script confirmation through', async () => {
     },
   })
   const progress = []
+  const controller = new AbortController()
   const result = await installer.install('hermes', {
     onProgress: event => progress.push(event),
     inspect: async () => ({}),
+    signal: controller.signal,
   })
   assert.equal(result.ok, true)
   assert.equal(seen.id, 'hermes')
@@ -45,6 +48,7 @@ test('wires progress, inspection and script confirmation through', async () => {
   assert.equal(seen.confirmed, true)
   assert.deepEqual(seen.confirm, { command: 'curl …' })
   assert.equal(seen.hasInspect, true)
+  assert.equal(seen.signal, controller.signal)
   assert.deepEqual(progress, [{ phase: 'start' }])
 })
 

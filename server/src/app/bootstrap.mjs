@@ -191,8 +191,11 @@ app.use((req, res, next) => {
       status: res.statusCode,
       durationMs: Date.now() - startedAt,
     }
-    if (res.statusCode >= 500) logger.warn('http.request_failed', fields)
-    else logger.debug('http.request_completed', fields)
+    if (res.statusCode >= 500) {
+      logger.warn('http.request_failed', fields)
+    } else {
+      logger.debug('http.request_completed', fields)
+    }
   })
   next()
 })
@@ -200,12 +203,22 @@ app.use(express.json({ limit: '1mb' }))
 
 let realtimeGateway
 
-app.get('/api/health', async (req, res) => {
-  const backend = await agent.health()
+app.get('/livez', (req, res) => {
+  res.json({ ok: true, status: 'live' })
+})
+
+app.get('/readyz', (req, res) => {
+  res.json({ ok: true, status: 'ready' })
+})
+
+app.get('/api/health', (req, res) => {
+  const backend = agent.status()
   const backendDescription = agent.describe()
   const realtime = describeActiveRealtime()
-  res.status(backend.ok ? 200 : 503).json({
-    ok: backend.ok,
+  res.json({
+    // Gateway liveness is independent from optional backend readiness.
+    ok: true,
+    status: 'ready',
     gatewayInstanceId: process.env.QWEN_AUDIO_GATEWAY_INSTANCE_ID || null,
     gatewayStartedAt: process.env.QWEN_AUDIO_GATEWAY_STARTED_AT || null,
     voiceConfigured: realtime.configured,

@@ -187,6 +187,7 @@ const definitions = new Map([
     },
     lifecycle: {
       installation: {
+        verifyInstalledPackages: true,
         // Keep the ACP executable package last. If an earlier Developer
         // Preview component fails, setup remains visibly incomplete and a
         // retry fills the whole composition instead of skipping it.

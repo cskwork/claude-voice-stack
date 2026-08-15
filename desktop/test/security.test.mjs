@@ -46,8 +46,9 @@ test('builds a dedicated desktop orb URL without losing existing parameters', ()
       orbSkin: 'goo',
       autoHideSeconds: 120,
       wakeWordEnabled: true,
+      language: 'en',
     }),
-    'http://127.0.0.1:3101/?channel=desktop&desktop=orb&orbSkin=goo&orbStyle=goo&autoHideSeconds=120&wakeWordEnabled=true',
+    'http://127.0.0.1:3101/?channel=desktop&desktop=orb&orbSkin=goo&orbStyle=goo&autoHideSeconds=120&wakeWordEnabled=true&lang=en',
   )
 })
 

@@ -26,6 +26,8 @@ const BACKEND_CONNECTION_DEFAULTS = {
   backendCredential: '',
 }
 
+const DESKTOP_LANGUAGE_DEFAULT = { language: 'auto' }
+
 test('reads desktop-owned settings with friendly defaults', () => {
   assert.deepEqual(parseSettings(''), {
     gatewayUrl: 'http://127.0.0.1:3101',
@@ -38,6 +40,7 @@ test('reads desktop-owned settings with friendly defaults', () => {
     backendModel: '',
     ...BACKEND_CONNECTION_DEFAULTS,
     nodePath: '',
+    ...DESKTOP_LANGUAGE_DEFAULT,
   })
 })
 
@@ -57,6 +60,7 @@ test('shows effective client settings when user config is empty', () => {
     backendModel: '',
     ...BACKEND_CONNECTION_DEFAULTS,
     nodePath: '',
+    ...DESKTOP_LANGUAGE_DEFAULT,
   })
 })
 
@@ -131,6 +135,7 @@ test('updates client settings without changing Gateway-owned configuration', () 
     backendModel: '',
     ...BACKEND_CONNECTION_DEFAULTS,
     nodePath: '',
+    ...DESKTOP_LANGUAGE_DEFAULT,
   })
 })
 
@@ -186,7 +191,18 @@ test('an explicitly empty key and backend override stale process values', () => 
     backendModel: '',
     ...BACKEND_CONNECTION_DEFAULTS,
     nodePath: '',
+    ...DESKTOP_LANGUAGE_DEFAULT,
   })
+})
+
+test('reads, normalizes, and persists the desktop language', () => {
+  assert.equal(parseSettings('QWEN_AUDIO_DESKTOP_LANGUAGE=en\n').language, 'en')
+  assert.equal(parseSettings('QWEN_AUDIO_DESKTOP_LANGUAGE=zh-TW\n').language, 'zh-CN')
+  assert.equal(parseSettings('QWEN_AUDIO_DESKTOP_LANGUAGE=invalid\n').language, 'auto')
+  assert.match(
+    updateSettingsContent('', { language: 'en' }),
+    /QWEN_AUDIO_DESKTOP_LANGUAGE=en/,
+  )
 })
 
 test('updates the selected backend while preserving unrelated configuration', () => {
@@ -490,6 +506,13 @@ test('desktop settings expose external backend connection controls', () => {
   assert.match(html, /<div\s+id="backend-list"/)
   assert.match(html, /role="listbox"/)
   assert.match(html, /id="refresh-backends"/)
+  const settingsRenderer = readFileSync(
+    new URL('../src/settings.js', import.meta.url),
+    'utf8',
+  )
+  assert.match(settingsRenderer, /backendPickerName\.title = backendPickerName\.textContent/)
+  assert.match(settingsRenderer, /name\.title = state\.label/)
+  assert.match(settingsRenderer, /status\.title = status\.textContent/)
   // 版本与自动更新状态由主进程推送渲染
   assert.match(html, /id="updater-status"/)
   assert.match(html, /id="check-updates"/)

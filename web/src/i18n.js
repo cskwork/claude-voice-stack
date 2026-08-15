@@ -111,6 +111,12 @@ const translations = {
 
 function currentLanguage() {
   try {
+    const requested = new URLSearchParams(globalThis.location?.search || '').get('lang')
+    if (requested) return requested
+  } catch {
+    // Ignore malformed or unavailable locations.
+  }
+  try {
     const stored = globalThis.localStorage?.getItem('qwen-audio-lang')
     if (stored) return stored
   } catch {

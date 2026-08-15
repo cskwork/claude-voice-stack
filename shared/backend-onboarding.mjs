@@ -47,7 +47,7 @@ const configurationAdapters = new Map([
   }],
   ['deepseek', {
     command: 'dsh web',
-    hint: '首次使用请启动 DeepSeek，并在模型设置中配置 API Key。',
+    hint: '请在 DeepSeek Web 的“设置 → Models”中为 deepseek-official 填写并保存 DEEPSEEK_API_KEY；仅打开 Web 不代表配置完成。',
     probe: { kind: 'deepseek-credentials' },
   }],
 ])

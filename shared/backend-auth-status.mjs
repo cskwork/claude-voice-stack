@@ -102,6 +102,7 @@ async function deepSeekCredentialStatus({ env, readFileImpl = readFile }) {
 
 function runStatus(command, args, {
   env,
+  platform = process.platform,
   spawnImpl = spawn,
   timeoutMs = 8_000,
 } = {}) {
@@ -121,7 +122,7 @@ function runStatus(command, args, {
         env,
         windowsHide: true,
         stdio: ['ignore', 'pipe', 'pipe'],
-        shell: process.platform === 'win32',
+        shell: platform === 'win32',
       })
     } catch (error) {
       resolve({ ok: false, output: '', error })
@@ -175,6 +176,6 @@ export async function inspectBackendAuthentication(id, {
   if (probe?.kind !== 'command' || !command) return { status: 'unknown' }
   const parse = STATUS_PARSERS[probe.parser]
   if (!parse) return { status: 'unknown' }
-  const result = await run(command, probe.args || [], { env })
+  const result = await run(command, probe.args || [], { env, platform })
   return { status: parse(cleanOutput(result.output)) }
 }

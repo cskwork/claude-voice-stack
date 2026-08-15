@@ -409,6 +409,15 @@
               </div>
 
               <div class="setting-row">
+                <label for="desktop-language">语言</label>
+                <select id="desktop-language">
+                  <option value="auto">跟随系统</option>
+                  <option value="zh-CN">中文</option>
+                  <option value="en">英文</option>
+                </select>
+              </div>
+
+              <div class="setting-row">
                 <span class="setting-label">日志</span>
                 <button id="open-logs" class="row-link" type="button">
                   <img src="./assets/icons/本地文件.svg" alt="" />
@@ -421,7 +430,7 @@
 
         <footer>
           <p id="message" role="status"></p>
-          <button class="apply-button" type="submit" disabled>应用</button>
+          <button class="apply-button" type="submit" aria-label="应用设置" disabled>应用</button>
         </footer>
       </form>
     </main>

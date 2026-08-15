@@ -56,6 +56,7 @@ test('ready backends are selectable and never installable', () => {
     configurationRequired: false,
     configurable: false,
     configurationLabel: '配置',
+    configurationHint: '',
     onboardingState: 'installed',
     statusLabel: '已安装',
     reason: '',
@@ -123,7 +124,11 @@ test('offers backend-owned configuration only after an Agent is installed', () =
           required: true,
           status: 'unauthenticated',
           actionAvailable: true,
-          action: { kind: 'terminal', label: '配置' },
+          action: {
+            kind: 'terminal',
+            label: '配置',
+            hint: '完成官方配置',
+          },
         },
       },
     }),
@@ -136,6 +141,7 @@ test('offers backend-owned configuration only after an Agent is installed', () =
   assert.equal(states[1].configurationRequired, true)
   assert.equal(states[1].configurable, true)
   assert.equal(states[1].configurationLabel, '配置')
+  assert.equal(states[1].configurationHint, '完成官方配置')
   assert.equal(states[1].statusLabel, '待配置')
   assert.equal(states[2].configurationRequired, false)
   assert.equal(states[2].configurable, false)

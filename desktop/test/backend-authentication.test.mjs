@@ -66,5 +66,5 @@ test('reports when the official configuration terminal cannot open', async () =>
       queueMicrotask(() => child.emit('error', new Error('terminal unavailable')))
       return child
     },
-  }), /terminal unavailable/)
+  }), /没有找到可用的终端程序/)
 })

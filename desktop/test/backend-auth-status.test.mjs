@@ -89,3 +89,18 @@ test('detects an OpenClaw installation that has not been onboarded', async () =>
     pathExists: () => false,
   })).status, 'unauthenticated')
 })
+
+test('passes the requested platform into command probes', async () => {
+  let observed
+  await inspectBackendAuthentication('codex', {
+    command: 'codex',
+    env: { PATH: 'C:\\Node' },
+    platform: 'win32',
+    run: async (_command, _args, options) => {
+      observed = options
+      return { ok: true, output: 'Logged in' }
+    },
+  })
+  assert.equal(observed.platform, 'win32')
+  assert.equal(observed.env.PATH, 'C:\\Node')
+})
