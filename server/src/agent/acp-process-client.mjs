@@ -603,7 +603,9 @@ export class AcpProcessClient {
       }
       killer.once?.('error', () => finish(false))
       killer.once?.('exit', code => finish(code === 0))
-      killer.unref?.()
+      // The returned Promise is part of the shutdown contract. Keep taskkill
+      // referenced until it reports exit; a pending Promise alone does not
+      // keep the Node 22 event loop alive on Windows.
     })
   }
 

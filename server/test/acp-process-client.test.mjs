@@ -155,6 +155,7 @@ test('escalates from SIGTERM to SIGKILL for a surviving POSIX process group', as
 
 test('uses taskkill tree cleanup on Windows and forces only after failure', async () => {
   const calls = []
+  let unrefCalls = 0
   const client = new AcpProcessClient({
     label: 'Test Agent',
     command: 'unused',
@@ -162,7 +163,7 @@ test('uses taskkill tree cleanup on Windows and forces only after failure', asyn
     treeSpawnImpl(command, args, options) {
       calls.push([command, args, options])
       const killer = new EventEmitter()
-      killer.unref = () => {}
+      killer.unref = () => { unrefCalls += 1 }
       process.nextTick(() => killer.emit('exit', calls.length === 1 ? 1 : 0))
       return killer
     },
@@ -174,6 +175,7 @@ test('uses taskkill tree cleanup on Windows and forces only after failure', asyn
     ['taskkill', ['/PID', '4242', '/T', '/F']],
   ])
   assert.equal(calls.every(call => call[2].windowsHide), true)
+  assert.equal(unrefCalls, 0)
 })
 
 test('applies backend-specific ACP error and output formatting hooks', async () => {
