@@ -8,6 +8,8 @@ import {
   REALTIME_PROVIDERS,
   RealtimeFrontend,
   realtimeEventErrorMessage,
+  SPAWN_THINKING_TOOL_NAME,
+  TOOLS,
 } from '../src/voice/realtime-provider.mjs'
 import { validateRealtimeProvider } from '../src/voice/providers/registry.mjs'
 import {
@@ -27,6 +29,16 @@ const FRONTEND_TOOL_NAMES = [
   'notes',
   'respond_agent_permission',
 ]
+
+test('keeps spawn_thinking as the stable asynchronous work protocol', () => {
+  assert.equal(SPAWN_THINKING_TOOL_NAME, 'spawn_thinking')
+  assert.equal(
+    TOOLS.filter(tool => (
+      tool.function.name === SPAWN_THINKING_TOOL_NAME
+    )).length,
+    1,
+  )
+})
 
 function createQwenFrontend(options = {}) {
   return new RealtimeFrontend({
@@ -795,32 +807,34 @@ test('builds cache-friendly policy, identity, memory and reconnect context', () 
   assert.match(notes.function.description, /破坏性操作/)
   assert.deepEqual(notes.function.parameters.required, ['action'])
 
-  const delegate = REALTIME_PROVIDERS.qwen
+  const spawnThinking = REALTIME_PROVIDERS.qwen
     .buildSession({ configured: false })
-    .tools.find(tool => tool.function.name === 'spawn_thinking')
-  assert.match(delegate.function.description, /屏幕/)
-  assert.match(delegate.function.description, /图片生成/)
-  assert.match(delegate.function.description, /直接调用/)
-  assert.match(delegate.function.description, /不要先否认能力/)
-  assert.match(delegate.function.description, /阶段结果/)
-  assert.match(delegate.function.description, /get_agent_task_status/)
+    .tools.find(tool => (
+      tool.function.name === SPAWN_THINKING_TOOL_NAME
+    ))
+  assert.match(spawnThinking.function.description, /屏幕/)
+  assert.match(spawnThinking.function.description, /图片生成/)
+  assert.match(spawnThinking.function.description, /直接调用/)
+  assert.match(spawnThinking.function.description, /不要先否认能力/)
+  assert.match(spawnThinking.function.description, /阶段结果/)
+  assert.match(spawnThinking.function.description, /get_agent_task_status/)
   assert.match(
-    delegate.function.parameters.properties.objective.description,
+    spawnThinking.function.parameters.properties.objective.description,
     /忠实保留用户要求的结果、约束、执行方式/,
   )
   assert.match(
-    delegate.function.parameters.properties.objective.description,
+    spawnThinking.function.parameters.properties.objective.description,
     /本项工作与既有工作的关系/,
   )
   assert.match(
-    delegate.function.parameters.properties.objective.description,
+    spawnThinking.function.parameters.properties.objective.description,
     /可直接执行的目标/,
   )
   assert.match(
-    delegate.function.parameters.properties.objective.description,
+    spawnThinking.function.parameters.properties.objective.description,
     /近期对话会随工作一并提供/,
   )
-  assert.match(delegate.function.description, /继续、修改已有工作/)
+  assert.match(spawnThinking.function.description, /继续、修改已有工作/)
   const status = REALTIME_PROVIDERS.qwen
     .buildSession({ configured: false })
     .tools.find(tool => tool.function.name === 'get_agent_task_status')
