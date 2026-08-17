@@ -463,7 +463,7 @@ test('desktop settings expose external backend connection controls', () => {
   assert.match(html, /id="speech-to-speech-url"/)
   assert.match(html, /id="speech-to-speech-token"/)
   assert.match(html, />语音前台</)
-  assert.match(html, />Agent</)
+  assert.match(html, />后台 Agent</)
   assert.match(html, /for="backend-model">Model</)
   assert.match(html, />应用</)
   assert.match(html, /role="tablist"/)
