@@ -541,6 +541,38 @@ test('starts a new Session in the coordinator project by default', async () => {
   await adapter.close()
 })
 
+test('propagates original non-text input blocks into a delegated project Session', async () => {
+  const client = fakeAcpClient()
+  const tools = fakeToolServer()
+  client.bind(tools)
+  const adapter = new AcpBackendAdapter({
+    protocol: 'qoder',
+    directory: '/coordinator-project',
+    client,
+    sessionToolServer: tools,
+  })
+  const image = {
+    type: 'image',
+    mimeType: 'image/png',
+    data: 'aGVsbG8=',
+  }
+
+  await adapter.runCoordinator([
+    { type: 'text', text: 'delegate' },
+    image,
+  ], {
+    ownerId: 'owner-one',
+    coordinationRunId: 'work-one',
+  })
+
+  const projectPrompt = client.calls.find(call => (
+    call[0] === 'prompt' && call[1] === 'project-1'
+  ))?.[2]
+  assert.equal(Array.isArray(projectPrompt), true)
+  assert.deepEqual(projectPrompt.at(-1), image)
+  await adapter.close()
+})
+
 test('recovers the original project before continuing an unremembered Session', async () => {
   const client = fakeAcpClient({ action: 'send' })
   const tools = fakeToolServer()

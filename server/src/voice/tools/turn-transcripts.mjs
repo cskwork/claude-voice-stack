@@ -4,6 +4,7 @@ export class TurnTranscripts {
     this.maxTurns = maxTurns
     this.values = new Map()
     this.waiters = new Map()
+    this.inputParts = new Map()
   }
 
   record(turnId, transcript) {
@@ -16,6 +17,20 @@ export class TurnTranscripts {
     const waiters = this.waiters.get(turnId) || []
     this.waiters.delete(turnId)
     waiters.forEach(resolve => resolve(content))
+  }
+
+  recordParts(turnId, parts = []) {
+    if (!turnId) return
+    const value = Array.isArray(parts) ? parts.map(part => ({ ...part })) : []
+    if (value.length) this.inputParts.set(turnId, value)
+    else this.inputParts.delete(turnId)
+    while (this.inputParts.size > this.maxTurns) {
+      this.inputParts.delete(this.inputParts.keys().next().value)
+    }
+  }
+
+  parts(turnId) {
+    return (this.inputParts.get(turnId) || []).map(part => ({ ...part }))
   }
 
   async transcript(turnId) {
@@ -49,11 +64,13 @@ export class TurnTranscripts {
     return {
       originalRequest,
       objective: objective || originalRequest,
+      ...(this.parts(turnId).length ? { inputParts: this.parts(turnId) } : {}),
     }
   }
 
   close() {
     this.waiters.forEach(waiters => waiters.forEach(resolve => resolve('')))
     this.waiters.clear()
+    this.inputParts.clear()
   }
 }

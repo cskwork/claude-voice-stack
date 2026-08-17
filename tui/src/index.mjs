@@ -1,4 +1,4 @@
-import { emitKeypressEvents } from 'node:readline'
+import { createInterface, emitKeypressEvents } from 'node:readline'
 import { pathToFileURL } from 'node:url'
 import WebSocket from 'ws'
 import {
@@ -9,6 +9,11 @@ import { createLogger } from '../../shared/logger.mjs'
 import { startMacVoiceIO } from './macos-voice-io.mjs'
 import { resamplePcm16 } from './pcm-audio.mjs'
 import { startPortAudioVoiceIO } from './portaudio-voice-io.mjs'
+import {
+  filePartFromPath,
+  inputPartsFromText,
+  stagedInputSummary,
+} from './input-parts.mjs'
 
 const OUTPUT_SAMPLE_RATE = 24000
 const AUDIO_MODES = new Set(['half', 'full'])
@@ -226,6 +231,9 @@ export function helpText(mode = audioModeForPlatform()) {
     description,
     '按键：',
     ...(mode.manualInterrupt ? ['  x  手动打断当前回复'] : []),
+    '  t  输入文字（支持 @文件路径）',
+    '  a  添加图片或文件到下一轮语音/文字输入',
+    '  c  清除待发送附件',
     '  m  静音 / 恢复麦克风',
     '  h  显示帮助',
     '  q  退出',
@@ -759,6 +767,8 @@ export async function runTui(options = parseArguments(process.argv.slice(2))) {
   let audioBridge = null
   let playback = null
   let keypressHandler = null
+  let stagedInputParts = []
+  let terminalInputActive = false
   const pendingPermissionTasks = new Set()
   let close = () => {}
   let resolveClosed
@@ -934,6 +944,54 @@ export async function runTui(options = parseArguments(process.argv.slice(2))) {
     if (setCaptureEnabled(true)) {
       print(`[麦克风已开启 · ${inputSampleRate} Hz · ${audioMode.shortLabel}]`)
     }
+  }
+
+  const readTerminalLine = prompt => new Promise(resolve => {
+    terminalInputActive = true
+    setCaptureEnabled(false)
+    if (keypressHandler) process.stdin.off('keypress', keypressHandler)
+    process.stdin.setRawMode(false)
+    const line = createInterface({ input: process.stdin, output: process.stdout })
+    line.question(prompt, answer => {
+      line.close()
+      process.stdin.setRawMode(true)
+      if (keypressHandler) process.stdin.on('keypress', keypressHandler)
+      terminalInputActive = false
+      startMicrophone()
+      resolve(answer)
+    })
+  })
+
+  const sendTextInput = async () => {
+    const text = await readTerminalLine('\n你 > ')
+    if (!text.trim() && !stagedInputParts.length) return
+    const parts = await inputPartsFromText(text, stagedInputParts)
+    if (socket?.readyState !== WebSocket.OPEN) {
+      throw new Error('Gateway 尚未连接')
+    }
+    socket.send(JSON.stringify({
+      type: GatewayClientEvent.INPUT_MESSAGE,
+      parts,
+    }))
+    stagedInputParts = []
+    socket.send(JSON.stringify({
+      type: GatewayClientEvent.INPUT_PARTS,
+      parts: [],
+    }))
+  }
+
+  const stageFileInput = async () => {
+    const path = await readTerminalLine('\n文件路径 > ')
+    if (!path.trim()) return
+    stagedInputParts.push(await filePartFromPath(path, stagedInputParts.length))
+    if (socket?.readyState !== WebSocket.OPEN) {
+      throw new Error('Gateway 尚未连接')
+    }
+    socket.send(JSON.stringify({
+      type: GatewayClientEvent.INPUT_PARTS,
+      parts: stagedInputParts,
+    }))
+    print(style(`[已添加附件] ${stagedInputSummary(stagedInputParts)}`, 'green'))
   }
 
   const setMuted = value => {
@@ -1210,8 +1268,22 @@ export async function runTui(options = parseArguments(process.argv.slice(2))) {
   process.stdin.resume()
   keypressHandler = async (value, key = {}) => {
     try {
+      if (terminalInputActive) return
       if ((key.ctrl && key.name === 'c') || value === 'q') {
         close()
+      } else if (value === 't') {
+        await sendTextInput()
+      } else if (value === 'a') {
+        await stageFileInput()
+      } else if (value === 'c') {
+        stagedInputParts = []
+        if (socket?.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify({
+            type: GatewayClientEvent.INPUT_PARTS,
+            parts: [],
+          }))
+        }
+        print(style('[已清除待发送附件]', 'yellow'))
       } else if (value === 'm') {
         setMuted(!muted)
       } else if (value === 'x' && audioMode.manualInterrupt) {

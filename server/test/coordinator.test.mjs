@@ -72,6 +72,50 @@ test('passes user preferences to the backend as directive material', () => {
   assert.match(preferences, /用户喜欢苹果/)
 })
 
+test('sends attachment metadata in the envelope and binary data as ACP blocks', async () => {
+  let received
+  const coordinator = new Coordinator({
+    client: {
+      runCoordinator: async message => {
+        received = message
+        return {
+          content: JSON.stringify({
+            work_id: 'work-image',
+            state: 'completed',
+            mode: 'respond',
+            presentation: { speech: '完成', inline: null },
+          }),
+        }
+      },
+    },
+  })
+  await coordinator.run({
+    originalRequest: '分析这张图片',
+    objective: '分析参考图片',
+    inputParts: [{
+      type: 'file',
+      mime: 'image/png',
+      filename: 'reference.png',
+      url: 'data:image/png;base64,aGVsbG8=',
+    }],
+  }, {
+    coordinationRunId: 'work-image',
+    ownerId: 'owner',
+    sessionId: 'voice',
+    turnId: 'turn-image',
+  })
+
+  assert.equal(received[0].type, 'text')
+  assert.match(received[0].text, /"attachments"/)
+  assert.match(received[0].text, /reference\.png/)
+  assert.deepEqual(received[1], {
+    type: 'image',
+    mimeType: 'image/png',
+    data: 'aGVsbG8=',
+    uri: 'qwen-audio-agent://input/reference.png',
+  })
+})
+
 test('normalizes a coordinator final result for speech and inline output', () => {
   const decision = parseCoordinatorDecision(JSON.stringify({
     work_id: 'work-one',

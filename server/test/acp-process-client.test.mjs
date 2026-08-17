@@ -297,3 +297,25 @@ test('keeps Session metadata and supports the legacy model method', async () => 
     },
   ])
 })
+
+test('sends multimodal ContentBlocks unchanged after capability negotiation', async () => {
+  const calls = []
+  const client = new AcpProcessClient({ label: 'Test Agent', command: 'unused' })
+  client.initializeResult = {
+    agentCapabilities: { promptCapabilities: { image: true } },
+  }
+  client.start = async () => client.initializeResult
+  client.context = {
+    async request(method, params) {
+      calls.push([method, params])
+      return { stopReason: 'end_turn' }
+    },
+    async notify() {},
+  }
+  const prompt = [
+    { type: 'text', text: 'inspect' },
+    { type: 'image', mimeType: 'image/png', data: 'aGVsbG8=' },
+  ]
+  await client.prompt('session-image', prompt)
+  assert.deepEqual(calls[0][1].prompt, prompt)
+})

@@ -260,6 +260,14 @@ export class RealtimeFrontend {
     })
   }
 
+  appendUserContext(text) {
+    const content = String(text || '').trim()
+    if (!content) return Promise.resolve()
+    return this.enqueueAction(() => this.createConversationItem(
+      this.protocol.userTextItem(content),
+    ))
+  }
+
   ensureResponse(context = {}, { shouldCreate, response } = {}) {
     return this.enqueueResponse('agent', context, () => {
       if (shouldCreate && !shouldCreate()) return false

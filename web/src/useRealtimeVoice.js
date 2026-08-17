@@ -758,6 +758,16 @@ export default function useRealtimeVoice({
     sendSocketEvent({ type: GatewayClientEvent.WAKE })
   ), [sendSocketEvent])
 
+  const sendInput = useCallback(parts => sendSocketEvent({
+    type: GatewayClientEvent.INPUT_MESSAGE,
+    parts,
+  }), [sendSocketEvent])
+
+  const stageInputParts = useCallback(parts => sendSocketEvent({
+    type: GatewayClientEvent.INPUT_PARTS,
+    parts,
+  }), [sendSocketEvent])
+
   return {
     state,
     visualState: visualVoiceState(state, inputActive, enabled && !suspended),
@@ -771,5 +781,7 @@ export default function useRealtimeVoice({
     activateAudio,
     interrupt,
     wake,
+    sendInput,
+    stageInputParts,
   }
 }

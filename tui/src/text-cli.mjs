@@ -3,6 +3,7 @@
 import { createInterface } from 'node:readline'
 import { pathToFileURL } from 'node:url'
 import WebSocket from 'ws'
+import { inputPartsFromText } from './input-parts.mjs'
 
 const ESC = ''
 const DIM = `${ESC}[90m`
@@ -200,7 +201,12 @@ export async function runCli(options = parseArguments(process.argv.slice(2))) {
       }
       continue
     }
-    socket.send(JSON.stringify({ type: 'text.message', text, textOnly: true }))
+    const parts = await inputPartsFromText(text)
+    socket.send(JSON.stringify({
+      type: 'input.message',
+      parts,
+      textOnly: true,
+    }))
   }
   socket.close()
   readline.close()

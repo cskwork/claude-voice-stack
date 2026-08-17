@@ -6,6 +6,10 @@ import * as acp from '@agentclientprotocol/sdk'
 import { PACKAGE_VERSION } from '../core/package-version.mjs'
 import { AgentError, requestSignal } from './backend-adapter.mjs'
 import { logger } from '../core/logger.mjs'
+import {
+  assertPromptCapabilities,
+  normalizeAcpPrompt,
+} from './acp-content.mjs'
 
 const MAX_STDERR_CHARS = 12_000
 // Gateway has a 2s hard shutdown deadline. Leave enough time for adapter and
@@ -441,6 +445,9 @@ export class AcpProcessClient {
         { status: 409, protocol: 'acp' },
       )
     }
+    await this.start()
+    const promptBlocks = normalizeAcpPrompt(prompt)
+    assertPromptCapabilities(promptBlocks, this.capabilities)
     const timeoutController = new AbortController()
     let timeoutTimer = null
     let permissionDepth = 0
@@ -486,7 +493,7 @@ export class AcpProcessClient {
         acp.methods.agent.session.prompt,
         {
           sessionId: id,
-          prompt: [{ type: 'text', text: String(prompt || '') }],
+          prompt: promptBlocks,
         },
         { signal: combined, timeoutMs: 0 },
       )

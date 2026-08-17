@@ -7,6 +7,19 @@
 | macOS | Full-duplex with echo cancellation | Speak directly |
 | Linux / Windows | Half-duplex | Press `x` during playback |
 
+## Text and Attachment Input
+
+In addition to voice, the TUI accepts text, images, and regular files:
+
+- Press `t` to enter text. An `@file-path` in the text is sent as an attachment.
+- Press `a` to select an image or file for the next voice or text turn.
+- Press `c` to clear attachments that have not been sent.
+
+The TUI reads attachment content and sends it to the Gateway. The realtime voice
+frontend receives metadata only. When it delegates through `spawn_thinking`, the
+Gateway converts the original attachments into ACP ContentBlocks for the backend
+agent. Each attachment is limited to 8 MB and the per-turn total is limited to 12 MB.
+
 ## macOS
 
 macOS always uses CoreAudio AEC full-duplex: audio is continuously captured during playback, supporting direct-speech interruption,

@@ -14,6 +14,7 @@ import {
   upsertUserTranscript,
 } from './message-order.js'
 import MessageContent from './MessageContent.jsx'
+import MultimodalComposer from './MultimodalComposer.jsx'
 import DesktopFluidOrb from './DesktopFluidOrb.jsx'
 import DesktopSpriteOrb from './DesktopSpriteOrb.jsx'
 import { desktopOrbClassName, resolveOrbVisualState } from './orb-presentation.js'
@@ -1284,6 +1285,11 @@ export default function App() {
           {turn.afterActivities.map(renderMessage)}
         </section>)}
       </div>
+
+      {!desktopOrbMode && <MultimodalComposer
+        onSend={voice.sendInput}
+        onStage={voice.stageInputParts}
+      />}
 
     </section>
   </main>

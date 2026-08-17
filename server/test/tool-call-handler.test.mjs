@@ -161,6 +161,34 @@ test('submits one nonblocking coordinator work item with organized intent', asyn
   assert.equal(received.conversationContext[0].content, '之前在改首页')
 })
 
+test('automatically carries current-turn attachments into spawned work', async () => {
+  let received
+  const kit = harness({
+    coordinator: {
+      run: async input => {
+        received = input
+        return { content: '完成', metadata: {} }
+      },
+    },
+  })
+  const image = {
+    type: 'file',
+    mime: 'image/png',
+    filename: 'reference.png',
+    url: 'data:image/png;base64,aGVsbG8=',
+  }
+  kit.transcripts.record('turn-one', '根据这张图生成皮肤')
+  kit.transcripts.recordParts('turn-one', [image])
+  await kit.handler.handle({
+    call_id: 'call-image',
+    name: 'spawn_thinking',
+    arguments: '{"objective":"根据参考图生成皮肤"}',
+  }, { turnId: 'turn-one', turnGeneration: 1 })
+
+  await kit.manager.wait(kit.outputs[0][1].work_id)
+  assert.deepEqual(received.inputParts, [image])
+})
+
 test('lets realtime avoid a repeated acknowledgement after speaking before delegation', async () => {
   const kit = harness()
   kit.transcripts.record('turn-one', '给项目添加特殊食物')

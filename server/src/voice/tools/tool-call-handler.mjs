@@ -194,7 +194,13 @@ export class ToolCallHandler {
       })
   }
 
-  createWork({ turnId, objective, verbatimRequest, submissionKey }) {
+  createWork({
+    turnId,
+    objective,
+    verbatimRequest,
+    submissionKey,
+    inputParts = [],
+  }) {
     let workId = ''
     const task = this.taskManager.create({
       objective,
@@ -215,6 +221,7 @@ export class ToolCallHandler {
           userMemories: this.memoryService?.list(this.ownerId, { limit: 64 }) || [],
           timeZone: this.getClientContext()?.timeZone,
           workingDirectory: this.getClientContext()?.workingDirectory,
+          inputParts: resolved.inputParts || inputParts,
         }, {
           ownerId: this.ownerId,
           sessionId: this.sessionId,
@@ -554,6 +561,7 @@ export class ToolCallHandler {
         objective,
         verbatimRequest,
         submissionKey,
+        inputParts: this.transcripts.parts(turnId),
       })
     } catch {
       await this.sendOutput(
