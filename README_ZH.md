@@ -91,7 +91,9 @@ https://github.com/user-attachments/assets/42022655-36d1-46b2-9c26-ff0765284000
 
 ![qwen-audio-agent 接入参考架构](docs/qwen-audio-agent-three-layer-architecture.png)
 
-更完整的设计与模块说明见[架构文档](docs/architecture.zh.md)。
+更完整的产品边界见[架构文档](docs/architecture.zh.md)；状态机、时序与实现索引见
+[语音 Agent 架构参考手册](docs/voice-agent-architecture-reference.zh.md)，也可查看
+[架构演示稿](docs/qwen-audio-agent-architecture-presentation.zh.pptx)。
 
 </details>
 

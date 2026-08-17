@@ -1,7 +1,7 @@
 import {
   CANCEL_AGENT_TASK_TOOL_NAME,
   SCHEDULE_REMINDER_TOOL_NAME,
-  DELEGATE_TOOL_NAME,
+  SPAWN_THINKING_TOOL_NAME,
   GET_AGENT_TASK_STATUS_TOOL_NAME,
   GET_CURRENT_TIME_TOOL_NAME,
   ENTER_SLEEP_TOOL_NAME,
@@ -390,7 +390,7 @@ export class ToolCallHandler {
       await this.enterSleep(callId, turnId)
       return
     }
-    if (toolName !== DELEGATE_TOOL_NAME) {
+    if (toolName !== SPAWN_THINKING_TOOL_NAME) {
       await this.sendOutput(
         callId,
         failure('unsupported_tool', '当前无法执行这个操作。'),
