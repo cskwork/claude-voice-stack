@@ -63,9 +63,7 @@ export const s2sProvider = {
     : {},
   classifyError,
 
-  buildSession: ({ agentContext }) => {
-    const textOnly = agentContext?.textOnly === true
-    return {
+  buildSession: ({ agentContext }) => ({
       // The GA schema requires a session type discriminator.
       type: 'realtime',
       instructions: buildFrontendInstructions(agentContext),
@@ -76,16 +74,14 @@ export const s2sProvider = {
         description: tool.function.description,
         parameters: tool.function.parameters,
       })),
-      output_modalities: textOnly ? ['text'] : ['audio'],
+      output_modalities: ['audio'],
       audio: {
         input: {
           // speech-to-speech treats an omitted input format as its native
           // 16 kHz PCM pipeline rate. OpenAI's GA AudioPCM schema only accepts
           // 24 kHz when the format is explicit, so declaring 16 kHz here would
           // make the entire session.update invalid.
-          turn_detection: textOnly
-            ? null
-            : { type: 'server_vad', interrupt_response: true },
+          turn_detection: { type: 'server_vad', interrupt_response: true },
         },
         output: {
           // Negotiate the common client playback rate explicitly. The
@@ -96,30 +92,29 @@ export const s2sProvider = {
           },
         },
       },
-    }
-  },
+  }),
 
-  buildSpeakResponse: (content, { textOnly = false } = {}) => ({
+  buildSpeakResponse: content => ({
     conversation: 'none',
-    modalities: textOnly ? ['text'] : ['audio'],
+    modalities: ['audio'],
     instructions: speakResponseInstructions(content),
     tool_choice: 'none',
   }),
 
-  buildResultInjection: (content, { textOnly = false } = {}) => ({
+  buildResultInjection: content => ({
     item: {
       type: 'message',
       role: 'user',
       content: [{ type: 'input_text', text: content }],
     },
     response: {
-      modalities: textOnly ? ['text'] : ['audio'],
+      modalities: ['audio'],
       tool_choice: 'none',
       instructions: resultResponseInstructions,
     },
   }),
 
-  buildPermissionInjection: (permission, { textOnly = false } = {}) => ({
+  buildPermissionInjection: permission => ({
     item: {
       type: 'message',
       role: 'user',
@@ -134,7 +129,7 @@ export const s2sProvider = {
       }],
     },
     response: {
-      modalities: textOnly ? ['text'] : ['audio'],
+      modalities: ['audio'],
       tool_choice: 'none',
       instructions: permissionResponseInstructions,
     },

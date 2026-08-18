@@ -3,6 +3,7 @@ import test from 'node:test'
 import {
   acceptsVoiceState,
   microphoneControlEvent,
+  realtimeClientMode,
   retainedRealtimeProvider,
   shouldAdvertiseVoice,
   shouldClaimReleasedVoice,
@@ -93,6 +94,34 @@ test('advertises voice only after microphone input is ready', () => {
   assert.equal(shouldAdvertiseVoice(true, false), false)
   assert.equal(shouldAdvertiseVoice(false, true), false)
   assert.equal(shouldAdvertiseVoice(true, true), true)
+})
+
+test('separates non-voice clients from microphone-only mute', () => {
+  assert.deepEqual(realtimeClientMode({
+    enabled: false,
+    inputReady: false,
+  }), {
+    textOnly: true,
+    inputEnabled: false,
+    outputEnabled: true,
+  })
+  assert.deepEqual(realtimeClientMode({
+    enabled: true,
+    inputReady: true,
+  }), {
+    textOnly: false,
+    inputEnabled: true,
+    outputEnabled: true,
+  })
+  assert.deepEqual(realtimeClientMode({
+    enabled: false,
+    inputReady: false,
+    inputOnlyMute: true,
+  }), {
+    textOnly: false,
+    inputEnabled: false,
+    outputEnabled: true,
+  })
 })
 
 test('shows agent and announcement playback even when it belongs to an older turn', () => {

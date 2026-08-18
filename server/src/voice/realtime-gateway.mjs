@@ -177,7 +177,7 @@ export function attachRealtimeGateway(server, {
     let userSpeaking = false
     let inputEnabled = false
     let outputEnabled = false
-    let textOnlySession = false
+    let nonVoiceClient = false
     let pendingInputParts = []
     // Realtime front end for this session. Defaults to the configured provider
     // and can be switched by the client through the connect event.
@@ -1212,14 +1212,14 @@ export function attachRealtimeGateway(server, {
           responseContext.responseDone = true
           finishResponseContextIfComplete(id, responseContext)
         } else {
-          const completedTextAnnouncement = (
+          const completedNonVoiceAnnouncement = (
             responseContext?.origin === 'announcement'
-            && textOnlySession
+            && nonVoiceClient
             && !responseFailed
           )
-          const completedTextTaskNotification = (
+          const completedNonVoiceTaskNotification = (
             responseContext?.consumesTaskNotification
-            && textOnlySession
+            && nonVoiceClient
             && !responseFailed
           )
           if (
@@ -1227,18 +1227,18 @@ export function attachRealtimeGateway(server, {
             && !responseFailed
             && (
               responseContext.origin !== 'announcement'
-              || completedTextAnnouncement
+              || completedNonVoiceAnnouncement
             )
           ) {
             flushPendingTranscripts(id, responseContext)
           }
           if (responseContext?.origin === 'announcement') {
-            if (completedTextAnnouncement) {
+            if (completedNonVoiceAnnouncement) {
               announcements.confirmMany(contextTaskIds(responseContext))
             } else {
               announcements.retryMany(contextTaskIds(responseContext))
             }
-          } else if (completedTextTaskNotification) {
+          } else if (completedNonVoiceTaskNotification) {
             announcements.confirmMany(contextTaskIds(responseContext))
           }
           responseContexts.delete(id)
@@ -1279,7 +1279,6 @@ export function attachRealtimeGateway(server, {
               committedTurnGeneration,
             }),
             response: {
-              modalities: textOnlySession ? ['text'] : undefined,
               instructions: responseGuardDecision.instructions,
             },
           }).catch(error => send(ws, { type: 'error', message: error.message }))
@@ -1394,7 +1393,6 @@ export function attachRealtimeGateway(server, {
         providerName: sessionProvider,
         agentContext: {
           client: clientContext,
-          textOnly: textOnlySession,
           memories: memoryService?.list(ownerId, { limit: 64 }) || [],
           recentMessages: conversationSync.frontendContext({ ownerId, sessionId }),
         },
@@ -1578,7 +1576,7 @@ export function attachRealtimeGateway(server, {
     const prepareSleepMode = () => {
       if (
         !config.wakeWordEnabled
-        || textOnlySession
+        || nonVoiceClient
         || wakeDetectorPromise
       ) return
       if (wakeDetector) {
@@ -1620,7 +1618,7 @@ export function attachRealtimeGateway(server, {
     // state transition. Desktop decides when it is safe to hide because only
     // the client knows about visible work, permission prompts and playback.
     const requestExplicitSleep = () => {
-      if (!config.wakeWordEnabled || textOnlySession) return false
+      if (!config.wakeWordEnabled || nonVoiceClient) return false
       explicitSleepRequested = true
       inputEnabled = false
       pendingAudio = []
@@ -1754,11 +1752,6 @@ export function attachRealtimeGateway(server, {
         .then(() => frontend.sendUserText(
           projection,
           { turnId: inputTurnId },
-          {
-            modalities: event.textOnly === true
-              ? ['text']
-              : undefined,
-          },
         ))
         .catch(reportFrontendError)
     }
@@ -1816,7 +1809,7 @@ export function attachRealtimeGateway(server, {
           outputEnabled: event.outputEnabled === true,
           textOnly: event.textOnly === true,
         })
-        textOnlySession = event.textOnly === true
+        nonVoiceClient = event.textOnly === true
         // The client may pick a realtime front end per session. An unknown
         // name is reported instead of silently falling back, so a typo does
         // not look like a working session on the wrong provider.
@@ -1839,7 +1832,7 @@ export function attachRealtimeGateway(server, {
           voiceEnabled: event.voiceEnabled,
           inputEnabled: event.inputEnabled,
           outputEnabled: event.outputEnabled,
-          textOnly: textOnlySession,
+          textOnly: nonVoiceClient,
         })
         if (capabilities.participatesInVoiceArbitration) {
           activateVoiceClient({
@@ -1873,7 +1866,6 @@ export function attachRealtimeGateway(server, {
         )
         frontend?.updateAgentContext({
           client: clientContext,
-          textOnly: textOnlySession,
         })
         if (sleeping) {
           sleeping = false
@@ -1888,7 +1880,7 @@ export function attachRealtimeGateway(server, {
         }
       } else if (event.type === GatewayClientEvent.UNMUTE) {
         explicitSleepRequested = false
-        if (textOnlySession) {
+        if (nonVoiceClient) {
           inputEnabled = false
           outputEnabled = true
           broadcastVoiceOwnership(ownerId)
@@ -1905,7 +1897,7 @@ export function attachRealtimeGateway(server, {
           .catch(reportFrontendError)
       } else if (event.type === GatewayClientEvent.INPUT_UNMUTE) {
         explicitSleepRequested = false
-        if (textOnlySession) return
+        if (nonVoiceClient) return
         if (activeVoiceClients.isActive(ownerId, voiceClient)) {
           inputEnabled = true
           outputEnabled = true

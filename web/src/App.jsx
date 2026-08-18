@@ -603,23 +603,13 @@ export default function App() {
       const completed = event.task
       if (completed.turnId) agentTurnIds.current.delete(completed.turnId)
       if (!completed.turnId || completed.turnId === currentTurnId.current) {
-        setActivity(voiceEnabled ? t('正在准备回复') : t('处理完成'))
+        setActivity(t('正在准备回复'))
       }
       setAgentTasks(items => upsertTask(
         items,
         completed.id,
-        task => {
-          const next = taskView(completed, task)
-          return !voiceEnabled && next.phase === 'responding'
-            ? { ...next, phase: 'completed' }
-            : next
-        },
-        (() => {
-          const next = taskView(completed)
-          return !voiceEnabled && next.phase === 'responding'
-            ? { ...next, phase: 'completed' }
-            : next
-        })(),
+        task => taskView(completed, task),
+        taskView(completed),
       ))
     }
     if (event.type === 'task.notification.delivered') {
@@ -686,8 +676,8 @@ export default function App() {
 
   // Keep the microphone alive while the desktop orb is hidden and the wake
   // word is enabled, even if the user has muted the realtime conversation.
-  // Muting only suppresses input/output processing; wake-word detection still
-  // needs a live audio stream to resume on "你好千问".
+  // Microphone mute leaves output playback active; wake-word detection still
+  // needs a live input stream to resume on "你好千问" while hidden.
   const voiceEnabledForWakeWord = (
     desktopOrbMode
     && desktopLifecycle === 'hidden'
@@ -698,7 +688,9 @@ export default function App() {
     enabled: voiceEnabled || voiceEnabledForWakeWord,
     suspended: desktopOrbMode && desktopLifecycle === 'hidden' && !wakeWordEnabled,
     outputMuted: false,
-    inputOnlyMute: desktopOrbMode,
+    // WebUI and desktop share one control contract: the toggle only changes
+    // microphone capture and never closes or interrupts the output stream.
+    inputOnlyMute: true,
     wakeWordOnly: voiceEnabledForWakeWord,
     clientType: desktopOrbMode ? 'desktop' : 'web',
     clientLabel: desktopOrbMode ? t('桌面端') : 'WebUI',
@@ -924,6 +916,13 @@ export default function App() {
     setWaitingForVoice(false)
     setVoiceEnabled(false)
     setActivity(t('待命'))
+  }
+
+  const sendComposerInput = parts => {
+    // Sending is a browser user gesture, so it is also the earliest reliable
+    // point to unlock audio playback while the microphone remains muted.
+    voice.activateAudio()
+    return voice.sendInput(parts)
   }
 
   const turns = useMemo(
@@ -1242,8 +1241,8 @@ export default function App() {
         }}
       >
         {voiceEnabled
-          ? t('关闭语音')
-          : waitingForVoice ? t('取消等待') : t('开启语音')}
+          ? t('麦克风静音')
+          : waitingForVoice ? t('取消等待') : t('开启麦克风')}
       </button>
     </header>
 
@@ -1289,7 +1288,7 @@ export default function App() {
       </div>
 
       {!desktopOrbMode && <MultimodalComposer
-        onSend={voice.sendInput}
+        onSend={sendComposerInput}
         onStage={voice.stageInputParts}
       />}
 

@@ -559,25 +559,25 @@ test('publishes the active DashScope profile without assigning one to s2s', t =>
   assert.deepEqual(s2s.modelCatalog, [])
 })
 
-test('configures a text-only Qwen session without Smart Turn', () => {
+test('client text-only hints do not change the Qwen Realtime session', () => {
   const session = REALTIME_PROVIDERS.qwen.buildSession({
     configured: false,
     agentContext: { textOnly: true },
   })
 
-  assert.deepEqual(session.modalities, ['text'])
-  assert.equal(session.turn_detection, null)
+  assert.deepEqual(session.modalities, ['text', 'audio'])
+  assert.deepEqual(session.turn_detection, { type: 'smart_turn' })
   assert.deepEqual(
     REALTIME_PROVIDERS.qwen
       .buildSpeakResponse('完成', { textOnly: true })
       .modalities,
-    ['text'],
+    ['text', 'audio'],
   )
   assert.deepEqual(
     REALTIME_PROVIDERS.qwen
       .buildResultInjection('结果', { textOnly: true })
       .response.modalities,
-    ['text'],
+    ['text', 'audio'],
   )
 })
 

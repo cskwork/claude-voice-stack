@@ -42,6 +42,27 @@ export function shouldAdvertiseVoice(enabled, inputReady) {
   return enabled === true && inputReady === true
 }
 
+export function realtimeClientMode({
+  enabled,
+  inputReady,
+  inputOnlyMute = false,
+  wakeWordOnly = false,
+} = {}) {
+  // A fully disabled client does not participate in voice arbitration. This
+  // flag never changes upstream Realtime modalities. Microphone-only mute
+  // keeps the client audio-capable and leaves output playback active.
+  const textOnly = enabled !== true && inputOnlyMute !== true
+  const inputEnabled = shouldAdvertiseVoice(enabled, inputReady)
+    && wakeWordOnly !== true
+  return {
+    textOnly,
+    inputEnabled,
+    // A non-voice client still needs output events and task notifications, but
+    // it must not claim voice ownership.
+    outputEnabled: textOnly || inputOnlyMute === true || inputEnabled,
+  }
+}
+
 // Keeps a persisted front end selection only while the server still offers it.
 // A stale key would be refused on every connect, so it degrades to the empty
 // value that means "use the server default".
@@ -449,18 +470,20 @@ export default function useRealtimeVoice({
         setVisualError(false)
         setConnectionState('connecting')
         eventRef.current?.({ type: GatewayServerEvent.GATEWAY_CONNECTED })
-        const inputEnabled = shouldAdvertiseVoice(
-          enabledRef.current,
-          inputReadyRef.current,
-        ) && !wakeWordOnlyRef.current
-        const outputEnabled = inputOnlyMute || inputEnabled
+        const mode = realtimeClientMode({
+          enabled: enabledRef.current,
+          inputReady: inputReadyRef.current,
+          inputOnlyMute,
+          wakeWordOnly: wakeWordOnlyRef.current,
+        })
         socket.send(JSON.stringify({
           type: GatewayClientEvent.CONNECT,
           timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
           locale: navigator.language,
-          voiceEnabled: outputEnabled,
-          inputEnabled,
-          outputEnabled,
+          voiceEnabled: mode.outputEnabled,
+          inputEnabled: mode.inputEnabled,
+          outputEnabled: mode.outputEnabled,
+          textOnly: mode.textOnly,
           wakeWordOnly: wakeWordOnlyRef.current,
           clientType,
           clientLabel,
@@ -530,7 +553,7 @@ export default function useRealtimeVoice({
           stopPlayback(event.reason || '')
         }
         if (event.type === GatewayServerEvent.AUDIO_DELTA) {
-          if (outputMutedRef.current) {
+          if (outputMutedRef.current || !audioRef.current) {
             consumeMutedAudio(event.responseId)
           } else {
             play(event.audio, event.sampleRate, event.responseId)
@@ -761,10 +784,6 @@ export default function useRealtimeVoice({
   const sendInput = useCallback(parts => sendSocketEvent({
     type: GatewayClientEvent.INPUT_MESSAGE,
     parts,
-    // The same WebUI composer remains available with voice disabled. Request
-    // text output in that state so a missing AudioContext cannot strand the
-    // response or its task-delivery acknowledgement.
-    textOnly: enabledRef.current !== true,
   }), [sendSocketEvent])
 
   const stageInputParts = useCallback(parts => sendSocketEvent({

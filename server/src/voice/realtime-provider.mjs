@@ -317,9 +317,7 @@ export class RealtimeFrontend {
     return this.enqueueResponse(origin, context, () => {
       if (shouldSpeak && !shouldSpeak()) return false
       this.send(this.protocol.responseCreate(
-        this.provider.buildSpeakResponse(content, {
-          textOnly: this.agentContext.textOnly === true,
-        }),
+        this.provider.buildSpeakResponse(content),
       ))
     })
   }
@@ -332,9 +330,7 @@ export class RealtimeFrontend {
   ) {
     const content = String(text || '').trim()
     if (!content) return
-    const injection = this.provider.buildResultInjection(content, {
-      textOnly: this.agentContext.textOnly === true,
-    })
+    const injection = this.provider.buildResultInjection(content)
     let contextInjected = false
     const outcome = await this.enqueueResponse(origin, context, async () => {
       if (injectContext) {
@@ -353,9 +349,7 @@ export class RealtimeFrontend {
     shouldSpeak,
   } = {}) {
     if (!permission?.id || !permission?.summary) return
-    const injection = this.provider.buildPermissionInjection(permission, {
-      textOnly: this.agentContext.textOnly === true,
-    })
+    const injection = this.provider.buildPermissionInjection(permission)
     // Make the permission identity available to the model immediately. The
     // spoken question may wait behind an active response, while the user can
     // already see the actionable permission event in TUI/WebUI and answer it.
