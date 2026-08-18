@@ -4,6 +4,7 @@ import { createInterface } from 'node:readline'
 import { pathToFileURL } from 'node:url'
 import WebSocket from 'ws'
 import { inputPartsFromText } from './input-parts.mjs'
+import { isExitCommand } from './terminal-commands.mjs'
 
 const ESC = ''
 const DIM = `${ESC}[90m`
@@ -43,7 +44,7 @@ export function helpText() {
     '  /tasks        查看当前会话任务',
     '  /cancel [id]  取消任务',
     '  /help         帮助',
-    '  /quit         退出',
+    '  /exit         退出（/quit、/q 同义）',
   ].join('\n')
 }
 
@@ -168,7 +169,7 @@ export async function runCli(options = parseArguments(process.argv.slice(2))) {
     if (!text) continue
     if (text.startsWith('/')) {
       const [command, argument] = text.split(/\s+/)
-      if (command === '/quit') break
+      if (isExitCommand(command)) break
       if (command === '/help') {
         print(helpText())
         continue

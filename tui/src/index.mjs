@@ -18,6 +18,7 @@ import { startPortAudioVoiceIO } from './portaudio-voice-io.mjs'
 import {
   inputPartsFromText,
 } from './input-parts.mjs'
+import { isExitCommand } from './terminal-commands.mjs'
 
 const OUTPUT_SAMPLE_RATE = 24000
 const AUDIO_MODES = new Set(['half', 'full'])
@@ -240,7 +241,7 @@ export function helpText(mode = audioModeForPlatform()) {
     ...(mode.manualInterrupt ? ['  /interrupt       手动打断当前回复'] : []),
     '  /mute           静音 / 恢复麦克风',
     '  /help           显示帮助',
-    '  /quit           退出',
+    '  /exit           退出（/quit、/q 同义）',
   ].join('\n')
 }
 
@@ -1559,7 +1560,7 @@ export async function runTui(options = parseArguments(process.argv.slice(2))) {
         cleanup()
         return
       }
-      setStatus('Gateway 已断开 · 正在自动重连 · Ctrl-C 可退出')
+      setStatus('Gateway 已断开 · 正在自动重连 · /exit 或 Ctrl-C 可退出')
       print(style('[qwen-audio-agent 连接中断，正在重连]', 'yellow'))
       scheduleReconnect()
     })
@@ -1588,7 +1589,7 @@ export async function runTui(options = parseArguments(process.argv.slice(2))) {
         headers = refreshed.cookie ? { Cookie: refreshed.cookie } : {}
         connectGateway()
       } catch (error) {
-        setStatus('等待 Gateway · 正在自动重连 · Ctrl-C 可退出')
+        setStatus('等待 Gateway · 正在自动重连 · /exit 或 Ctrl-C 可退出')
         print(style(`[等待 Gateway] ${error.message}`, 'yellow'))
         scheduleReconnect()
       }
@@ -1598,7 +1599,7 @@ export async function runTui(options = parseArguments(process.argv.slice(2))) {
   handleTerminalLine = async value => {
     const text = String(value || '').trim()
     const [command = ''] = text.split(/\s+/)
-    if (['/quit', '/q'].includes(command)) {
+    if (isExitCommand(command)) {
       close()
     } else if (['/mute', '/m'].includes(command)) {
       setMuted(!muted)

@@ -22,6 +22,15 @@ import {
   realtimeModelStatusText,
   websocketUrl,
 } from '../src/index.mjs'
+import { isExitCommand } from '../src/terminal-commands.mjs'
+
+test('supports /exit and keeps existing exit aliases', () => {
+  assert.equal(isExitCommand('/exit'), true)
+  assert.equal(isExitCommand('/quit'), true)
+  assert.equal(isExitCommand('/q'), true)
+  assert.equal(isExitCommand('/help'), false)
+  assert.match(helpText(), /\/exit/)
+})
 
 test('renders active realtime profile and truthful visual transport support', () => {
   assert.match(realtimeModelStatusText({
