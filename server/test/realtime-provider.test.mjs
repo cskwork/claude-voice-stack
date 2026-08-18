@@ -1334,6 +1334,40 @@ test('identifies a permission response rejected while the user is speaking', asy
   assert.equal((await outcome).failed, true)
 })
 
+test('retries typed input that races the end of a Smart Turn', async () => {
+  const frontend = createQwenFrontend()
+  const sent = []
+  let retried = null
+  frontend.ready = true
+  frontend.ws = {
+    readyState: 1,
+    send: value => sent.push(JSON.parse(value)),
+  }
+  frontend.retryRefusedResponse = pending => {
+    retried = pending
+    frontend.settlePending(pending, { completed: true, retried: true })
+  }
+
+  const outcome = frontend.sendUserText('键盘输入', { turnId: 'text-turn' })
+  await new Promise(resolve => setImmediate(resolve))
+  frontend.handleLifecycle({
+    type: 'conversation.item.created',
+    item: { ...sent[0].item, status: 'completed' },
+  })
+  await new Promise(resolve => setImmediate(resolve))
+
+  const error = {
+    type: 'error',
+    error: { message: 'Cannot create response while user is speaking.' },
+  }
+  frontend.handleLifecycle(error)
+
+  assert.equal(error.__voiceRetried, true)
+  assert.equal(retried?.origin, 'model')
+  assert.equal(retried?.busyRetries, 1)
+  assert.deepEqual(await outcome, { completed: true, retried: true })
+})
+
 function createS2sFrontend(options = {}) {
   return new RealtimeFrontend({
     provider: REALTIME_PROVIDERS['speech-to-speech'],

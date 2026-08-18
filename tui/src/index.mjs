@@ -1,18 +1,17 @@
-import { createInterface, emitKeypressEvents } from 'node:readline'
+import { createInterface } from 'node:readline'
 import { pathToFileURL } from 'node:url'
 import WebSocket from 'ws'
 import {
   GatewayClientEvent,
   GatewayServerEvent,
 } from '../../shared/realtime-events.mjs'
+import { displayInputText } from '../../shared/input-parts.mjs'
 import { createLogger } from '../../shared/logger.mjs'
 import { startMacVoiceIO } from './macos-voice-io.mjs'
 import { resamplePcm16 } from './pcm-audio.mjs'
 import { startPortAudioVoiceIO } from './portaudio-voice-io.mjs'
 import {
-  filePartFromPath,
   inputPartsFromText,
-  stagedInputSummary,
 } from './input-parts.mjs'
 
 const OUTPUT_SAMPLE_RATE = 24000
@@ -226,17 +225,16 @@ export function helpText(mode = audioModeForPlatform()) {
     ? '语音模式：请直接说话；使用 macOS CoreAudio 全双工回声消除，可用语音打断回复。'
     : mode.fullDuplex
       ? '语音模式：PortAudio 全双工不提供回声消除，请使用耳机；可直接说话打断回复。'
-      : '语音模式：回复播放完毕后可继续说话；按 x 可手动打断播放。'
+      : '语音模式：回复播放完毕后可继续说话；使用 /interrupt 可手动打断播放。'
   return [
     description,
-    '按键：',
-    ...(mode.manualInterrupt ? ['  x  手动打断当前回复'] : []),
-    '  t  输入文字（支持 @文件路径）',
-    '  a  添加图片或文件到下一轮语音/文字输入',
-    '  c  清除待发送附件',
-    '  m  静音 / 恢复麦克风',
-    '  h  显示帮助',
-    '  q  退出',
+    '输入区常驻：直接输入文字并回车；粘贴文件路径会自动作为附件。',
+    '文字中使用 @文件路径，可同时提交指令和附件。',
+    '命令：',
+    ...(mode.manualInterrupt ? ['  /interrupt       手动打断当前回复'] : []),
+    '  /mute           静音 / 恢复麦克风',
+    '  /help           显示帮助',
+    '  /quit           退出',
   ].join('\n')
 }
 
@@ -634,6 +632,120 @@ export function createTerminalTranscriptRenderer({
   }
 }
 
+export function createPersistentTerminalRenderer({
+  stdin = process.stdin,
+  stdout = process.stdout,
+  prompt = '你 > ',
+  onLine = async () => {},
+  onClose = () => {},
+} = {}) {
+  let activePreview = ''
+  let closed = false
+  let closeRequested = false
+  let lineQueue = Promise.resolve()
+  const stripAnsi = text => String(text || '').replace(/\u001b\[[0-9;]*m/g, '')
+  const characterWidth = character => {
+    const point = character.codePointAt(0) || 0
+    return point <= 0x7e ? 1 : 2
+  }
+  const singleLine = text => {
+    const maxWidth = Math.max(12, Number(stdout.columns) || 80) - 1
+    let width = 0
+    let result = ''
+    for (const character of Array.from(stripAnsi(text).replace(/\s+/g, ' '))) {
+      const nextWidth = characterWidth(character)
+      if (width + nextWidth > maxWidth) break
+      result += character
+      width += nextWidth
+    }
+    return result
+  }
+  const line = createInterface({
+    input: stdin,
+    output: stdout,
+    terminal: true,
+    prompt,
+  })
+  const clearDynamic = () => {
+    if (!stdout.isTTY) return
+    stdout.write('\r\u001b[2K')
+    if (activePreview) stdout.write('\u001b[1A\r\u001b[2K')
+  }
+  const redraw = () => {
+    if (closed) return
+    if (activePreview) stdout.write(`${activePreview}\n`)
+    line.prompt(true)
+  }
+  const writeLine = value => {
+    const content = String(value || '')
+    stdout.write(content)
+    if (!content.endsWith('\n')) stdout.write('\n')
+  }
+  const renderer = {
+    update(prefix, content) {
+      clearDynamic()
+      activePreview = singleLine(`${prefix} ${content}`)
+      redraw()
+    },
+    stream(prefix, content) {
+      clearDynamic()
+      activePreview = singleLine(`${prefix} ${content}`)
+      redraw()
+    },
+    finish(prefix, content) {
+      clearDynamic()
+      activePreview = ''
+      writeLine(`${prefix} ${content}`)
+      redraw()
+    },
+    print(value) {
+      clearDynamic()
+      writeLine(value)
+      redraw()
+    },
+    discardPreview() {
+      if (!activePreview) return
+      clearDynamic()
+      activePreview = ''
+      redraw()
+    },
+    cancel() {
+      if (!activePreview) return
+      clearDynamic()
+      activePreview = ''
+      redraw()
+    },
+    close() {
+      if (closed) return
+      clearDynamic()
+      closed = true
+      stdin.off('data', handleControlCharacter)
+      line.close()
+    },
+  }
+  line.on('line', value => {
+    lineQueue = lineQueue
+      .then(() => onLine(value))
+      .catch(error => renderer.print(`[错误] ${error.message}`))
+      .finally(() => redraw())
+  })
+  const requestClose = () => {
+    if (closed || closeRequested) return
+    closeRequested = true
+    onClose()
+  }
+  const handleControlCharacter = value => {
+    if (Buffer.from(value).includes(3)) requestClose()
+  }
+  stdin.on('data', handleControlCharacter)
+  line.on('SIGINT', requestClose)
+  line.on('close', () => {
+    if (!closed) requestClose()
+  })
+  line.prompt()
+  return renderer
+}
+
 export function createPlayback({
   audioSink,
   onError,
@@ -766,9 +878,8 @@ export async function runTui(options = parseArguments(process.argv.slice(2))) {
   let captureStateSent = false
   let audioBridge = null
   let playback = null
-  let keypressHandler = null
-  let stagedInputParts = []
-  let terminalInputActive = false
+  let handleTerminalLine = async () => {}
+  const typedTranscripts = []
   const pendingPermissionTasks = new Set()
   let close = () => {}
   let resolveClosed
@@ -776,7 +887,10 @@ export async function runTui(options = parseArguments(process.argv.slice(2))) {
     resolveClosed = resolvePromise
   })
 
-  const transcriptRenderer = createTerminalTranscriptRenderer()
+  const transcriptRenderer = createPersistentTerminalRenderer({
+    onLine: value => handleTerminalLine(value),
+    onClose: () => close(),
+  })
   const print = text => transcriptRenderer.print(text)
   const userPrefix = style('你 >', 'cyan')
   const assistantPrefix = style('qwen-audio >', 'bold')
@@ -784,7 +898,10 @@ export async function runTui(options = parseArguments(process.argv.slice(2))) {
   const transcriptDisplay = createTranscriptDisplay({
     onUserDelta: content => transcriptRenderer.update(userPrefix, content),
     onUser: (content, event) => {
-      transcriptRenderer.finish(userPrefix, content)
+      if (typedTranscripts[0] === content) {
+        typedTranscripts.shift()
+        transcriptRenderer.cancel()
+      } else transcriptRenderer.finish(userPrefix, content)
       turnStatusDisplay.begin(event?.turnId)
     },
     onUserDiscard: (_turnId, event) => {
@@ -814,17 +931,9 @@ export async function runTui(options = parseArguments(process.argv.slice(2))) {
     clearTimeout(reconnectTimer)
     playback?.close()
     audioBridge?.close()
-    if (keypressHandler) process.stdin.off('keypress', keypressHandler)
+    transcriptRenderer.close()
     process.off('SIGINT', handleSigint)
     process.off('SIGTERM', handleSigterm)
-    if (process.stdin.isTTY) {
-      try {
-        process.stdin.setRawMode(false)
-      } catch {
-        // The terminal may already have closed while the audio helper exited.
-      }
-    }
-    process.stdin.pause()
     resolveClosed()
   }
   close = () => {
@@ -946,26 +1055,9 @@ export async function runTui(options = parseArguments(process.argv.slice(2))) {
     }
   }
 
-  const readTerminalLine = prompt => new Promise(resolve => {
-    terminalInputActive = true
-    setCaptureEnabled(false)
-    if (keypressHandler) process.stdin.off('keypress', keypressHandler)
-    process.stdin.setRawMode(false)
-    const line = createInterface({ input: process.stdin, output: process.stdout })
-    line.question(prompt, answer => {
-      line.close()
-      process.stdin.setRawMode(true)
-      if (keypressHandler) process.stdin.on('keypress', keypressHandler)
-      terminalInputActive = false
-      startMicrophone()
-      resolve(answer)
-    })
-  })
-
-  const sendTextInput = async () => {
-    const text = await readTerminalLine('\n你 > ')
-    if (!text.trim() && !stagedInputParts.length) return
-    const parts = await inputPartsFromText(text, stagedInputParts)
+  const sendTextInput = async text => {
+    if (!text.trim()) return
+    const parts = await inputPartsFromText(text)
     if (socket?.readyState !== WebSocket.OPEN) {
       throw new Error('Gateway 尚未连接')
     }
@@ -973,25 +1065,7 @@ export async function runTui(options = parseArguments(process.argv.slice(2))) {
       type: GatewayClientEvent.INPUT_MESSAGE,
       parts,
     }))
-    stagedInputParts = []
-    socket.send(JSON.stringify({
-      type: GatewayClientEvent.INPUT_PARTS,
-      parts: [],
-    }))
-  }
-
-  const stageFileInput = async () => {
-    const path = await readTerminalLine('\n文件路径 > ')
-    if (!path.trim()) return
-    stagedInputParts.push(await filePartFromPath(path, stagedInputParts.length))
-    if (socket?.readyState !== WebSocket.OPEN) {
-      throw new Error('Gateway 尚未连接')
-    }
-    socket.send(JSON.stringify({
-      type: GatewayClientEvent.INPUT_PARTS,
-      parts: stagedInputParts,
-    }))
-    print(style(`[已添加附件] ${stagedInputSummary(stagedInputParts)}`, 'green'))
+    typedTranscripts.push(displayInputText(parts))
   }
 
   const setMuted = value => {
@@ -1002,7 +1076,7 @@ export async function runTui(options = parseArguments(process.argv.slice(2))) {
         socket.send(JSON.stringify(microphoneControlEvent(true)))
       }
       print(style(
-        '[麦克风已静音，语音输入不会被识别；按 m 恢复]',
+        '[麦克风已静音，语音输入不会被识别；输入 /mute 恢复]',
         'yellow',
       ))
       if (pendingPermissionTasks.size > 0) {
@@ -1131,7 +1205,7 @@ export async function runTui(options = parseArguments(process.argv.slice(2))) {
       )
       if (muted) {
         print(style(
-          '[正在等待授权，但麦克风已静音；按 m 恢复后再回答]',
+          '[正在等待授权，但麦克风已静音；输入 /mute 恢复后再回答]',
           'yellow',
         ))
       }
@@ -1261,47 +1335,34 @@ export async function runTui(options = parseArguments(process.argv.slice(2))) {
     }, delay)
   }
 
-  connectGateway()
-
-  emitKeypressEvents(process.stdin)
-  process.stdin.setRawMode(true)
-  process.stdin.resume()
-  keypressHandler = async (value, key = {}) => {
-    try {
-      if (terminalInputActive) return
-      if ((key.ctrl && key.name === 'c') || value === 'q') {
-        close()
-      } else if (value === 't') {
-        await sendTextInput()
-      } else if (value === 'a') {
-        await stageFileInput()
-      } else if (value === 'c') {
-        stagedInputParts = []
-        if (socket?.readyState === WebSocket.OPEN) {
-          socket.send(JSON.stringify({
-            type: GatewayClientEvent.INPUT_PARTS,
-            parts: [],
-          }))
-        }
-        print(style('[已清除待发送附件]', 'yellow'))
-      } else if (value === 'm') {
-        setMuted(!muted)
-      } else if (value === 'x' && audioMode.manualInterrupt) {
-        performManualInterrupt({
-          playback,
-          transcriptRenderer,
-          socket,
-          startMicrophone,
-          print,
-        })
-      } else if (value === 'h') {
-        print(helpText(audioMode))
+  handleTerminalLine = async value => {
+    const text = String(value || '').trim()
+    const [command = ''] = text.split(/\s+/)
+    if (['/quit', '/q'].includes(command)) {
+      close()
+    } else if (['/mute', '/m'].includes(command)) {
+      setMuted(!muted)
+    } else if (['/interrupt', '/x'].includes(command)) {
+      if (!audioMode.manualInterrupt) {
+        throw new Error('当前全双工模式支持直接用语音打断，无需手动打断')
       }
-    } catch (error) {
-      print(`[错误] ${error.message}`)
+      performManualInterrupt({
+        playback,
+        transcriptRenderer,
+        socket,
+        startMicrophone,
+        print,
+      })
+    } else if (['/help', '/h'].includes(command)) {
+      print(helpText(audioMode))
+    } else if (command.startsWith('/')) {
+      throw new Error(`未知命令：${command}；输入 /help 查看帮助`)
+    } else {
+      await sendTextInput(value)
     }
   }
-  process.stdin.on('keypress', keypressHandler)
+
+  connectGateway()
 
   process.once('SIGINT', handleSigint)
   process.once('SIGTERM', handleSigterm)

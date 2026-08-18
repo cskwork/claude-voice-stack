@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { PassThrough } from 'node:stream'
 import {
   assertInteractiveTerminal,
   audioModeForPlatform,
@@ -7,6 +8,7 @@ import {
   completeTranscript,
   connectMessage,
   createPlayback,
+  createPersistentTerminalRenderer,
   createTerminalTranscriptRenderer,
   createTranscriptDisplay,
   createTurnStatusDisplay,
@@ -38,7 +40,7 @@ test('renders active realtime profile and truthful visual transport support', ()
   assert.match(realtimeModelStatusText({ realtimeLabel: 'Legacy Audio' }), /Legacy Audio/)
 })
 
-test('m key controls microphone input without disabling voice output', () => {
+test('microphone command controls input without disabling voice output', () => {
   assert.deepEqual(microphoneControlEvent(true), {
     type: 'input.mute',
   })
@@ -245,12 +247,41 @@ test('uses macOS AEC and selectable PortAudio duplex modes elsewhere', () => {
   assert.match(helpText(mac), /语音打断回复/)
   assert.doesNotMatch(helpText(mac), /x  手动打断当前回复/)
   assert.match(helpText(linux), /回复播放完毕后可继续说话/)
-  assert.match(helpText(linux), /按 x 可手动打断/)
-  assert.match(helpText(linux), /输入文字/)
-  assert.match(helpText(linux), /添加图片或文件/)
+  assert.match(helpText(linux), /\/interrupt/)
+  assert.match(helpText(linux), /输入区常驻/)
+  assert.match(helpText(linux), /粘贴文件路径会自动作为附件/)
   assert.equal(fullDuplexFallbackHint(mac), '')
   assert.equal(fullDuplexFallbackHint(linux), '')
   assert.match(fullDuplexFallbackHint(linuxFull), /--audio-mode half/)
+})
+
+test('keeps a terminal input line active while asynchronous output arrives', async () => {
+  const stdin = new PassThrough()
+  const stdout = new PassThrough()
+  stdin.isTTY = true
+  stdout.isTTY = true
+  stdout.columns = 80
+  const submitted = []
+  let closeRequests = 0
+  const renderer = createPersistentTerminalRenderer({
+    stdin,
+    stdout,
+    onLine: value => submitted.push(value),
+    onClose: () => { closeRequests += 1 },
+  })
+
+  stdin.write('你好\n')
+  await new Promise(resolve => setImmediate(resolve))
+  renderer.update('你 >', '语音预览')
+  renderer.print('[状态] 后台处理中')
+  renderer.finish('qwen-audio >', '完成')
+  stdin.write('\u0003')
+  await new Promise(resolve => setImmediate(resolve))
+  renderer.close()
+
+  assert.deepEqual(submitted, ['你好'])
+  assert.equal(closeRequests, 1)
+  assert.match(stdout.read().toString(), /后台处理中/)
 })
 
 test('drops queued microphone frames whenever half-duplex capture is gated', () => {

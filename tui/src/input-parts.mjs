@@ -1,5 +1,6 @@
 import { readFile, stat } from 'node:fs/promises'
-import { basename, resolve } from 'node:path'
+import { basename, isAbsolute, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import {
   MAX_INPUT_FILE_BYTES,
   inputPartLabel,
@@ -81,9 +82,83 @@ function referencedPaths(text) {
   return values
 }
 
+function pastedFilePath(text) {
+  let value = String(text || '').trim()
+  const quoted = value.match(/^(?:"([\s\S]*)"|'([\s\S]*)')$/)
+  if (quoted) value = quoted[1] ?? quoted[2]
+  if (value.startsWith('file://')) {
+    try {
+      return fileURLToPath(value)
+    } catch {
+      return ''
+    }
+  }
+  // Finder and common terminals paste shell-escaped absolute paths.
+  value = value.replace(/\\([\\ '"()&;])/g, '$1')
+  return isAbsolute(value) || /^\.\.?[\\/]/.test(value) ? value : ''
+}
+
+function pastedPathReferences(text) {
+  const references = []
+  const pattern = /(^|\s)((?:file:\/\/|\/|\.\.?[\\/])(?:\\.|[^\s])+)/g
+  for (const match of String(text || '').matchAll(pattern)) {
+    const value = match[2]
+    let path = value.replace(/\\([\\ '"()&;])/g, '$1')
+    if (path.startsWith('file://')) {
+      try {
+        path = fileURLToPath(path)
+      } catch {
+        continue
+      }
+    }
+    const start = match.index + match[1].length
+    references.push({ path, start, end: start + value.length })
+  }
+  return references
+}
+
 export async function inputPartsFromText(text, staged = []) {
+  const content = String(text || '').trim()
   const parts = [...staged]
-  const paths = referencedPaths(text)
+  const paths = referencedPaths(content)
+  const directPath = paths.length ? '' : pastedFilePath(content)
+  if (directPath) {
+    try {
+      parts.push(await filePartFromPath(directPath, parts.length))
+      return withAttachmentAnchors(parts)
+    } catch (error) {
+      // A missing pasted path may still be intentional text. Existing paths
+      // that are directories, too large, or unreadable remain real errors.
+      if (!['ENOENT', 'ENOTDIR'].includes(error?.code)) throw error
+    }
+  }
+  if (!paths.length) {
+    const replacements = []
+    for (const reference of pastedPathReferences(content)) {
+      try {
+        const part = await filePartFromPath(reference.path, parts.length)
+        parts.push(part)
+        replacements.push({
+          ...reference,
+          value: part.source.text.value,
+        })
+      } catch (error) {
+        if (!['ENOENT', 'ENOTDIR'].includes(error?.code)) throw error
+      }
+    }
+    if (replacements.length) {
+      let canonical = content
+      for (const replacement of replacements.reverse()) {
+        canonical = canonical.slice(0, replacement.start)
+          + replacement.value
+          + canonical.slice(replacement.end)
+      }
+      return withAttachmentAnchors([
+        { type: 'text', text: canonical },
+        ...parts,
+      ])
+    }
+  }
   for (const reference of paths) {
     const resolved = resolve(reference.path)
     if (parts.some(part => part?.source?.path === resolved)) continue
@@ -101,7 +176,7 @@ export async function inputPartsFromText(text, staged = []) {
     }
   }
   return withAttachmentAnchors([
-    ...(String(text || '').trim() ? [{ type: 'text', text: String(text).trim() }] : []),
+    ...(content ? [{ type: 'text', text: content }] : []),
     ...parts,
   ])
 }

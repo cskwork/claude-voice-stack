@@ -556,16 +556,18 @@ export class RealtimeFrontend {
         id = first[0]
         pending = first[1]
       }
-      // A single-slot provider refuses a response.create that races a
-      // server-side turn. Retry the refused payload once the slot frees up
-      // instead of dropping the injection on the floor.
-      const slotBusy = event.type === 'error'
-        && this.capabilities.singleResponseSlot
-        && this.provider.classifyError(
-          event.error?.message || event.message || '',
-        ) === 'response_slot_busy'
+      // A response.create can race either another response or the tail of a
+      // Smart Turn input. Both are transient: retry the exact refused payload
+      // instead of surfacing a protocol timing error to the user.
+      const refusalKind = event.type === 'error'
+        ? this.provider.classifyError(event.error?.message || event.message || '')
+        : ''
+      const slotBusy = this.capabilities.singleResponseSlot
+        && refusalKind === 'response_slot_busy'
+      const inputBusy = pending?.origin === 'model'
+        && refusalKind === 'input_busy'
       if (
-        slotBusy
+        (slotBusy || inputBusy)
         && pending
         && pending.responsePayload
         && (pending.busyRetries || 0) < 3
@@ -735,11 +737,9 @@ export class RealtimeFrontend {
           payload,
           pending.requestId,
         )
-        if (this.capabilities.singleResponseSlot) {
-          // Remember the exact payload on the pending marker so a refused
-          // response can be replayed after the occupied slot becomes idle.
-          pending.responsePayload = outgoing
-        }
+        // Remember the exact payload so transient response-slot and Smart Turn
+        // input collisions can replay it without rebuilding conversation state.
+        pending.responsePayload = outgoing
       }
       const body = this.protocol.encodeOutgoing(outgoing)
       this.ws.send(JSON.stringify(body))

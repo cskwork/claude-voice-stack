@@ -29,6 +29,30 @@ test('expands @path references into file parts', async () => {
   assert.equal(parts[1].source.text.start, 3)
 })
 
+test('promotes a directly pasted local path into an attachment', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'qaa-tui-input-'))
+  const path = join(directory, 'pasted image.png')
+  await writeFile(path, 'image')
+
+  const parts = await inputPartsFromText(path.replaceAll(' ', '\\ '))
+
+  assert.equal(parts[0].text, '[Image 1]')
+  assert.equal(parts[1].filename, 'pasted image.png')
+  assert.equal(parts[1].source.path, path)
+})
+
+test('replaces a pasted path inside a prompt with an attachment anchor', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'qaa-tui-input-'))
+  const path = join(directory, 'cat image.png')
+  await writeFile(path, 'image')
+
+  const pasted = path.replaceAll(' ', '\\ ')
+  const parts = await inputPartsFromText(`${pasted} 这是什么？`)
+
+  assert.equal(parts[0].text, '[Image 1] 这是什么？')
+  assert.equal(parts[1].filename, 'cat image.png')
+})
+
 test('adds a staged attachment reference to the submitted text', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'qaa-tui-input-'))
   const path = join(directory, 'screen.png')
