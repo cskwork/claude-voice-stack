@@ -8,6 +8,7 @@ import {
   taskLine,
   websocketUrl,
 } from '../src/text-cli.mjs'
+import { isExitCommand } from '../src/terminal-commands.mjs'
 
 test('parseArguments 默认值与覆盖', () => {
   const defaults = parseArguments([])
@@ -43,10 +44,16 @@ test('taskLine 摘要格式', () => {
 
 test('helpText 覆盖全部命令', () => {
   const text = helpText()
-  for (const command of ['/tasks', '/cancel', '/help', '/quit']) {
+  for (const command of ['/tasks', '/cancel', '/help', '/exit']) {
     assert.ok(text.includes(command), command)
   }
   assert.doesNotMatch(text, /\/bg/)
+})
+
+test('退出命令支持 /exit 并保留原有别名', () => {
+  for (const command of ['/exit', '/quit', '/q']) {
+    assert.equal(isExitCommand(command), true)
+  }
 })
 
 test('取消命令识别 queued 和 running 任务', () => {

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { PassThrough } from 'node:stream'
 import {
   assertInteractiveTerminal,
   audioModeForPlatform,
@@ -7,6 +8,7 @@ import {
   completeTranscript,
   connectMessage,
   createPlayback,
+  createPersistentTerminalRenderer,
   createTerminalTranscriptRenderer,
   createTranscriptDisplay,
   createTurnStatusDisplay,
@@ -20,6 +22,15 @@ import {
   realtimeModelStatusText,
   websocketUrl,
 } from '../src/index.mjs'
+import { isExitCommand } from '../src/terminal-commands.mjs'
+
+test('supports /exit and keeps existing exit aliases', () => {
+  assert.equal(isExitCommand('/exit'), true)
+  assert.equal(isExitCommand('/quit'), true)
+  assert.equal(isExitCommand('/q'), true)
+  assert.equal(isExitCommand('/help'), false)
+  assert.match(helpText(), /\/exit/)
+})
 
 test('renders active realtime profile and truthful visual transport support', () => {
   assert.match(realtimeModelStatusText({
@@ -38,7 +49,7 @@ test('renders active realtime profile and truthful visual transport support', ()
   assert.match(realtimeModelStatusText({ realtimeLabel: 'Legacy Audio' }), /Legacy Audio/)
 })
 
-test('m key controls microphone input without disabling voice output', () => {
+test('microphone command controls input without disabling voice output', () => {
   assert.deepEqual(microphoneControlEvent(true), {
     type: 'input.mute',
   })
@@ -133,6 +144,12 @@ test('reports the TUI launch directory as client context', () => {
     voiceEnabled: true,
     clientType: 'cli',
     clientLabel: 'CLI',
+    inputCapabilities: {
+      text: true,
+      audio: true,
+      image: true,
+      resource: true,
+    },
     takeover: true,
     workingDirectory: '/Users/me/codes/snake-game',
     timeZone: 'Asia/Shanghai',
@@ -156,6 +173,12 @@ test('advertises a muted TUI as output-capable on reconnect', () => {
     outputEnabled: true,
     clientType: 'cli',
     clientLabel: 'CLI',
+    inputCapabilities: {
+      text: true,
+      audio: true,
+      image: true,
+      resource: true,
+    },
     takeover: false,
     workingDirectory: '/workspace',
     timeZone: 'Asia/Shanghai',
@@ -245,11 +268,92 @@ test('uses macOS AEC and selectable PortAudio duplex modes elsewhere', () => {
   assert.match(helpText(mac), /语音打断回复/)
   assert.doesNotMatch(helpText(mac), /x  手动打断当前回复/)
   assert.match(helpText(linux), /回复播放完毕后可继续说话/)
-  assert.match(helpText(linux), /按 x 可手动打断/)
-  assert.doesNotMatch(helpText(linux), /输入文字|text\.message/)
+  assert.match(helpText(linux), /\/interrupt/)
+  assert.match(helpText(linux), /输入区常驻/)
+  assert.match(helpText(linux), /粘贴文件路径会自动作为附件/)
   assert.equal(fullDuplexFallbackHint(mac), '')
   assert.equal(fullDuplexFallbackHint(linux), '')
   assert.match(fullDuplexFallbackHint(linuxFull), /--audio-mode half/)
+})
+
+test('keeps a fixed composer active while asynchronous output arrives', async () => {
+  const stdin = new PassThrough()
+  const stdout = new PassThrough()
+  stdin.isTTY = true
+  const rawModes = []
+  stdin.setRawMode = value => rawModes.push(value)
+  stdout.isTTY = true
+  stdout.columns = 80
+  stdout.rows = 12
+  const submitted = []
+  let closeRequests = 0
+  const renderer = createPersistentTerminalRenderer({
+    stdin,
+    stdout,
+    onLine: value => submitted.push(value),
+    onClose: () => { closeRequests += 1 },
+  })
+
+  stdin.write('你好')
+  renderer.update('你 >', '语音预览')
+  renderer.print('[状态] 后台处理中')
+  renderer.setStatus('Gateway 已连接 · 麦克风已开启')
+  renderer.finish('qwen-audio >', '完成')
+  stdin.write('\n')
+  await new Promise(resolve => setImmediate(resolve))
+  stdin.write('\u0003')
+  await new Promise(resolve => setImmediate(resolve))
+  renderer.close()
+
+  assert.deepEqual(submitted, ['你好'])
+  assert.equal(closeRequests, 1)
+  assert.deepEqual(rawModes, [true, false])
+  const output = stdout.read().toString()
+  assert.match(output, /\u001b\[\?1049h/)
+  assert.match(output, /后台处理中/)
+  assert.match(output, /Gateway 已连接 · 麦克风已开启/)
+  assert.match(output, /你 > 你好/)
+  assert.match(output, /\u001b\[\?1049l/)
+})
+
+test('replaces a bracketed pasted path with an attachment anchor', async () => {
+  const stdin = new PassThrough()
+  const stdout = new PassThrough()
+  stdin.isTTY = true
+  stdin.setRawMode = () => {}
+  stdout.isTTY = true
+  stdout.columns = 80
+  stdout.rows = 12
+  const submitted = []
+  const changes = []
+  let applied = 0
+  let pasteIndex = 0
+  const renderer = createPersistentTerminalRenderer({
+    stdin,
+    stdout,
+    onLine: value => submitted.push(value),
+    onPaste: async value => ({
+      text: value.endsWith('.png') ? `[Image ${++pasteIndex}]` : value,
+      apply: () => { applied += 1 },
+    }),
+    onChange: value => changes.push(value),
+  })
+
+  stdin.write('\u001b[200~/tmp/cat.png\u001b[201~')
+  stdin.write(' ')
+  stdin.write('\u001b[200~/tmp/dog.png\u001b[201~')
+  await new Promise(resolve => setImmediate(resolve))
+  stdin.write('\n')
+  await new Promise(resolve => setImmediate(resolve))
+  renderer.close()
+
+  assert.equal(applied, 2)
+  assert.equal(changes.at(-1), '[Image 1] [Image 2]')
+  assert.deepEqual(submitted, ['[Image 1] [Image 2]'])
+  const output = stdout.read().toString()
+  assert.match(output, /你 > \[Image 1\] \[Image 2\]/)
+  assert.match(output, /\u001b\[\?2004h/)
+  assert.match(output, /\u001b\[\?2004l/)
 })
 
 test('drops queued microphone frames whenever half-duplex capture is gated', () => {

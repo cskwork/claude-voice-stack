@@ -9,6 +9,7 @@ import {
   isResponseActivityEvent,
   realtimeResponseId,
 } from './response-lifecycle.mjs'
+import { frontendInputProjection } from '../../../shared/input-parts.mjs'
 
 // Re-export provider-agnostic tools and instructions so existing callers
 // (tests, tool-call-handler, bootstrap) continue to work without changes.
@@ -260,6 +261,53 @@ export class RealtimeFrontend {
     })
   }
 
+  projectUserInput(parts, options = {}) {
+    const custom = this.provider.projectUserInput?.({
+      parts,
+      options,
+      protocol: this.protocol,
+      modelCapabilities: this.modelCapabilities,
+      transportCapabilities: this.transportCapabilities,
+    })
+    if (custom) return custom
+    const content = frontendInputProjection(parts, options)
+    return content
+      ? { conversationItem: this.protocol.userTextItem(content) }
+      : null
+  }
+
+  async applyUserInput(parts, options = {}) {
+    const projection = this.projectUserInput(parts, options)
+    if (!projection) return false
+    for (const event of projection.beforeEvents || []) this.send(event)
+    if (projection.conversationItem) {
+      await this.createConversationItem(projection.conversationItem)
+    }
+    for (const event of projection.afterEvents || []) this.send(event)
+    return true
+  }
+
+  sendUserInput(parts, context = {}, { modalities } = {}) {
+    return this.enqueueResponse('model', context, async () => {
+      if (!await this.applyUserInput(parts)) return false
+      this.send(this.protocol.responseCreate(
+        modalities ? { modalities } : undefined,
+      ))
+    })
+  }
+
+  appendUserInputContext(parts, options = {}) {
+    return this.enqueueAction(() => this.applyUserInput(parts, options))
+  }
+
+  appendUserContext(text) {
+    const content = String(text || '').trim()
+    if (!content) return Promise.resolve()
+    return this.enqueueAction(() => this.createConversationItem(
+      this.protocol.userTextItem(content),
+    ))
+  }
+
   ensureResponse(context = {}, { shouldCreate, response } = {}) {
     return this.enqueueResponse('agent', context, () => {
       if (shouldCreate && !shouldCreate()) return false
@@ -309,9 +357,7 @@ export class RealtimeFrontend {
     return this.enqueueResponse(origin, context, () => {
       if (shouldSpeak && !shouldSpeak()) return false
       this.send(this.protocol.responseCreate(
-        this.provider.buildSpeakResponse(content, {
-          textOnly: this.agentContext.textOnly === true,
-        }),
+        this.provider.buildSpeakResponse(content),
       ))
     })
   }
@@ -324,9 +370,7 @@ export class RealtimeFrontend {
   ) {
     const content = String(text || '').trim()
     if (!content) return
-    const injection = this.provider.buildResultInjection(content, {
-      textOnly: this.agentContext.textOnly === true,
-    })
+    const injection = this.provider.buildResultInjection(content)
     let contextInjected = false
     const outcome = await this.enqueueResponse(origin, context, async () => {
       if (injectContext) {
@@ -345,9 +389,7 @@ export class RealtimeFrontend {
     shouldSpeak,
   } = {}) {
     if (!permission?.id || !permission?.summary) return
-    const injection = this.provider.buildPermissionInjection(permission, {
-      textOnly: this.agentContext.textOnly === true,
-    })
+    const injection = this.provider.buildPermissionInjection(permission)
     // Make the permission identity available to the model immediately. The
     // spoken question may wait behind an active response, while the user can
     // already see the actionable permission event in TUI/WebUI and answer it.
@@ -554,16 +596,18 @@ export class RealtimeFrontend {
         id = first[0]
         pending = first[1]
       }
-      // A single-slot provider refuses a response.create that races a
-      // server-side turn. Retry the refused payload once the slot frees up
-      // instead of dropping the injection on the floor.
-      const slotBusy = event.type === 'error'
-        && this.capabilities.singleResponseSlot
-        && this.provider.classifyError(
-          event.error?.message || event.message || '',
-        ) === 'response_slot_busy'
+      // A response.create can race either another response or the tail of a
+      // Smart Turn input. Both are transient: retry the exact refused payload
+      // instead of surfacing a protocol timing error to the user.
+      const refusalKind = event.type === 'error'
+        ? this.provider.classifyError(event.error?.message || event.message || '')
+        : ''
+      const slotBusy = this.capabilities.singleResponseSlot
+        && refusalKind === 'response_slot_busy'
+      const inputBusy = pending?.origin === 'model'
+        && refusalKind === 'input_busy'
       if (
-        slotBusy
+        (slotBusy || inputBusy)
         && pending
         && pending.responsePayload
         && (pending.busyRetries || 0) < 3
@@ -733,11 +777,9 @@ export class RealtimeFrontend {
           payload,
           pending.requestId,
         )
-        if (this.capabilities.singleResponseSlot) {
-          // Remember the exact payload on the pending marker so a refused
-          // response can be replayed after the occupied slot becomes idle.
-          pending.responsePayload = outgoing
-        }
+        // Remember the exact payload so transient response-slot and Smart Turn
+        // input collisions can replay it without rebuilding conversation state.
+        pending.responsePayload = outgoing
       }
       const body = this.protocol.encodeOutgoing(outgoing)
       this.ws.send(JSON.stringify(body))

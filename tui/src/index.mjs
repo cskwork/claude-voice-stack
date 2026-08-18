@@ -5,10 +5,20 @@ import {
   GatewayClientEvent,
   GatewayServerEvent,
 } from '../../shared/realtime-events.mjs'
+import {
+  displayInputText,
+  inputFileParts,
+  inputText,
+} from '../../shared/input-parts.mjs'
 import { createLogger } from '../../shared/logger.mjs'
+import { clientInputCapabilities } from '../../shared/client-input-capabilities.mjs'
 import { startMacVoiceIO } from './macos-voice-io.mjs'
 import { resamplePcm16 } from './pcm-audio.mjs'
 import { startPortAudioVoiceIO } from './portaudio-voice-io.mjs'
+import {
+  inputPartsFromText,
+} from './input-parts.mjs'
+import { isExitCommand } from './terminal-commands.mjs'
 
 const OUTPUT_SAMPLE_RATE = 24000
 const AUDIO_MODES = new Set(['half', 'full'])
@@ -111,6 +121,7 @@ export function connectMessage({
       : { outputEnabled: outputEnabled === true }),
     clientType: 'cli',
     clientLabel: 'CLI',
+    inputCapabilities: clientInputCapabilities('cli'),
     takeover: takeover === true,
     workingDirectory,
     timeZone,
@@ -221,14 +232,16 @@ export function helpText(mode = audioModeForPlatform()) {
     ? '语音模式：请直接说话；使用 macOS CoreAudio 全双工回声消除，可用语音打断回复。'
     : mode.fullDuplex
       ? '语音模式：PortAudio 全双工不提供回声消除，请使用耳机；可直接说话打断回复。'
-      : '语音模式：回复播放完毕后可继续说话；按 x 可手动打断播放。'
+      : '语音模式：回复播放完毕后可继续说话；使用 /interrupt 可手动打断播放。'
   return [
     description,
-    '按键：',
-    ...(mode.manualInterrupt ? ['  x  手动打断当前回复'] : []),
-    '  m  静音 / 恢复麦克风',
-    '  h  显示帮助',
-    '  q  退出',
+    '输入区常驻：直接输入文字并回车；粘贴文件路径会自动作为附件。',
+    '文字中使用 @文件路径，可同时提交指令和附件。',
+    '命令：',
+    ...(mode.manualInterrupt ? ['  /interrupt       手动打断当前回复'] : []),
+    '  /mute           静音 / 恢复麦克风',
+    '  /help           显示帮助',
+    '  /exit           退出（/quit、/q 同义）',
   ].join('\n')
 }
 
@@ -626,6 +639,325 @@ export function createTerminalTranscriptRenderer({
   }
 }
 
+export function createPersistentTerminalRenderer({
+  stdin = process.stdin,
+  stdout = process.stdout,
+  prompt = '你 > ',
+  onLine = async () => {},
+  onPaste = async value => value,
+  onChange = () => {},
+  onClose = () => {},
+} = {}) {
+  const entries = []
+  let activePreview = ''
+  let draft = []
+  let cursor = 0
+  let scrollOffset = 0
+  let pasteBuffer = null
+  let pasteQueue = Promise.resolve()
+  const pendingPastes = []
+  let status = 'Gateway 连接中 · 麦克风准备中'
+  let closed = false
+  let closeRequested = false
+  let lineQueue = Promise.resolve()
+  const maxHistoryEntries = 2000
+  const stripAnsi = text => String(text || '').replace(/\u001b\[[0-9;]*m/g, '')
+  const characterWidth = character => {
+    const point = character.codePointAt(0) || 0
+    if (
+      point === 0
+      || point < 32
+      || (point >= 0x7f && point < 0xa0)
+      || (point >= 0x300 && point <= 0x36f)
+      || (point >= 0xfe00 && point <= 0xfe0f)
+      || point === 0x200d
+    ) return 0
+    return point <= 0x7e ? 1 : 2
+  }
+  const displayWidth = text => Array.from(stripAnsi(text))
+    .reduce((width, character) => width + characterWidth(character), 0)
+  const truncate = (text, maxWidth) => {
+    let result = ''
+    let width = 0
+    for (const character of Array.from(stripAnsi(text))) {
+      const next = characterWidth(character)
+      if (width + next > maxWidth) break
+      result += character
+      width += next
+    }
+    return result
+  }
+  const wrap = (text, maxWidth) => {
+    const lines = []
+    for (const sourceLine of stripAnsi(text).split('\n')) {
+      let line = ''
+      let width = 0
+      for (const character of Array.from(sourceLine)) {
+        const next = characterWidth(character)
+        if (line && width + next > maxWidth) {
+          lines.push(line)
+          line = ''
+          width = 0
+        }
+        line += character
+        width += next
+      }
+      lines.push(line)
+    }
+    return lines
+  }
+  const inputViewport = maxWidth => {
+    let start = cursor
+    let width = 0
+    while (start > 0) {
+      const next = characterWidth(draft[start - 1])
+      if (width + next > maxWidth) break
+      start -= 1
+      width += next
+    }
+    let end = cursor
+    let afterWidth = width
+    while (end < draft.length) {
+      const next = characterWidth(draft[end])
+      if (afterWidth + next > maxWidth) break
+      afterWidth += next
+      end += 1
+    }
+    return {
+      content: draft.slice(start, end).join(''),
+      cursorColumn: draft.slice(start, cursor)
+        .reduce((sum, character) => sum + characterWidth(character), 0),
+    }
+  }
+  const redraw = () => {
+    if (closed) return
+    const columns = Math.max(20, Number(stdout.columns) || 80)
+    // Avoid writing into the last terminal column. Some terminals immediately
+    // auto-wrap an exact-width line and would shift the fixed composer down.
+    const contentWidth = columns - 1
+    const rows = Math.max(8, Number(stdout.rows) || 24)
+    const conversationRows = rows - 4
+    const source = activePreview
+      ? [...entries, activePreview]
+      : entries
+    const allLines = source.flatMap(entry => wrap(entry, contentWidth))
+    const maxOffset = Math.max(0, allLines.length - conversationRows)
+    scrollOffset = Math.min(scrollOffset, maxOffset)
+    const end = Math.max(0, allLines.length - scrollOffset)
+    const start = Math.max(0, end - conversationRows)
+    const visible = allLines.slice(start, end)
+    while (visible.length < conversationRows) visible.unshift('')
+    const separator = '─'.repeat(contentWidth)
+    const input = inputViewport(Math.max(
+      1,
+      contentWidth - displayWidth(prompt),
+    ))
+    const visibleStatus = scrollOffset > 0
+      ? `${status} · 已上翻 ${scrollOffset} 行`
+      : status
+    const footer = [
+      separator,
+      truncate(visibleStatus, contentWidth),
+      `${prompt}${input.content}`,
+      truncate(
+        'Enter 发送 · /help 命令 · PgUp/PgDn 滚动 · Ctrl-C 退出',
+        contentWidth,
+      ),
+    ]
+    const screen = [...visible, ...footer]
+      .map(value => `\u001b[2K${value}`)
+      .join('\n')
+    const inputRow = conversationRows + 3
+    const inputColumn = Math.min(
+      contentWidth,
+      displayWidth(prompt) + input.cursorColumn + 1,
+    )
+    stdout.write(
+      `\u001b[?25l\u001b[H${screen}`
+      + `\u001b[${inputRow};${inputColumn}H\u001b[?25h`,
+    )
+  }
+  const append = value => {
+    const content = String(value || '').replace(/\n+$/, '')
+    if (content) entries.push(content)
+    if (entries.length > maxHistoryEntries) {
+      entries.splice(0, entries.length - maxHistoryEntries)
+    }
+    scrollOffset = 0
+    redraw()
+  }
+  const renderer = {
+    update(prefix, content) {
+      activePreview = `${prefix} ${content}`
+      scrollOffset = 0
+      redraw()
+    },
+    stream(prefix, content) {
+      activePreview = `${prefix} ${content}`
+      scrollOffset = 0
+      redraw()
+    },
+    finish(prefix, content) {
+      activePreview = ''
+      append(`${prefix} ${content}`)
+    },
+    print(value) {
+      append(value)
+    },
+    setStatus(value) {
+      status = String(value || '')
+      redraw()
+    },
+    discardPreview() {
+      if (!activePreview) return
+      activePreview = ''
+      redraw()
+    },
+    cancel() {
+      if (!activePreview) return
+      activePreview = ''
+      redraw()
+    },
+    close() {
+      if (closed) return
+      closed = true
+      stdin.off('keypress', handleKeypress)
+      stdout.off?.('resize', redraw)
+      if (stdin.isTTY && typeof stdin.setRawMode === 'function') {
+        stdin.setRawMode(false)
+      }
+      stdout.write('\u001b[?2004l\u001b[?25h\u001b[?1049l')
+    },
+  }
+  const submit = value => {
+    lineQueue = lineQueue
+      .then(() => onLine(value))
+      .catch(error => renderer.print(`[错误] ${error.message}`))
+      .finally(redraw)
+  }
+  const requestClose = () => {
+    if (closed || closeRequested) return
+    closeRequested = true
+    onClose()
+  }
+  const insert = value => {
+    const inserted = Array.from(value)
+    const start = cursor
+    draft.splice(cursor, 0, ...inserted)
+    cursor += inserted.length
+    return { start, length: inserted.length }
+  }
+  const resolvePaste = (value, insertion) => {
+    pendingPastes.push(insertion)
+    pasteQueue = pasteQueue
+      .then(() => onPaste(value))
+      .then(result => {
+        if (closed) return
+        const replacement = typeof result === 'string'
+          ? result
+          : String(result?.text ?? value)
+        const original = draft
+          .slice(insertion.start, insertion.start + insertion.length)
+          .join('')
+        if (original !== value) return
+        const characters = Array.from(replacement)
+        draft.splice(insertion.start, insertion.length, ...characters)
+        const delta = characters.length - insertion.length
+        for (const pending of pendingPastes) {
+          if (pending !== insertion && pending.start > insertion.start) {
+            pending.start += delta
+          }
+        }
+        if (cursor >= insertion.start + insertion.length) cursor += delta
+        else if (cursor > insertion.start) cursor = insertion.start + characters.length
+        result?.apply?.()
+        onChange(draft.join(''))
+        redraw()
+      })
+      .catch(error => renderer.print(`[附件错误] ${error.message}`))
+      .finally(() => {
+        const index = pendingPastes.indexOf(insertion)
+        if (index >= 0) pendingPastes.splice(index, 1)
+      })
+  }
+  const handleKeypress = (value, key = {}) => {
+    if (closed) return
+    if (key.name === 'paste-start') {
+      pasteBuffer = ''
+      return
+    }
+    if (key.name === 'paste-end') {
+      const pasted = String(pasteBuffer || '').replace(/[\r\n]+/g, ' ')
+      pasteBuffer = null
+      if (!pasted) return
+      const insertion = insert(pasted)
+      redraw()
+      resolvePaste(pasted, insertion)
+      return
+    }
+    if (pasteBuffer !== null) {
+      pasteBuffer += value || ''
+      return
+    }
+    if (key.ctrl && key.name === 'c') {
+      requestClose()
+      return
+    }
+    if (key.name === 'return' || key.name === 'enter') {
+      const submitted = draft.join('')
+      draft = []
+      cursor = 0
+      scrollOffset = 0
+      redraw()
+      submit(submitted)
+      return
+    }
+    let changed = false
+    if (key.name === 'backspace') {
+      if (cursor > 0) {
+        draft.splice(--cursor, 1)
+        changed = true
+      }
+    } else if (key.name === 'delete') {
+      if (cursor < draft.length) {
+        draft.splice(cursor, 1)
+        changed = true
+      }
+    } else if (key.name === 'left') {
+      cursor = Math.max(0, cursor - 1)
+    } else if (key.name === 'right') {
+      cursor = Math.min(draft.length, cursor + 1)
+    } else if (key.name === 'home') {
+      cursor = 0
+    } else if (key.name === 'end') {
+      cursor = draft.length
+    } else if (key.name === 'pageup') {
+      scrollOffset += Math.max(1, (Number(stdout.rows) || 24) - 5)
+    } else if (key.name === 'pagedown') {
+      scrollOffset = Math.max(0, scrollOffset - Math.max(
+        1,
+        (Number(stdout.rows) || 24) - 5,
+      ))
+    } else if (key.ctrl || key.meta || key.name === 'escape') {
+      return
+    } else if (value && !/^[\u0000-\u001f\u007f]$/.test(value)) {
+      insert(value)
+      changed = true
+    } else return
+    if (changed) onChange(draft.join(''))
+    redraw()
+  }
+  emitKeypressEvents(stdin)
+  if (stdin.isTTY && typeof stdin.setRawMode === 'function') {
+    stdin.setRawMode(true)
+  }
+  stdin.on('keypress', handleKeypress)
+  stdout.on?.('resize', redraw)
+  stdout.write('\u001b[?1049h\u001b[?2004h')
+  redraw()
+  return renderer
+}
+
 export function createPlayback({
   audioSink,
   onError,
@@ -758,7 +1090,11 @@ export async function runTui(options = parseArguments(process.argv.slice(2))) {
   let captureStateSent = false
   let audioBridge = null
   let playback = null
-  let keypressHandler = null
+  let handleTerminalLine = async () => {}
+  let stagedInputParts = []
+  let publishStagedInputParts = () => {}
+  let reconcileStagedInputParts = () => {}
+  const typedTranscripts = []
   const pendingPermissionTasks = new Set()
   let close = () => {}
   let resolveClosed
@@ -766,15 +1102,37 @@ export async function runTui(options = parseArguments(process.argv.slice(2))) {
     resolveClosed = resolvePromise
   })
 
-  const transcriptRenderer = createTerminalTranscriptRenderer()
+  const transcriptRenderer = createPersistentTerminalRenderer({
+    onLine: value => handleTerminalLine(value),
+    onPaste: async value => {
+      const parts = await inputPartsFromText(value, [], {
+        attachmentOffset: stagedInputParts.length,
+      })
+      const files = inputFileParts(parts)
+      if (!files.length) return value
+      return {
+        text: inputText(parts),
+        apply() {
+          stagedInputParts = [...stagedInputParts, ...files]
+          publishStagedInputParts()
+        },
+      }
+    },
+    onChange: value => reconcileStagedInputParts(value),
+    onClose: () => close(),
+  })
   const print = text => transcriptRenderer.print(text)
+  const setStatus = text => transcriptRenderer.setStatus(text)
   const userPrefix = style('你 >', 'cyan')
   const assistantPrefix = style('qwen-audio >', 'bold')
   const turnStatusDisplay = createTurnStatusDisplay({ print })
   const transcriptDisplay = createTranscriptDisplay({
     onUserDelta: content => transcriptRenderer.update(userPrefix, content),
     onUser: (content, event) => {
-      transcriptRenderer.finish(userPrefix, content)
+      if (typedTranscripts[0] === content) {
+        typedTranscripts.shift()
+        transcriptRenderer.cancel()
+      } else transcriptRenderer.finish(userPrefix, content)
       turnStatusDisplay.begin(event?.turnId)
     },
     onUserDiscard: (_turnId, event) => {
@@ -804,17 +1162,9 @@ export async function runTui(options = parseArguments(process.argv.slice(2))) {
     clearTimeout(reconnectTimer)
     playback?.close()
     audioBridge?.close()
-    if (keypressHandler) process.stdin.off('keypress', keypressHandler)
+    transcriptRenderer.close()
     process.off('SIGINT', handleSigint)
     process.off('SIGTERM', handleSigterm)
-    if (process.stdin.isTTY) {
-      try {
-        process.stdin.setRawMode(false)
-      } catch {
-        // The terminal may already have closed while the audio helper exited.
-      }
-    }
-    process.stdin.pause()
     resolveClosed()
   }
   close = () => {
@@ -832,6 +1182,21 @@ export async function runTui(options = parseArguments(process.argv.slice(2))) {
         audio: chunk.toString('base64'),
       }))
     }
+  }
+  publishStagedInputParts = () => {
+    if (socket?.readyState !== WebSocket.OPEN) return
+    socket.send(JSON.stringify({
+      type: GatewayClientEvent.INPUT_PARTS,
+      parts: stagedInputParts,
+    }))
+  }
+  reconcileStagedInputParts = value => {
+    const next = stagedInputParts.filter(part => (
+      String(value || '').includes(String(part?.source?.text?.value || ''))
+    ))
+    if (next.length === stagedInputParts.length) return
+    stagedInputParts = next
+    publishStagedInputParts()
   }
 
   const startVoiceIO = audioMode.audioBackend === 'coreaudio'
@@ -872,6 +1237,7 @@ export async function runTui(options = parseArguments(process.argv.slice(2))) {
       },
     })
   } catch (error) {
+    cleanup()
     if (!fallbackHint) throw error
     throw new Error(`${error.message}\n建议：${fallbackHint}`, { cause: error })
   }
@@ -932,19 +1298,41 @@ export async function runTui(options = parseArguments(process.argv.slice(2))) {
       || socket?.readyState !== WebSocket.OPEN
     ) return
     if (setCaptureEnabled(true)) {
+      setStatus(`已连接 · 麦克风已开启 · ${audioMode.shortLabel}`)
       print(`[麦克风已开启 · ${inputSampleRate} Hz · ${audioMode.shortLabel}]`)
     }
+  }
+
+  const sendTextInput = async text => {
+    if (!text.trim()) return
+    const referencedParts = stagedInputParts.filter(part => (
+      text.includes(String(part?.source?.text?.value || ''))
+    ))
+    const parts = await inputPartsFromText(text, referencedParts)
+    if (socket?.readyState !== WebSocket.OPEN) {
+      throw new Error('Gateway 尚未连接')
+    }
+    socket.send(JSON.stringify({
+      type: GatewayClientEvent.INPUT_MESSAGE,
+      parts,
+    }))
+    const transcript = displayInputText(parts)
+    stagedInputParts = []
+    publishStagedInputParts()
+    typedTranscripts.push(transcript)
+    transcriptRenderer.finish(userPrefix, transcript)
   }
 
   const setMuted = value => {
     muted = value
     if (muted) {
       setCaptureEnabled(false)
+      setStatus('麦克风已静音 · 语音回复保持开启')
       if (socket?.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify(microphoneControlEvent(true)))
       }
       print(style(
-        '[麦克风已静音，语音输入不会被识别；按 m 恢复]',
+        '[麦克风已静音，语音输入不会被识别；输入 /mute 恢复]',
         'yellow',
       ))
       if (pendingPermissionTasks.size > 0) {
@@ -955,6 +1343,7 @@ export async function runTui(options = parseArguments(process.argv.slice(2))) {
         socket.send(JSON.stringify(microphoneControlEvent(false)))
       }
       print(style('[麦克风已恢复]', 'green'))
+      setStatus('麦克风正在恢复 · 语音回复保持开启')
       startMicrophone()
     }
   }
@@ -1073,7 +1462,7 @@ export async function runTui(options = parseArguments(process.argv.slice(2))) {
       )
       if (muted) {
         print(style(
-          '[正在等待授权，但麦克风已静音；按 m 恢复后再回答]',
+          '[正在等待授权，但麦克风已静音；输入 /mute 恢复后再回答]',
           'yellow',
         ))
       }
@@ -1127,12 +1516,14 @@ export async function runTui(options = parseArguments(process.argv.slice(2))) {
     nextSocket.on('open', () => {
       if (socket !== nextSocket || closed) return
       reconnectDelay = 500
+      setStatus('Gateway 已连接 · 语音服务准备中')
       nextSocket.send(JSON.stringify(connectMessage({
         voiceEnabled: true,
         inputEnabled: !muted,
         outputEnabled: true,
         takeover: options.takeover === true,
       })))
+      publishStagedInputParts()
       syncActiveTasks().catch(error => {
         print(style(`[任务状态] ${error.message}`, 'yellow'))
       })
@@ -1169,6 +1560,7 @@ export async function runTui(options = parseArguments(process.argv.slice(2))) {
         cleanup()
         return
       }
+      setStatus('Gateway 已断开 · 正在自动重连 · /exit 或 Ctrl-C 可退出')
       print(style('[qwen-audio-agent 连接中断，正在重连]', 'yellow'))
       scheduleReconnect()
     })
@@ -1197,39 +1589,41 @@ export async function runTui(options = parseArguments(process.argv.slice(2))) {
         headers = refreshed.cookie ? { Cookie: refreshed.cookie } : {}
         connectGateway()
       } catch (error) {
+        setStatus('等待 Gateway · 正在自动重连 · /exit 或 Ctrl-C 可退出')
         print(style(`[等待 Gateway] ${error.message}`, 'yellow'))
         scheduleReconnect()
       }
     }, delay)
   }
 
-  connectGateway()
-
-  emitKeypressEvents(process.stdin)
-  process.stdin.setRawMode(true)
-  process.stdin.resume()
-  keypressHandler = async (value, key = {}) => {
-    try {
-      if ((key.ctrl && key.name === 'c') || value === 'q') {
-        close()
-      } else if (value === 'm') {
-        setMuted(!muted)
-      } else if (value === 'x' && audioMode.manualInterrupt) {
-        performManualInterrupt({
-          playback,
-          transcriptRenderer,
-          socket,
-          startMicrophone,
-          print,
-        })
-      } else if (value === 'h') {
-        print(helpText(audioMode))
+  handleTerminalLine = async value => {
+    const text = String(value || '').trim()
+    const [command = ''] = text.split(/\s+/)
+    if (isExitCommand(command)) {
+      close()
+    } else if (['/mute', '/m'].includes(command)) {
+      setMuted(!muted)
+    } else if (['/interrupt', '/x'].includes(command)) {
+      if (!audioMode.manualInterrupt) {
+        throw new Error('当前全双工模式支持直接用语音打断，无需手动打断')
       }
-    } catch (error) {
-      print(`[错误] ${error.message}`)
+      performManualInterrupt({
+        playback,
+        transcriptRenderer,
+        socket,
+        startMicrophone,
+        print,
+      })
+    } else if (['/help', '/h'].includes(command)) {
+      print(helpText(audioMode))
+    } else if (command.startsWith('/')) {
+      throw new Error(`未知命令：${command}；输入 /help 查看帮助`)
+    } else {
+      await sendTextInput(value)
     }
   }
-  process.stdin.on('keypress', keypressHandler)
+
+  connectGateway()
 
   process.once('SIGINT', handleSigint)
   process.once('SIGTERM', handleSigterm)

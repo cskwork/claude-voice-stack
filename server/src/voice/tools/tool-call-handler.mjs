@@ -11,8 +11,22 @@ import {
 } from '../realtime-provider.mjs'
 import { currentTimeSnapshot } from '../../conversation/frontend-agent-context.mjs'
 import { canonicalScope, isMemoryDocument } from '../../core/memory-scopes.mjs'
+import { inputPartRef } from '../../../../shared/input-parts.mjs'
 
 const SENSITIVE_MEMORY = /(?:pass(?:word)?|secret|api[_ -]?key|access[_ -]?token|credential|验证码|密码|密钥|令牌|\bsk-[a-z0-9_-]+)/i
+
+function mergeInputParts(...groups) {
+  const merged = []
+  const seen = new Set()
+  for (const part of groups.flat()) {
+    if (part?.type !== 'file') continue
+    const key = inputPartRef(part) || [part.mime, part.url].join('\u0000')
+    if (seen.has(key)) continue
+    seen.add(key)
+    merged.push(part)
+  }
+  return merged
+}
 
 function failure(errorCode, userMessage, {
   retryable = false,
@@ -49,6 +63,7 @@ export class ToolCallHandler {
     permissionPolicy,
     onPermissionDeliveryFailed = () => {},
     requestClientState = () => {},
+    inputAssets = null,
   }) {
     this.taskManager = taskManager
     this.ownerId = ownerId
@@ -68,6 +83,7 @@ export class ToolCallHandler {
     this.permissionPolicy = permissionPolicy
     this.onPermissionDeliveryFailed = onPermissionDeliveryFailed
     this.requestClientState = requestClientState
+    this.inputAssets = inputAssets
     this.gatewayApprovedPermissions = new Set()
     this.processedCalls = new Set()
     this.turnTasks = new Map()
@@ -194,7 +210,13 @@ export class ToolCallHandler {
       })
   }
 
-  createWork({ turnId, objective, verbatimRequest, submissionKey }) {
+  createWork({
+    turnId,
+    objective,
+    verbatimRequest,
+    submissionKey,
+    inputParts = [],
+  }) {
     let workId = ''
     const task = this.taskManager.create({
       objective,
@@ -215,6 +237,7 @@ export class ToolCallHandler {
           userMemories: this.memoryService?.list(this.ownerId, { limit: 64 }) || [],
           timeZone: this.getClientContext()?.timeZone,
           workingDirectory: this.getClientContext()?.workingDirectory,
+          inputParts: mergeInputParts(inputParts, resolved.inputParts || []),
         }, {
           ownerId: this.ownerId,
           sessionId: this.sessionId,
@@ -535,6 +558,15 @@ export class ToolCallHandler {
 
     let task
     try {
+      const historicalInputParts = this.inputAssets?.resolve({
+        ownerId: this.ownerId,
+        sessionId: this.sessionId,
+        refs: args.input_refs,
+      }) || []
+      const delegatedInputParts = mergeInputParts(
+        this.transcripts.parts(turnId),
+        historicalInputParts,
+      )
       const submissionKey = [
         'delegation',
         this.sessionId,
@@ -554,8 +586,22 @@ export class ToolCallHandler {
         objective,
         verbatimRequest,
         submissionKey,
+        inputParts: delegatedInputParts,
       })
-    } catch {
+    } catch (error) {
+      const message = String(error?.message || error || '')
+      if (/输入.*失效|输入引用|找不到或无权访问/.test(message)) {
+        await this.sendOutput(
+          callId,
+          failure(
+            'invalid_input_ref',
+            '引用的图片或文件已经失效，需要用户重新发送。',
+            { retryable: true },
+          ),
+          turnId,
+        )
+        return
+      }
       await this.sendOutput(
         callId,
         failure(

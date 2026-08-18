@@ -38,6 +38,12 @@ test('keeps spawn_thinking as the stable asynchronous work protocol', () => {
     )).length,
     1,
   )
+  const spawn = TOOLS.find(tool => (
+    tool.function.name === SPAWN_THINKING_TOOL_NAME
+  ))
+  assert.deepEqual(spawn.function.parameters.required, ['objective'])
+  assert.equal(spawn.function.parameters.properties.input_refs.type, 'array')
+  assert.equal(spawn.function.parameters.properties.input_refs.maxItems, 8)
 })
 
 function createQwenFrontend(options = {}) {
@@ -46,6 +52,29 @@ function createQwenFrontend(options = {}) {
     ...options,
   })
 }
+
+test('projects input parts through the realtime provider boundary', () => {
+  const frontend = createQwenFrontend()
+  const projection = frontend.projectUserInput([
+    { type: 'text', text: '[Image 1] 这是什么？' },
+    {
+      type: 'file',
+      mime: 'image/png',
+      filename: 'cat.png',
+      url: 'data:image/png;base64,aGVsbG8=',
+      source: { type: 'clipboard', text: { value: '[Image 1]' } },
+      _meta: { 'qwen-audio-agent/inputRef': 'input_1' },
+    },
+  ])
+  const text = projection.conversationItem.content[0].text
+
+  assert.match(text, /\[Image 1\] 这是什么？/)
+  assert.match(text, /"id":"input_1"/)
+  assert.match(text, /"type":"file"/)
+  assert.match(text, /"source":\{"type":"clipboard","text":\{"value":"\[Image 1\]"\}\}/)
+  assert.match(text, /"mime":"image\/png"/)
+  assert.doesNotMatch(text, /aGVsbG8=/)
+})
 
 test('rejects a provider error before the realtime session becomes ready', () => {
   const frontend = createQwenFrontend()
@@ -113,31 +142,36 @@ test('carries originating turn metadata to a created realtime response', () => {
 })
 
 test('only reports a queued announcement as completed after response.done', async () => {
-  const frontend = createQwenFrontend({
-    responseStartTimeoutMs: 50,
-    responseCompletionTimeoutMs: 50,
-  })
+  const frontend = createQwenFrontend()
   frontend.ready = true
-  frontend.send = () => {}
+  let waitingAfterCreated = false
+  frontend.send = event => {
+    if (event.type !== 'response.create') return
+    const requestId = frontend.pendingResponses[0].requestId
+    frontend.handleLifecycle({
+      type: 'response.created',
+      response: {
+        id: 'response-1',
+        metadata: { qwen_audio_request_id: requestId },
+      },
+    })
+    waitingAfterCreated = frontend.responseWaiters.has('response-1')
+    frontend.handleLifecycle({
+      type: 'response.done',
+      response: { id: 'response-1', status: 'completed' },
+    })
+  }
 
   const outcome = frontend.speak('任务完成', 'agent', {
     turnId: 'voice-100-1',
     taskId: 'job-1',
-  })
-  await new Promise(resolve => setImmediate(resolve))
-  frontend.handleLifecycle({
-    type: 'response.created',
-    response: { id: 'response-1' },
-  })
-  frontend.handleLifecycle({
-    type: 'response.done',
-    response: { id: 'response-1', status: 'completed' },
   })
 
   assert.deepEqual(await outcome, {
     completed: true,
     responseId: 'response-1',
   })
+  assert.equal(waitingAfterCreated, true)
 })
 
 test('keeps a long response alive while output activity continues', async () => {
@@ -559,25 +593,25 @@ test('publishes the active DashScope profile without assigning one to s2s', t =>
   assert.deepEqual(s2s.modelCatalog, [])
 })
 
-test('configures a text-only Qwen session without Smart Turn', () => {
+test('client text-only hints do not change the Qwen Realtime session', () => {
   const session = REALTIME_PROVIDERS.qwen.buildSession({
     configured: false,
     agentContext: { textOnly: true },
   })
 
-  assert.deepEqual(session.modalities, ['text'])
-  assert.equal(session.turn_detection, null)
+  assert.deepEqual(session.modalities, ['text', 'audio'])
+  assert.deepEqual(session.turn_detection, { type: 'smart_turn' })
   assert.deepEqual(
     REALTIME_PROVIDERS.qwen
       .buildSpeakResponse('完成', { textOnly: true })
       .modalities,
-    ['text'],
+    ['text', 'audio'],
   )
   assert.deepEqual(
     REALTIME_PROVIDERS.qwen
       .buildResultInjection('结果', { textOnly: true })
       .response.modalities,
-    ['text'],
+    ['text', 'audio'],
   )
 })
 
@@ -1332,6 +1366,40 @@ test('identifies a permission response rejected while the user is speaking', asy
     taskId: 'work-permission',
   })
   assert.equal((await outcome).failed, true)
+})
+
+test('retries typed input that races the end of a Smart Turn', async () => {
+  const frontend = createQwenFrontend()
+  const sent = []
+  let retried = null
+  frontend.ready = true
+  frontend.ws = {
+    readyState: 1,
+    send: value => sent.push(JSON.parse(value)),
+  }
+  frontend.retryRefusedResponse = pending => {
+    retried = pending
+    frontend.settlePending(pending, { completed: true, retried: true })
+  }
+
+  const outcome = frontend.sendUserText('键盘输入', { turnId: 'text-turn' })
+  await new Promise(resolve => setImmediate(resolve))
+  frontend.handleLifecycle({
+    type: 'conversation.item.created',
+    item: { ...sent[0].item, status: 'completed' },
+  })
+  await new Promise(resolve => setImmediate(resolve))
+
+  const error = {
+    type: 'error',
+    error: { message: 'Cannot create response while user is speaking.' },
+  }
+  frontend.handleLifecycle(error)
+
+  assert.equal(error.__voiceRetried, true)
+  assert.equal(retried?.origin, 'model')
+  assert.equal(retried?.busyRetries, 1)
+  assert.deepEqual(await outcome, { completed: true, retried: true })
 })
 
 function createS2sFrontend(options = {}) {

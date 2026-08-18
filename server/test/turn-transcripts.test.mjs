@@ -29,3 +29,21 @@ test('never borrows a transcript from a different turn', async () => {
     },
   )
 })
+
+test('keeps multimodal parts bound to their originating turn', async () => {
+  const transcripts = new TurnTranscripts({ waitMs: 5 })
+  const image = {
+    type: 'file',
+    mime: 'image/png',
+    url: 'data:image/png;base64,aGVsbG8=',
+  }
+  transcripts.recordParts('turn-image', [image])
+  transcripts.record('turn-image', '分析这张图')
+
+  assert.deepEqual(await transcripts.resolveDelegation('turn-image', '分析图片'), {
+    originalRequest: '分析这张图',
+    objective: '分析图片',
+    inputParts: [image],
+  })
+  assert.deepEqual(transcripts.parts('other-turn'), [])
+})

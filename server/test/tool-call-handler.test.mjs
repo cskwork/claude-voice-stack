@@ -18,6 +18,7 @@ function harness({
   onPermissionDeliveryFailed,
   clientContext = {},
   requestClientState,
+  inputAssets,
   getTurnId = () => 'turn-one',
 } = {}) {
   const outputs = []
@@ -47,6 +48,7 @@ function harness({
     onPermissionDeliveryFailed,
     getClientContext: () => clientContext,
     requestClientState,
+    inputAssets,
     getConversationContext: () => [
       { role: 'user', content: '之前在改首页' },
     ],
@@ -159,6 +161,95 @@ test('submits one nonblocking coordinator work item with organized intent', asyn
   assert.equal(received.originalRequest, '继续改刚才那个页面')
   assert.equal(received.objective, '继续修改此前讨论的页面')
   assert.equal(received.conversationContext[0].content, '之前在改首页')
+})
+
+test('automatically carries current-turn attachments into spawned work', async () => {
+  let received
+  const kit = harness({
+    coordinator: {
+      run: async input => {
+        received = input
+        return { content: '完成', metadata: {} }
+      },
+    },
+  })
+  const image = {
+    type: 'file',
+    mime: 'image/png',
+    filename: 'reference.png',
+    url: 'data:image/png;base64,aGVsbG8=',
+  }
+  kit.transcripts.record('turn-one', '根据这张图生成皮肤')
+  kit.transcripts.recordParts('turn-one', [image])
+  await kit.handler.handle({
+    call_id: 'call-image',
+    name: 'spawn_thinking',
+    arguments: '{"objective":"根据参考图生成皮肤"}',
+  }, { turnId: 'turn-one', turnGeneration: 1 })
+
+  await kit.manager.wait(kit.outputs[0][1].work_id)
+  assert.deepEqual(received.inputParts, [image])
+})
+
+test('resolves an earlier-turn input reference when the next turn delegates work', async () => {
+  let received
+  const historicalImage = {
+    type: 'file',
+    mime: 'image/png',
+    filename: 'cat.png',
+    url: 'data:image/png;base64,aGVsbG8=',
+  }
+  const kit = harness({
+    inputAssets: {
+      resolve: ({ ownerId, sessionId, refs }) => {
+        assert.equal(ownerId, 'owner')
+        assert.equal(sessionId, 'voice')
+        assert.deepEqual(refs, ['input_1'])
+        return [historicalImage]
+      },
+    },
+    coordinator: {
+      run: async input => {
+        received = input
+        return { content: '完成', metadata: {} }
+      },
+    },
+  })
+  kit.transcripts.record('turn-one', '分析刚才那张图片')
+
+  await kit.handler.handle({
+    call_id: 'call-historical-image',
+    name: 'spawn_thinking',
+    arguments: JSON.stringify({
+      objective: '分析用户此前提供的图片',
+      input_refs: ['input_1'],
+    }),
+  }, { turnId: 'turn-one', turnGeneration: 1 })
+
+  await kit.manager.wait(kit.outputs[0][1].work_id)
+  assert.deepEqual(received.inputParts, [historicalImage])
+})
+
+test('asks for the attachment again when a referenced input has expired', async () => {
+  const kit = harness({
+    inputAssets: {
+      resolve: () => { throw new Error('引用的输入已经失效') },
+    },
+  })
+  kit.transcripts.record('turn-one', '分析刚才那张图片')
+
+  await kit.handler.handle({
+    call_id: 'call-expired-image',
+    name: 'spawn_thinking',
+    arguments: JSON.stringify({
+      objective: '分析用户此前提供的图片',
+      input_refs: ['input_1'],
+    }),
+  }, { turnId: 'turn-one', turnGeneration: 1 })
+
+  assert.equal(kit.outputs[0][1].error_code, 'invalid_input_ref')
+  assert.equal(kit.outputs[0][1].retryable, true)
+  assert.equal(kit.manager.list({ ownerId: 'owner' }).length, 0)
 })
 
 test('lets realtime avoid a repeated acknowledgement after speaking before delegation', async () => {

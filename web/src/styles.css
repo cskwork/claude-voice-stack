@@ -5,6 +5,90 @@
   font-synthesis: none;
 }
 
+.multimodal-composer {
+  width: min(880px, calc(100% - 32px));
+  margin: 0 auto 20px;
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 18px;
+  background: rgba(18, 21, 27, 0.86);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.22);
+  backdrop-filter: blur(18px);
+}
+
+.composer-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.composer-row textarea {
+  flex: 1;
+  min-height: 42px;
+  max-height: 140px;
+  resize: vertical;
+  border: 0;
+  outline: 0;
+  padding: 10px 4px;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+}
+
+.composer-attach,
+.composer-send {
+  min-width: 42px;
+  height: 42px;
+  border: 0;
+  border-radius: 13px;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.1);
+  cursor: pointer;
+}
+
+.composer-send {
+  padding: 0 16px;
+  background: #6d5dfc;
+  color: white;
+}
+
+.composer-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  padding: 2px 2px 9px;
+}
+
+.composer-attachment {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 240px;
+  padding: 6px 8px 6px 10px;
+  border-radius: 999px;
+  background: rgba(109, 93, 252, 0.17);
+  font-size: 12px;
+}
+
+.composer-attachment > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-attachment button {
+  border: 0;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+
+.composer-error {
+  display: block;
+  padding: 5px 4px 0;
+  color: #ff8c8c;
+}
+
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; }
 body { margin: 0; min-width: 320px; min-height: 100%; overflow: hidden; }

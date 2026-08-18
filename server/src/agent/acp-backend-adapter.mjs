@@ -24,6 +24,11 @@ import {
 import { BackendRuntimeState } from './backend-runtime-state.mjs'
 import { KeyedSerialExecutor } from './keyed-serial-executor.mjs'
 import { PermissionBroker } from './permission-broker.mjs'
+import {
+  appendPromptBlocks,
+  nonTextPromptBlocks,
+  transformPromptText,
+} from './acp-content.mjs'
 
 const MAX_SESSION_RESULTS = 100
 const MAX_DELEGATION_RESULT_CHARS = 12_000
@@ -763,11 +768,15 @@ export class AcpBackendAdapter {
         session.coordinationRunId = run.coordinationRunId
         session.onEvent = run.onEvent
         session.permissionScopeId = permissionScopeId
-        const result = await this.client.prompt(record.sessionId, prompt, {
-          signal: controller.signal,
-          timeoutMs: 0,
-          onUpdate: update => this.onSessionUpdate(run, update),
-        })
+        const result = await this.client.prompt(
+          record.sessionId,
+          appendPromptBlocks(prompt, run.inputBlocks),
+          {
+            signal: controller.signal,
+            timeoutMs: 0,
+            onUpdate: update => this.onSessionUpdate(run, update),
+          },
+        )
         record.status = 'completed'
         record.result = result
         return {
@@ -936,14 +945,14 @@ export class AcpBackendAdapter {
       'status=started, return the delegated response required by the request',
       'envelope and stop this turn. Never poll it in the same turn.',
     ].join(' ')
-    return [
+    return transformPromptText(message, content => [
       '<qwen_audio_agent_backend_instructions>',
       BACKEND_AGENT_INSTRUCTIONS,
       sessionInstructions,
       '</qwen_audio_agent_backend_instructions>',
       '',
-      message,
-    ].join('\n')
+      content,
+    ].join('\n'))
   }
 
   async promptCoordinator(session, prompt, run, {
@@ -992,18 +1001,19 @@ export class AcpBackendAdapter {
       toolCalls: new Map(),
       initialPromptDone: false,
       receivedUpdate: false,
+      inputBlocks: nonTextPromptBlocks(message),
     }
     const ownerKey = clean(ownerId)
     const pendingFacts = this.pendingCoordinatorFacts.get(ownerKey) || []
     const prompt = pendingFacts.length
-      ? [
+      ? transformPromptText(message, content => [
           '<qwen_audio_agent_reconciliation>',
           ...pendingFacts.map(fact => JSON.stringify(fact)),
           '</qwen_audio_agent_reconciliation>',
           '以上是 Gateway 已执行并验证的控制结果。请更新你的上下文，不要重复执行。',
           '',
-          message,
-        ].join('\n')
+          content,
+        ].join('\n'))
       : message
     const registration = await this.ensureCoordinatorToolRegistration(
       ownerId,

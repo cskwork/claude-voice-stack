@@ -9,6 +9,7 @@ import { AnnouncementWindow } from './announcement/announcement-window.mjs'
 import { config } from '../core/config.mjs'
 import { logger } from '../core/logger.mjs'
 import { conversationSync } from '../conversation/conversation-sync.mjs'
+import { InputAssetRegistry } from './input-asset-registry.mjs'
 import { normalizeClientContext } from '../conversation/frontend-agent-context.mjs'
 import {
   createRealtimeFrontend,
@@ -43,6 +44,13 @@ import {
   isResponseActivityEvent,
   realtimeResponseId,
 } from './response-lifecycle.mjs'
+import {
+  displayInputText,
+  inputFileParts,
+  inputText,
+  normalizeInputParts,
+  withAttachmentAnchors,
+} from '../../../shared/input-parts.mjs'
 
 const MAX_PENDING_AUDIO_CHUNKS = 30
 const RESPONSE_START_WATCHDOG_MS = 12000
@@ -113,8 +121,9 @@ export function attachRealtimeGateway(server, {
   backendAvailability = null,
   respondPermission,
   permissionPolicy,
+  inputAssets = new InputAssetRegistry(),
 }) {
-  const wss = new WebSocketServer({ noServer: true, maxPayload: 2 * 1024 * 1024 })
+  const wss = new WebSocketServer({ noServer: true, maxPayload: 20 * 1024 * 1024 })
   const activeVoiceClients = new ActiveVoiceClients()
   const voiceConnections = new Map()
 
@@ -169,7 +178,8 @@ export function attachRealtimeGateway(server, {
     let userSpeaking = false
     let inputEnabled = false
     let outputEnabled = false
-    let textOnlySession = false
+    let nonVoiceClient = false
+    let pendingInputParts = []
     // Realtime front end for this session. Defaults to the configured provider
     // and can be switched by the client through the connect event.
     let sessionProvider = config.audioProvider
@@ -379,6 +389,7 @@ export function attachRealtimeGateway(server, {
         })
         if (state === 'sleeping') enterSleep()
       },
+      inputAssets,
     })
     const currentTurn = () => ({
       turnId,
@@ -920,6 +931,24 @@ export function attachRealtimeGateway(server, {
           turnId = `voice-${Date.now()}-${turnGeneration}`
           rememberInputTurn(event.item_id, currentTurn())
         }
+        if (pendingInputParts.length) {
+          const attachedParts = inputAssets.registerParts({
+            ownerId,
+            sessionId,
+            turnId,
+            parts: pendingInputParts,
+          })
+          pendingInputParts = []
+          transcripts.recordParts(turnId, attachedParts)
+          frontend?.appendUserInputContext(
+            attachedParts,
+            { accompaniesVoice: true },
+          )
+            .catch(error => send(ws, {
+              type: GatewayServerEvent.ERROR,
+              message: `附件上下文没有成功送达语音前台：${error.message}`,
+            }))
+        }
         announcementWindow.beginTurn(turnId)
         announcements.dismissActive()
         send(ws, {
@@ -1013,6 +1042,9 @@ export function attachRealtimeGateway(server, {
           content: transcript,
           source: 'voice-user',
           turnId: transcriptTurn.turnId,
+          inputs: inputAssets.metadataForParts(
+            transcripts.parts(transcriptTurn.turnId),
+          ),
         })
         send(ws, {
           type: 'transcript.final',
@@ -1190,14 +1222,14 @@ export function attachRealtimeGateway(server, {
           responseContext.responseDone = true
           finishResponseContextIfComplete(id, responseContext)
         } else {
-          const completedTextAnnouncement = (
+          const completedNonVoiceAnnouncement = (
             responseContext?.origin === 'announcement'
-            && textOnlySession
+            && nonVoiceClient
             && !responseFailed
           )
-          const completedTextTaskNotification = (
+          const completedNonVoiceTaskNotification = (
             responseContext?.consumesTaskNotification
-            && textOnlySession
+            && nonVoiceClient
             && !responseFailed
           )
           if (
@@ -1205,18 +1237,18 @@ export function attachRealtimeGateway(server, {
             && !responseFailed
             && (
               responseContext.origin !== 'announcement'
-              || completedTextAnnouncement
+              || completedNonVoiceAnnouncement
             )
           ) {
             flushPendingTranscripts(id, responseContext)
           }
           if (responseContext?.origin === 'announcement') {
-            if (completedTextAnnouncement) {
+            if (completedNonVoiceAnnouncement) {
               announcements.confirmMany(contextTaskIds(responseContext))
             } else {
               announcements.retryMany(contextTaskIds(responseContext))
             }
-          } else if (completedTextTaskNotification) {
+          } else if (completedNonVoiceTaskNotification) {
             announcements.confirmMany(contextTaskIds(responseContext))
           }
           responseContexts.delete(id)
@@ -1257,7 +1289,6 @@ export function attachRealtimeGateway(server, {
               committedTurnGeneration,
             }),
             response: {
-              modalities: textOnlySession ? ['text'] : undefined,
               instructions: responseGuardDecision.instructions,
             },
           }).catch(error => send(ws, { type: 'error', message: error.message }))
@@ -1372,7 +1403,6 @@ export function attachRealtimeGateway(server, {
         providerName: sessionProvider,
         agentContext: {
           client: clientContext,
-          textOnly: textOnlySession,
           memories: memoryService?.list(ownerId, { limit: 64 }) || [],
           recentMessages: conversationSync.frontendContext({ ownerId, sessionId }),
         },
@@ -1556,7 +1586,7 @@ export function attachRealtimeGateway(server, {
     const prepareSleepMode = () => {
       if (
         !config.wakeWordEnabled
-        || textOnlySession
+        || nonVoiceClient
         || wakeDetectorPromise
       ) return
       if (wakeDetector) {
@@ -1598,7 +1628,7 @@ export function attachRealtimeGateway(server, {
     // state transition. Desktop decides when it is safe to hide because only
     // the client knows about visible work, permission prompts and playback.
     const requestExplicitSleep = () => {
-      if (!config.wakeWordEnabled || textOnlySession) return false
+      if (!config.wakeWordEnabled || nonVoiceClient) return false
       explicitSleepRequested = true
       inputEnabled = false
       pendingAudio = []
@@ -1671,6 +1701,77 @@ export function attachRealtimeGateway(server, {
       attemptWakeConnect(0)
     }
 
+    const submitInputMessage = event => {
+      let parts
+      try {
+        parts = withAttachmentAnchors(normalizeInputParts(
+          event.parts,
+          { fallbackText: event.text },
+        ))
+      } catch (error) {
+        send(ws, { type: GatewayServerEvent.ERROR, message: error.message })
+        return
+      }
+      const inputTurnId = `text_${randomUUID().replaceAll('-', '')}`
+      parts = inputAssets.registerParts({
+        ownerId,
+        sessionId,
+        turnId: inputTurnId,
+        parts,
+      })
+      const text = inputText(parts)
+      const display = displayInputText(parts)
+      turnGeneration = ++turnSequence
+      turnId = inputTurnId
+      const inputContext = currentTurn()
+      commitTurn(inputContext)
+      clearResponseCandidate()
+      // Text and attachment submissions are first-class user turns. They must
+      // close any result announcement still occupying the previous turn and
+      // block a newly completed task from speaking over the response now being
+      // generated, just like input_audio_buffer.speech_started does for voice.
+      announcementWindow.beginTurn(inputTurnId)
+      announcementWindow.endSpeech()
+      announcements.dismissActive()
+      send(ws, {
+        type: GatewayServerEvent.PLAYBACK_CLEAR,
+        reason: 'user_interruption',
+      })
+      send(ws, { type: GatewayServerEvent.TURN_STARTED, turnId: inputTurnId })
+      send(ws, {
+        type: GatewayServerEvent.VOICE_STATE,
+        state: 'thinking',
+        turnId: inputTurnId,
+        origin: 'model',
+      })
+      frontend?.cancel()
+      pendingInputParts = []
+      transcripts.record(inputTurnId, text || display)
+      transcripts.recordParts(inputTurnId, inputFileParts(parts))
+      conversationSync.record({
+        ownerId,
+        sessionId,
+        id: `voice:user:${inputTurnId}`,
+        role: 'user',
+        content: display,
+        source: 'text-user',
+        turnId: inputTurnId,
+        inputs: inputAssets.metadataForParts(parts),
+      })
+      send(ws, {
+        type: GatewayServerEvent.TRANSCRIPT_FINAL,
+        role: 'user',
+        content: display,
+        turnId: inputTurnId,
+      })
+      ensureFrontend()
+        .then(() => frontend.sendUserInput(
+          parts,
+          { turnId: inputTurnId },
+        ))
+        .catch(reportFrontendError)
+    }
+
     const acceptSleepingAudio = audio => {
       try {
         const sampleRate = resolveRealtimeProvider(sessionProvider).inputSampleRate
@@ -1724,7 +1825,7 @@ export function attachRealtimeGateway(server, {
           outputEnabled: event.outputEnabled === true,
           textOnly: event.textOnly === true,
         })
-        textOnlySession = event.textOnly === true
+        nonVoiceClient = event.textOnly === true
         // The client may pick a realtime front end per session. An unknown
         // name is reported instead of silently falling back, so a typo does
         // not look like a working session on the wrong provider.
@@ -1747,7 +1848,7 @@ export function attachRealtimeGateway(server, {
           voiceEnabled: event.voiceEnabled,
           inputEnabled: event.inputEnabled,
           outputEnabled: event.outputEnabled,
-          textOnly: textOnlySession,
+          textOnly: nonVoiceClient,
         })
         if (capabilities.participatesInVoiceArbitration) {
           activateVoiceClient({
@@ -1771,6 +1872,16 @@ export function attachRealtimeGateway(server, {
           && Array.isArray(event.clientStates)
           && event.clientStates.includes('sleeping')
         ) ? ['sleeping'] : []
+        clientContext.inputCapabilities = (
+          event.inputCapabilities
+          && typeof event.inputCapabilities === 'object'
+        ) ? {
+            text: event.inputCapabilities.text === true,
+            audio: event.inputCapabilities.audio === true,
+            image: event.inputCapabilities.image === true,
+            resource: event.inputCapabilities.resource === true,
+          }
+          : null
         // A desktop that advertises the sleeping state owns its inactivity
         // policy. Keep Gateway's legacy automatic timer only for clients that
         // cannot request an explicit synchronized sleep transition.
@@ -1781,7 +1892,6 @@ export function attachRealtimeGateway(server, {
         )
         frontend?.updateAgentContext({
           client: clientContext,
-          textOnly: textOnlySession,
         })
         if (sleeping) {
           sleeping = false
@@ -1796,7 +1906,7 @@ export function attachRealtimeGateway(server, {
         }
       } else if (event.type === GatewayClientEvent.UNMUTE) {
         explicitSleepRequested = false
-        if (textOnlySession) {
+        if (nonVoiceClient) {
           inputEnabled = false
           outputEnabled = true
           broadcastVoiceOwnership(ownerId)
@@ -1813,7 +1923,7 @@ export function attachRealtimeGateway(server, {
           .catch(reportFrontendError)
       } else if (event.type === GatewayClientEvent.INPUT_UNMUTE) {
         explicitSleepRequested = false
-        if (textOnlySession) return
+        if (nonVoiceClient) return
         if (activeVoiceClients.isActive(ownerId, voiceClient)) {
           inputEnabled = true
           outputEnabled = true
@@ -1854,9 +1964,10 @@ export function attachRealtimeGateway(server, {
             ensureFrontend().catch(reportFrontendError)
           }
         }
-      } else if (event.type === GatewayClientEvent.TEXT_MESSAGE) {
-        const text = String(event.text || '').trim()
-        if (!text) return
+      } else if (
+        event.type === GatewayClientEvent.TEXT_MESSAGE
+        || event.type === GatewayClientEvent.INPUT_MESSAGE
+      ) {
         if (sleeping || waking) {
           send(ws, {
             type: 'error',
@@ -1865,28 +1976,15 @@ export function attachRealtimeGateway(server, {
           return
         }
         sleepController.recordActivity()
-        const turnId = `text_${randomUUID().replaceAll('-', '')}`
-        conversationSync.record({
-          ownerId,
-          sessionId,
-          id: `voice:user:${turnId}`,
-          role: 'user',
-          content: text,
-          source: 'text-user',
-          turnId,
-        })
-        send(ws, { type: 'transcript.final', role: 'user', content: text, turnId })
-        ensureFrontend()
-          .then(() => frontend.sendUserText(
-            text,
-            { turnId },
-            {
-              modalities: textOnlySession && event.textOnly === true
-                ? ['text']
-                : undefined,
-            },
-          ))
-          .catch(reportFrontendError)
+        submitInputMessage(event)
+      } else if (event.type === GatewayClientEvent.INPUT_PARTS) {
+        try {
+          pendingInputParts = Array.isArray(event.parts) && event.parts.length
+            ? inputFileParts(normalizeInputParts(event.parts))
+            : []
+        } catch (error) {
+          send(ws, { type: GatewayServerEvent.ERROR, message: error.message })
+        }
       } else if (event.type === GatewayClientEvent.INTERRUPT) {
         sleepController.recordActivity()
         turnGeneration = ++turnSequence

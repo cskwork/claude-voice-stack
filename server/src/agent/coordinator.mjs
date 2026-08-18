@@ -1,4 +1,6 @@
 import { agent } from './agent-client.mjs'
+import { promptWithInputParts } from './acp-content.mjs'
+import { inputAttachmentMetadata } from '../../../shared/input-parts.mjs'
 import { parseCoordinatorPayload } from './acp-backend-session-utils.mjs'
 import { canonicalScope, isDirectiveScope } from '../core/memory-scopes.mjs'
 
@@ -151,6 +153,7 @@ export function buildCoordinatorPrompt({
   voiceSessionId = '',
   turnId = '',
   delivery = {},
+  inputParts = [],
 }) {
   const userModel = userMemories
     .filter(memory => isDirectiveScope(clean(memory.scope)))
@@ -189,6 +192,9 @@ export function buildCoordinatorPrompt({
     input: {
       final_asr: clean(originalRequest),
       objective: clean(objective),
+      ...(inputAttachmentMetadata(inputParts).length
+        ? { attachments: inputAttachmentMetadata(inputParts) }
+        : {}),
       ...(trustedBackendEvent
         ? { trusted_backend_event: trustedBackendEvent }
         : {}),
@@ -243,6 +249,7 @@ export class Coordinator {
       turnId: options.turnId,
       delivery: options.delivery,
     })
+    const initialMessage = promptWithInputParts(prompt, input.inputParts)
     const run = message => this.client.runCoordinator
       ? this.client.runCoordinator(message, {
           ownerId: options.ownerId,
@@ -253,7 +260,7 @@ export class Coordinator {
           onEvent: options.onEvent,
         })
       : Promise.reject(new Error('Coordinator backend is unavailable'))
-    let result = await run(prompt)
+    let result = await run(initialMessage)
     if (!clean(result?.content)) {
       throw new Error('Coordinator backend returned an empty response')
     }

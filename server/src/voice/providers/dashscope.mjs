@@ -31,11 +31,11 @@ function activeModelProfile() {
   return resolveDashScopeRealtimeModelProfile(config.audioModel)
 }
 
-function responseModalities(profile, { textOnly = false } = {}) {
+function responseModalities(profile) {
   const capabilities = profile.modelCapabilities
   return [
     capabilities.textOutput ? 'text' : null,
-    !textOnly && capabilities.audioOutput ? 'audio' : null,
+    capabilities.audioOutput ? 'audio' : null,
   ].filter(Boolean)
 }
 
@@ -65,7 +65,6 @@ export const dashscopeProvider = {
   classifyError,
 
   buildSession: ({ configured, agentContext }) => {
-    const textOnly = agentContext?.textOnly === true
     const profile = activeModelProfile()
     const session = {
       instructions: buildFrontendInstructions(agentContext),
@@ -74,7 +73,7 @@ export const dashscopeProvider = {
       session.tools = frontendTools(agentContext)
     }
     if (!configured) {
-      session.modalities = responseModalities(profile, { textOnly })
+      session.modalities = responseModalities(profile)
       if (profile.modelCapabilities.audioOutput) {
         session.voice = dashscopeProvider.voice()
         session.output_audio_format = 'pcm'
@@ -82,33 +81,33 @@ export const dashscopeProvider = {
       if (profile.transportCapabilities.audioInput) {
         session.input_audio_format = 'pcm'
       }
-      session.turn_detection = !textOnly && profile.transportCapabilities.audioInput
+      session.turn_detection = profile.transportCapabilities.audioInput
         ? profile.sessionDefaults.turnDetection
         : null
     }
     return session
   },
 
-  buildSpeakResponse: (content, { textOnly = false } = {}) => ({
+  buildSpeakResponse: content => ({
     conversation: 'none',
-    modalities: responseModalities(activeModelProfile(), { textOnly }),
+    modalities: responseModalities(activeModelProfile()),
     instructions: speakResponseInstructions(content),
   }),
 
-  buildResultInjection: (content, { textOnly = false } = {}) => ({
+  buildResultInjection: content => ({
     item: {
       type: 'message',
       role: 'user',
       content: [{ type: 'input_text', text: content }],
     },
     response: {
-      modalities: responseModalities(activeModelProfile(), { textOnly }),
+      modalities: responseModalities(activeModelProfile()),
       tool_choice: 'none',
       instructions: resultResponseInstructions,
     },
   }),
 
-  buildPermissionInjection: (permission, { textOnly = false } = {}) => ({
+  buildPermissionInjection: permission => ({
     item: {
       type: 'message',
       role: 'user',
@@ -123,7 +122,7 @@ export const dashscopeProvider = {
       }],
     },
     response: {
-      modalities: responseModalities(activeModelProfile(), { textOnly }),
+      modalities: responseModalities(activeModelProfile()),
       tool_choice: 'none',
       instructions: permissionResponseInstructions,
     },

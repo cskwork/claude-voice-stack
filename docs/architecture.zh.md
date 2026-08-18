@@ -107,7 +107,9 @@ Gateway 直接回答非委派 Work。对于 `delegated` Work，它创建一个�
 
 传递给 `spawn_thinking` 的 `objective` 是对用户请求的保守解释，而非执行计划。
 最近的语音上下文会单独包含在后端 Agent 信封中，因此诸如"继续那个页面"之类的
-引用仍然可以理解。final ASR 仍然是事实来源。
+引用仍然可以理解。final ASR 仍然是事实来源。当前轮附件由 Gateway 自动随任务
+传递；只有任务明确依赖此前轮次的图片或文件时，前台才通过可选的 `input_refs`
+引用 Gateway 分配的会话内输入 ID。没有多模态输入的调用保持原协议不变。
 
 ## 4. 固定后端 Agent Session
 

@@ -73,6 +73,7 @@
     "tui/src/macos-voice-io.mjs",
     "tui/src/pcm-audio.mjs",
     "tui/src/portaudio-voice-io.mjs",
+    "tui/src/terminal-commands.mjs",
     "tui/package.json",
     "web/dist/",
     "README_ZH.md",

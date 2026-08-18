@@ -132,7 +132,10 @@ backend's Session-scoped permission option when available.
 The `objective` passed to `spawn_thinking` is a conservative interpretation of
 the user's request, not an execution plan. Recent voice context is separately
 included in the backend Agent envelope so references such as “continue that
-page” remain understandable. Final ASR remains the source of truth.
+page” remain understandable. Final ASR remains the source of truth. The Gateway
+automatically carries current-turn attachments. Only work that explicitly
+depends on an earlier image or file uses the optional `input_refs` field with a
+conversation-local input ID; calls without multimodal input remain unchanged.
 
 ## 4. Fixed Backend Agent Session
 

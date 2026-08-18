@@ -8,6 +8,7 @@ import { coordinator as defaultCoordinator } from '../agent/coordinator.mjs'
 import { config as defaultConfig } from '../core/config.mjs'
 import { logger as defaultLogger, runWithLogContext } from '../core/logger.mjs'
 import { conversationSync as defaultConversationSync } from '../conversation/conversation-sync.mjs'
+import { InputAssetRegistry } from '../voice/input-asset-registry.mjs'
 import { IdentityManager } from '../core/identity.mjs'
 import { FrontendNotesStore } from '../conversation/frontend-notes.mjs'
 import { MemoryAudit } from '../conversation/memory-audit.mjs'
@@ -34,12 +35,17 @@ export function createGatewayApplication({
   agent = defaultAgent,
   coordinator = defaultCoordinator,
   conversationSync = defaultConversationSync,
+  inputAssets = null,
   taskManager = defaultTaskManager,
   taskStore = defaultTaskStore,
   logger = defaultLogger,
   parentPort = process.parentPort,
   autoStart = true,
 } = {}) {
+const inputAssetRegistry = inputAssets || new InputAssetRegistry({
+  sessionTtlMs: config.conversationSessionTtlMs,
+  maxSessions: config.maxConversationSessions,
+})
 const identityManager = new IdentityManager({
   secret: config.authSecret,
   mode: config.identityMode,
@@ -411,6 +417,7 @@ realtimeGateway = attachRealtimeGateway(server, {
     agent.respondPermission(id, decision, options)
   ),
   permissionPolicy,
+  inputAssets: inputAssetRegistry,
 })
 const start = () => {
   if (server.listening) return server
@@ -468,6 +475,7 @@ return {
     coordinator,
     frontendMemoryService,
     identityManager,
+    inputAssets: inputAssetRegistry,
     notesStore,
     permissionPolicy,
     realtimeGateway,
