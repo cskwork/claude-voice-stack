@@ -49,6 +49,7 @@ import {
   inputFileParts,
   inputText,
   normalizeInputParts,
+  withAttachmentAnchors,
 } from '../../../shared/input-parts.mjs'
 
 const MAX_PENDING_AUDIO_CHUNKS = 30
@@ -1695,7 +1696,10 @@ export function attachRealtimeGateway(server, {
     const submitInputMessage = event => {
       let parts
       try {
-        parts = normalizeInputParts(event.parts, { fallbackText: event.text })
+        parts = withAttachmentAnchors(normalizeInputParts(
+          event.parts,
+          { fallbackText: event.text },
+        ))
       } catch (error) {
         send(ws, { type: GatewayServerEvent.ERROR, message: error.message })
         return

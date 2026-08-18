@@ -17,7 +17,8 @@ TUI 在语音之外也支持文本、图片和普通文件：
 
 附件内容由 TUI 读取后发送给 Gateway。实时语音前台只接收附件摘要；当前台通过
 `spawn_thinking` 委托任务时，Gateway 会把原始附件转换为 ACP ContentBlock，交给
-后台 Agent。单个附件上限为 8 MB，单轮附件总量上限为 12 MB。
+后台 Agent。`[Image 1]` 或 `@文件路径` 会作为文本引用与附件 part 一起保留，便于
+多附件指代、历史重放和后台解析。单个附件上限为 8 MB，单轮附件总量上限为 12 MB。
 
 ## macOS
 

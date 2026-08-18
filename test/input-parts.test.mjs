@@ -5,6 +5,7 @@ import {
   frontendInputProjection,
   normalizeInputParts,
   parseDataUrl,
+  withAttachmentAnchors,
 } from '../shared/input-parts.mjs'
 
 test('normalizes OpenCode-style text and image parts', () => {
@@ -49,4 +50,47 @@ test('uses file labels for file-only turns', () => {
     url: 'data:text/markdown;base64,IyBTa2lsbA==',
   }])
   assert.equal(displayInputText(parts), '@SKILL.md')
+})
+
+test('adds missing attachment anchors to the canonical text prompt', () => {
+  const parts = withAttachmentAnchors(normalizeInputParts([
+    { type: 'text', text: '这是啥' },
+    {
+      type: 'file',
+      mime: 'image/png',
+      filename: 'clipboard.png',
+      url: 'data:image/png;base64,aGVsbG8=',
+      source: { type: 'clipboard', text: { value: '[Image 1]' } },
+    },
+  ]))
+  assert.equal(parts[0].text, '[Image 1] 这是啥')
+  assert.deepEqual(parts[1].source.text, {
+    value: '[Image 1]',
+    start: 0,
+    end: 9,
+  })
+  assert.equal(displayInputText(parts), '[Image 1] 这是啥')
+})
+
+test('preserves existing attachment anchors and is idempotent', () => {
+  const original = normalizeInputParts([
+    { type: 'text', text: '比较 [Image 1] 和 [Image 2]' },
+    {
+      type: 'file',
+      mime: 'image/png',
+      url: 'data:image/png;base64,YQ==',
+      source: { type: 'clipboard', text: { value: '[Image 1]' } },
+    },
+    {
+      type: 'file',
+      mime: 'image/jpeg',
+      url: 'data:image/jpeg;base64,Yg==',
+      source: { type: 'clipboard', text: { value: '[Image 2]' } },
+    },
+  ])
+  const once = withAttachmentAnchors(original)
+  const twice = withAttachmentAnchors(once)
+  assert.deepEqual(twice, once)
+  assert.equal(once[1].source.text.start, 3)
+  assert.equal(once[2].source.text.start, 15)
 })

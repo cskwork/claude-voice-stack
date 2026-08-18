@@ -18,7 +18,9 @@ In addition to voice, the TUI accepts text, images, and regular files:
 The TUI reads attachment content and sends it to the Gateway. The realtime voice
 frontend receives metadata only. When it delegates through `spawn_thinking`, the
 Gateway converts the original attachments into ACP ContentBlocks for the backend
-agent. Each attachment is limited to 8 MB and the per-turn total is limited to 12 MB.
+agent. Text anchors such as `[Image 1]` or `@file-path` remain bound to their file
+parts for multi-attachment references, replay, and backend interpretation. Each
+attachment is limited to 8 MB and the per-turn total is limited to 12 MB.
 
 ## macOS
 

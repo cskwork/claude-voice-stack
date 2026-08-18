@@ -3,6 +3,7 @@ import { basename, resolve } from 'node:path'
 import {
   MAX_INPUT_FILE_BYTES,
   inputPartLabel,
+  withAttachmentAnchors,
 } from '../../shared/input-parts.mjs'
 
 const MIME_BY_EXTENSION = new Map([
@@ -37,7 +38,7 @@ function extension(path) {
   return index >= 0 ? name.slice(index).toLowerCase() : ''
 }
 
-export async function filePartFromPath(value, index = 0) {
+export async function filePartFromPath(value, index = 0, reference = null) {
   const path = resolve(String(value || '').trim())
   const info = await stat(path)
   if (!info.isFile()) throw new Error(`不是普通文件：${path}`)
@@ -47,7 +48,8 @@ export async function filePartFromPath(value, index = 0) {
   const content = await readFile(path)
   const filename = basename(path)
   const mime = MIME_BY_EXTENSION.get(extension(path)) || 'application/octet-stream'
-  const label = mime.startsWith('image/') ? `[Image ${index + 1}]` : `@${filename}`
+  const label = reference?.value
+    || (mime.startsWith('image/') ? `[Image ${index + 1}]` : `@${filename}`)
   return {
     type: 'file',
     mime,
@@ -56,7 +58,11 @@ export async function filePartFromPath(value, index = 0) {
     source: {
       type: 'file',
       path,
-      text: { value: label },
+      text: {
+        value: label,
+        ...(Number.isInteger(reference?.start) ? { start: reference.start } : {}),
+        ...(Number.isInteger(reference?.end) ? { end: reference.end } : {}),
+      },
     },
   }
 }
@@ -65,7 +71,12 @@ function referencedPaths(text) {
   const values = []
   const pattern = /@(?:"([^"]+)"|'([^']+)'|([^\s]+))/g
   for (const match of String(text || '').matchAll(pattern)) {
-    values.push(match[1] || match[2] || match[3])
+    values.push({
+      path: match[1] || match[2] || match[3],
+      value: match[0],
+      start: match.index,
+      end: match.index + match[0].length,
+    })
   }
   return values
 }
@@ -73,11 +84,15 @@ function referencedPaths(text) {
 export async function inputPartsFromText(text, staged = []) {
   const parts = [...staged]
   const paths = referencedPaths(text)
-  for (const path of paths) {
-    const resolved = resolve(path)
+  for (const reference of paths) {
+    const resolved = resolve(reference.path)
     if (parts.some(part => part?.source?.path === resolved)) continue
     try {
-      parts.push(await filePartFromPath(path, parts.length))
+      parts.push(await filePartFromPath(
+        reference.path,
+        parts.length,
+        reference,
+      ))
     } catch (error) {
       // A literal @mention is still ordinary text. Only an existing path is
       // promoted into a file part; explicit attachment selection still
@@ -85,10 +100,10 @@ export async function inputPartsFromText(text, staged = []) {
       if (!['ENOENT', 'ENOTDIR'].includes(error?.code)) throw error
     }
   }
-  return [
+  return withAttachmentAnchors([
     ...(String(text || '').trim() ? [{ type: 'text', text: String(text).trim() }] : []),
     ...parts,
-  ]
+  ])
 }
 
 export function stagedInputSummary(parts = []) {

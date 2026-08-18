@@ -2,10 +2,11 @@ import { useCallback, useRef, useState } from 'react'
 import {
   MAX_INPUT_FILE_BYTES,
   inputPartLabel,
+  withAttachmentAnchors,
 } from '../../shared/input-parts.mjs'
 import { t } from './i18n.js'
 
-function filePart(file, index) {
+function filePart(file, index, sourceType = 'file') {
   return new Promise((resolve, reject) => {
     if (file.size > MAX_INPUT_FILE_BYTES) {
       reject(new Error(t('文件 {name} 超过 8 MB 限制', { name: file.name })))
@@ -24,7 +25,7 @@ function filePart(file, index) {
           filename: file.name,
           url: String(reader.result || ''),
           source: {
-            type: 'file',
+            type: sourceType,
             text: { value: label },
           },
         },
@@ -45,12 +46,12 @@ export default function MultimodalComposer({ onSend, onStage }) {
     onStage(next.map(item => item.part))
   }, [onStage])
 
-  const addFiles = useCallback(async fileList => {
+  const addFiles = useCallback(async (fileList, sourceType = 'file') => {
     const files = [...fileList]
     if (!files.length) return
     try {
       const next = await Promise.all(files.map((file, index) => (
-        filePart(file, attachments.length + index)
+        filePart(file, attachments.length + index, sourceType)
       )))
       updateAttachments([...attachments, ...next])
       setError('')
@@ -63,10 +64,10 @@ export default function MultimodalComposer({ onSend, onStage }) {
     event.preventDefault()
     const content = text.trim()
     if (!content && !attachments.length) return
-    const parts = [
+    const parts = withAttachmentAnchors([
       ...(content ? [{ type: 'text', text: content }] : []),
       ...attachments.map(item => item.part),
-    ]
+    ])
     if (!onSend(parts)) {
       setError(t('Gateway 尚未连接'))
       return
@@ -122,7 +123,7 @@ export default function MultimodalComposer({ onSend, onStage }) {
           const files = event.clipboardData?.files
           if (!files?.length) return
           event.preventDefault()
-          addFiles(files)
+          addFiles(files, 'clipboard')
         }}
         onKeyDown={event => {
           if (event.key === 'Enter' && !event.shiftKey) submit(event)

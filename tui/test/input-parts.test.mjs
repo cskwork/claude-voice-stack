@@ -25,6 +25,18 @@ test('expands @path references into file parts', async () => {
   const parts = await inputPartsFromText(`分析 @${path}`)
   assert.equal(parts[0].type, 'text')
   assert.equal(parts[1].filename, 'sample.txt')
+  assert.equal(parts[1].source.text.value, `@${path}`)
+  assert.equal(parts[1].source.text.start, 3)
+})
+
+test('adds a staged attachment reference to the submitted text', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'qaa-tui-input-'))
+  const path = join(directory, 'screen.png')
+  await writeFile(path, 'image')
+  const staged = [await filePartFromPath(path)]
+  const parts = await inputPartsFromText('这是什么', staged)
+  assert.equal(parts[0].text, '[Image 1] 这是什么')
+  assert.equal(parts[1].source.text.start, 0)
 })
 
 test('keeps ordinary @mentions as text when they are not paths', async () => {

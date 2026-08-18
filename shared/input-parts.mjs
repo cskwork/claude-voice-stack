@@ -41,7 +41,7 @@ function normalizeSource(source) {
     : 'file'
   const text = source.text && typeof source.text === 'object'
     ? {
-        value: cleanText(source.text.value, 120),
+        value: cleanText(source.text.value, 2048),
         ...(Number.isInteger(source.text.start) ? { start: source.text.start } : {}),
         ...(Number.isInteger(source.text.end) ? { end: source.text.end } : {}),
       }
@@ -128,11 +128,72 @@ export function inputFileParts(parts = []) {
   return parts.filter(part => part?.type === 'file')
 }
 
-export function inputPartLabel(part, index = 0) {
+export function inputPartReference(part, index = 0) {
   const supplied = String(part?.source?.text?.value || '').trim()
-  if (supplied) return supplied.slice(0, 120)
+  if (supplied) return supplied.slice(0, 2048)
   if (String(part?.mime || '').startsWith('image/')) return `[Image ${index + 1}]`
   return part?.filename ? `@${part.filename}` : `[File ${index + 1}]`
+}
+
+export function inputPartLabel(part, index = 0) {
+  return inputPartReference(part, index).slice(0, 120)
+}
+
+function uniqueAttachmentReferences(files) {
+  const used = new Set()
+  return files.map((part, index) => {
+    let reference = inputPartReference(part, index)
+    if (!used.has(reference)) {
+      used.add(reference)
+      return reference
+    }
+    const prefix = String(part?.mime || '').startsWith('image/')
+      ? 'Image'
+      : 'File'
+    let ordinal = index + 1
+    do {
+      reference = `[${prefix} ${ordinal}]`
+      ordinal += 1
+    } while (used.has(reference))
+    used.add(reference)
+    return reference
+  })
+}
+
+/**
+ * Ensure every attachment has a textual reference anchor and bind that anchor
+ * back to the file part with OpenCode-compatible source.text offsets.
+ *
+ * The file part remains authoritative. The text anchor preserves the user's
+ * visible prompt and makes multi-attachment references replayable.
+ */
+export function withAttachmentAnchors(parts = []) {
+  const files = inputFileParts(parts)
+  if (!files.length) return parts
+  const references = uniqueAttachmentReferences(files)
+  const originalText = inputText(parts)
+  const missing = references.filter(reference => !originalText.includes(reference))
+  const text = [missing.join(' '), originalText].filter(Boolean).join(' ')
+  let searchFrom = 0
+  const anchoredFiles = files.map((part, index) => {
+    const reference = references[index]
+    let start = text.indexOf(reference, searchFrom)
+    if (start < 0) start = text.indexOf(reference)
+    searchFrom = start + reference.length
+    return {
+      ...part,
+      source: {
+        ...(part.source || {}),
+        type: part.source?.type || 'file',
+        text: {
+          value: reference,
+          start,
+          end: start + reference.length,
+        },
+      },
+    }
+  })
+  return [{ type: 'text', text }, ...anchoredFiles]
 }
 
 export function frontendInputProjection(parts = [], { accompaniesVoice = false } = {}) {
