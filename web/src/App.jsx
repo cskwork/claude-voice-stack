@@ -249,41 +249,52 @@ export default function App() {
 
   useEffect(() => {
     let cancelled = false
-    fetch('api/health', { cache: 'no-store' })
-      .then(async response => ({ response, payload: await response.json() }))
-      .then(({ response, payload }) => {
-        if (cancelled) return
-        const label = payload.backend?.label || payload.backend?.kind || 'Agent'
-        setFrontend({
-          label: payload.realtimeLabel || payload.realtimeProvider || 'Realtime Agent',
-        })
-        setRealtimeProviders(payload.realtimeProviders || [])
-        setModelStatus(realtimeModelStatus(payload))
-        // A front end persisted by an earlier visit may no longer exist on this
-        // server (removed provider, different deployment). Sending it would be
-        // refused on every connect, so the stale selection is dropped in favour
-        // of the server default instead of leaving the client stuck.
-        setRealtimeProvider(current => {
-          const selection = realtimeProviderSelection(current, payload)
-          setProviderNotice(selection.notice)
-          if (selection.provider !== current) {
-            localStorage.removeItem('qwen-audio-agent.realtimeProvider')
+    let retryTimer = null
+    const loadHealth = () => {
+      fetch('api/health', { cache: 'no-store' })
+        .then(async response => ({ response, payload: await response.json() }))
+        .then(({ response, payload }) => {
+          if (cancelled) return
+          const label = payload.backend?.label || payload.backend?.kind || 'Agent'
+          setFrontend({
+            label: payload.realtimeLabel || payload.realtimeProvider || 'Realtime Agent',
+          })
+          setRealtimeProviders(payload.realtimeProviders || [])
+          setModelStatus(realtimeModelStatus(payload))
+          // A front end persisted by an earlier visit may no longer exist on this
+          // server (removed provider, different deployment). Sending it would be
+          // refused on every connect, so the stale selection is dropped in favour
+          // of the server default instead of leaving the client stuck.
+          setRealtimeProvider(current => {
+            const selection = realtimeProviderSelection(current, payload)
+            setProviderNotice(selection.notice)
+            if (selection.provider !== current) {
+              localStorage.removeItem('qwen-audio-agent.realtimeProvider')
+            }
+            return selection.provider
+          })
+          setHealthValidated(true)
+          const backendReady = Boolean(response.ok && payload.backend?.ok)
+          setBackend({
+            label,
+            ready: backendReady,
+            url: payload.backend?.uiPath || payload.backend?.baseUrl || '',
+          })
+          setActivity(response.ok ? t('Gateway 已连接') : t('能力服务尚未连接'))
+          // 后台 Agent 就绪需要数秒（Pi 经 pi-acp 适配器甚至更慢）；首次拉取
+          // 时尚未就绪会让状态灯一直灰色。已配置但未就绪时持续重试。
+          if (response.ok && payload.backend?.kind && !backendReady) {
+            retryTimer = setTimeout(loadHealth, 5000)
           }
-          return selection.provider
         })
-        setHealthValidated(true)
-        setBackend({
-          label,
-          ready: response.ok && payload.backend?.ok,
-          url: payload.backend?.uiPath || payload.backend?.baseUrl || '',
+        .catch(() => {
+          if (!cancelled) setActivity(t('qwen-audio-agent Gateway 尚未连接'))
         })
-        setActivity(response.ok ? t('Gateway 已连接') : t('能力服务尚未连接'))
-      })
-      .catch(() => {
-        if (!cancelled) setActivity(t('qwen-audio-agent Gateway 尚未连接'))
-      })
+    }
+    loadHealth()
     return () => {
       cancelled = true
+      clearTimeout(retryTimer)
     }
   }, [])
 
