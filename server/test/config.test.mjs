@@ -107,9 +107,8 @@ test('maps one backend model name to each managed backend provider', () => {
     codeBuddy: 'qwen3.7-plus',
     codex: 'qwen3.7-plus',
     claude: 'qwen3.7-plus',
-    deepSeekHarness: '',
-
     pi: 'qwen3.7-plus',
+    deepSeekHarness: '',
     acp: 'qwen3.7-plus',
   })
 })
@@ -129,9 +128,8 @@ test('ignores backend-native model variables as Gateway overrides', () => {
     codeBuddy: '',
     codex: '',
     claude: '',
-    deepSeekHarness: '',
-
     pi: '',
+    deepSeekHarness: '',
     acp: '',
   })
 })
@@ -150,9 +148,8 @@ test('treats legacy auto as no backend model override', () => {
     codeBuddy: '',
     codex: '',
     claude: '',
-    deepSeekHarness: '',
-
     pi: '',
+    deepSeekHarness: '',
     acp: '',
   })
 })
@@ -172,9 +169,8 @@ test('uses only the unified backend model override', () => {
     codeBuddy: 'qwen3.7-max',
     codex: 'qwen3.7-max',
     claude: 'qwen3.7-max',
-    deepSeekHarness: '',
-
     pi: 'qwen3.7-max',
+    deepSeekHarness: '',
     acp: 'qwen3.7-max',
   })
 })

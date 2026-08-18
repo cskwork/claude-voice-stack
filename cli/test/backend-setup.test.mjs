@@ -195,56 +195,6 @@ test('checks explicit generic ACP commands and adapter binaries', () => {
   assert.equal(claude.adapter.source, 'installed')
 })
 
-test('detects the DeepSeek Harness ACP runtime', () => {
-  const item = inspector({
-    backend: 'deepseek',
-    commands: {
-      dsh: '/bin/dsh',
-      'dsh-acp-demo': '/bin/dsh-acp-demo',
-    },
-  }).backends[0]
-  assert.equal(item.ready, true)
-  assert.equal(item.integration, 'native')
-})
-
-test('requires both the DeepSeek Harness CLI and ACP runtime', () => {
-  const missingCli = inspector({
-    backend: 'deepseek',
-    commands: { 'dsh-acp-demo': '/bin/dsh-acp-demo' },
-  }).backends[0]
-  assert.equal(missingCli.ready, false)
-  assert.match(missingCli.issues[0], /DeepSeek/)
-
-  const missingAcp = inspector({
-    backend: 'deepseek',
-    commands: { dsh: '/bin/dsh', npx: '/bin/npx' },
-  }).backends[0]
-  assert.equal(missingAcp.ready, false)
-  assert.match(missingAcp.issues[0], /dsh-acp-demo/)
-})
-
-test('requires every pinned DeepSeek runtime package', () => {
-  const item = inspector({
-    backend: 'deepseek',
-    commands: {
-      dsh: '/bin/dsh',
-      'dsh-acp-demo': '/bin/dsh-acp-demo',
-      npm: '/bin/npm',
-    },
-    globalPackages: {
-      '@deepseek-ai/dsh': '0.1.0-rc.6',
-      '@deepseek-ai/dsh-acp-demo': '0.1.0-rc.6',
-    },
-  }).backends[0]
-  assert.equal(item.backend.ready, true)
-  assert.equal(item.adapter.ready, true)
-  assert.equal(item.ready, false)
-  assert.match(item.issues[0], /dsh-llm-deepseek/)
-  assert.equal(
-    item.packages.find(entry => entry.name === '@deepseek-ai/dsh-llm-deepseek').ready,
-    false,
-  )
-
 test('requires a compatible Pi version and its ACP adapter', () => {
   const ready = inspector({
     backend: 'pi',
@@ -303,6 +253,57 @@ test('requires a compatible Pi version and its ACP adapter', () => {
   }).backends[0]
   assert.equal(installedOnly.ready, false)
   assert.match(installedOnly.issues[0], /桌面版需先手动安装/)
+})
+
+test('detects the DeepSeek Harness ACP runtime', () => {
+  const item = inspector({
+    backend: 'deepseek',
+    commands: {
+      dsh: '/bin/dsh',
+      'dsh-acp-demo': '/bin/dsh-acp-demo',
+    },
+  }).backends[0]
+  assert.equal(item.ready, true)
+  assert.equal(item.integration, 'native')
+})
+
+test('requires both the DeepSeek Harness CLI and ACP runtime', () => {
+  const missingCli = inspector({
+    backend: 'deepseek',
+    commands: { 'dsh-acp-demo': '/bin/dsh-acp-demo' },
+  }).backends[0]
+  assert.equal(missingCli.ready, false)
+  assert.match(missingCli.issues[0], /DeepSeek/)
+
+  const missingAcp = inspector({
+    backend: 'deepseek',
+    commands: { dsh: '/bin/dsh', npx: '/bin/npx' },
+  }).backends[0]
+  assert.equal(missingAcp.ready, false)
+  assert.match(missingAcp.issues[0], /dsh-acp-demo/)
+})
+
+test('requires every pinned DeepSeek runtime package', () => {
+  const item = inspector({
+    backend: 'deepseek',
+    commands: {
+      dsh: '/bin/dsh',
+      'dsh-acp-demo': '/bin/dsh-acp-demo',
+      npm: '/bin/npm',
+    },
+    globalPackages: {
+      '@deepseek-ai/dsh': '0.1.0-rc.6',
+      '@deepseek-ai/dsh-acp-demo': '0.1.0-rc.6',
+    },
+  }).backends[0]
+  assert.equal(item.backend.ready, true)
+  assert.equal(item.adapter.ready, true)
+  assert.equal(item.ready, false)
+  assert.match(item.issues[0], /dsh-llm-deepseek/)
+  assert.equal(
+    item.packages.find(entry => entry.name === '@deepseek-ai/dsh-llm-deepseek').ready,
+    false,
+  )
 })
 
 test('honors explicit package and binary runtime requirements', () => {
