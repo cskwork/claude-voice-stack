@@ -144,36 +144,34 @@ test('carries originating turn metadata to a created realtime response', () => {
 test('only reports a queued announcement as completed after response.done', async () => {
   const frontend = createQwenFrontend()
   frontend.ready = true
-  const responseRequested = Promise.withResolvers()
+  let waitingAfterCreated = false
   frontend.send = event => {
-    if (event.type === 'response.create') responseRequested.resolve()
+    if (event.type !== 'response.create') return
+    const requestId = frontend.pendingResponses[0].requestId
+    frontend.handleLifecycle({
+      type: 'response.created',
+      response: {
+        id: 'response-1',
+        metadata: { qwen_audio_request_id: requestId },
+      },
+    })
+    waitingAfterCreated = frontend.responseWaiters.has('response-1')
+    frontend.handleLifecycle({
+      type: 'response.done',
+      response: { id: 'response-1', status: 'completed' },
+    })
   }
 
   const outcome = frontend.speak('任务完成', 'agent', {
     turnId: 'voice-100-1',
     taskId: 'job-1',
   })
-  await responseRequested.promise
-  frontend.handleLifecycle({
-    type: 'response.created',
-    response: { id: 'response-1' },
-  })
-  let settled = false
-  outcome.then(() => {
-    settled = true
-  })
-  await Promise.resolve()
-  assert.equal(settled, false)
-
-  frontend.handleLifecycle({
-    type: 'response.done',
-    response: { id: 'response-1', status: 'completed' },
-  })
 
   assert.deepEqual(await outcome, {
     completed: true,
     responseId: 'response-1',
   })
+  assert.equal(waitingAfterCreated, true)
 })
 
 test('keeps a long response alive while output activity continues', async () => {
