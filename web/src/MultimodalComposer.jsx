@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from 'react'
 import {
   MAX_INPUT_FILE_BYTES,
+  createInputFilePart,
   inputPartLabel,
   withAttachmentAnchors,
 } from '../../shared/input-parts.mjs'
@@ -15,20 +16,14 @@ function filePart(file, index, sourceType = 'file') {
     const reader = new FileReader()
     reader.onerror = () => reject(reader.error || new Error(t('无法读取文件')))
     reader.onload = () => {
-      const image = file.type.startsWith('image/')
-      const label = image ? `[Image ${index + 1}]` : `@${file.name}`
       resolve({
         id: crypto.randomUUID(),
-        part: {
-          type: 'file',
+        part: createInputFilePart({
           mime: file.type || 'application/octet-stream',
           filename: file.name,
           url: String(reader.result || ''),
-          source: {
-            type: sourceType,
-            text: { value: label },
-          },
-        },
+          sourceType,
+        }, index),
       })
     }
     reader.readAsDataURL(file)

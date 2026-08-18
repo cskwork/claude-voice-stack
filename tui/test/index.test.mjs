@@ -295,6 +295,46 @@ test('keeps a fixed composer active while asynchronous output arrives', async ()
   assert.match(output, /\u001b\[\?1049l/)
 })
 
+test('replaces a bracketed pasted path with an attachment anchor', async () => {
+  const stdin = new PassThrough()
+  const stdout = new PassThrough()
+  stdin.isTTY = true
+  stdin.setRawMode = () => {}
+  stdout.isTTY = true
+  stdout.columns = 80
+  stdout.rows = 12
+  const submitted = []
+  const changes = []
+  let applied = 0
+  let pasteIndex = 0
+  const renderer = createPersistentTerminalRenderer({
+    stdin,
+    stdout,
+    onLine: value => submitted.push(value),
+    onPaste: async value => ({
+      text: value.endsWith('.png') ? `[Image ${++pasteIndex}]` : value,
+      apply: () => { applied += 1 },
+    }),
+    onChange: value => changes.push(value),
+  })
+
+  stdin.write('\u001b[200~/tmp/cat.png\u001b[201~')
+  stdin.write(' ')
+  stdin.write('\u001b[200~/tmp/dog.png\u001b[201~')
+  await new Promise(resolve => setImmediate(resolve))
+  stdin.write('\n')
+  await new Promise(resolve => setImmediate(resolve))
+  renderer.close()
+
+  assert.equal(applied, 2)
+  assert.equal(changes.at(-1), '[Image 1] [Image 2]')
+  assert.deepEqual(submitted, ['[Image 1] [Image 2]'])
+  const output = stdout.read().toString()
+  assert.match(output, /你 > \[Image 1\] \[Image 2\]/)
+  assert.match(output, /\u001b\[\?2004h/)
+  assert.match(output, /\u001b\[\?2004l/)
+})
+
 test('drops queued microphone frames whenever half-duplex capture is gated', () => {
   assert.equal(canSendMicrophoneAudio({
     connected: true,

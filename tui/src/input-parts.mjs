@@ -3,6 +3,7 @@ import { basename, isAbsolute, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   MAX_INPUT_FILE_BYTES,
+  createInputFilePart,
   inputPartLabel,
   withAttachmentAnchors,
 } from '../../shared/input-parts.mjs'
@@ -49,23 +50,23 @@ export async function filePartFromPath(value, index = 0, reference = null) {
   const content = await readFile(path)
   const filename = basename(path)
   const mime = MIME_BY_EXTENSION.get(extension(path)) || 'application/octet-stream'
-  const label = reference?.value
-    || (mime.startsWith('image/') ? `[Image ${index + 1}]` : `@${filename}`)
-  return {
-    type: 'file',
+  const label = reference?.value || (
+    mime.startsWith('image/') ? '' : `@${path}`
+  )
+  const part = createInputFilePart({
     mime,
     filename,
     url: `data:${mime};base64,${content.toString('base64')}`,
-    source: {
-      type: 'file',
-      path,
-      text: {
-        value: label,
-        ...(Number.isInteger(reference?.start) ? { start: reference.start } : {}),
-        ...(Number.isInteger(reference?.end) ? { end: reference.end } : {}),
-      },
-    },
+    path,
+    reference: label,
+  }, index)
+  if (Number.isInteger(reference?.start)) {
+    part.source.text.start = reference.start
   }
+  if (Number.isInteger(reference?.end)) {
+    part.source.text.end = reference.end
+  }
+  return part
 }
 
 function referencedPaths(text) {
@@ -117,14 +118,22 @@ function pastedPathReferences(text) {
   return references
 }
 
-export async function inputPartsFromText(text, staged = []) {
+export async function inputPartsFromText(
+  text,
+  staged = [],
+  { attachmentOffset = staged.length } = {},
+) {
   const content = String(text || '').trim()
   const parts = [...staged]
+  const initialPartCount = parts.length
+  const nextAttachmentIndex = () => (
+    attachmentOffset + parts.length - initialPartCount
+  )
   const paths = referencedPaths(content)
   const directPath = paths.length ? '' : pastedFilePath(content)
   if (directPath) {
     try {
-      parts.push(await filePartFromPath(directPath, parts.length))
+      parts.push(await filePartFromPath(directPath, nextAttachmentIndex()))
       return withAttachmentAnchors(parts)
     } catch (error) {
       // A missing pasted path may still be intentional text. Existing paths
@@ -136,7 +145,10 @@ export async function inputPartsFromText(text, staged = []) {
     const replacements = []
     for (const reference of pastedPathReferences(content)) {
       try {
-        const part = await filePartFromPath(reference.path, parts.length)
+        const part = await filePartFromPath(
+          reference.path,
+          nextAttachmentIndex(),
+        )
         parts.push(part)
         replacements.push({
           ...reference,
@@ -165,7 +177,7 @@ export async function inputPartsFromText(text, staged = []) {
     try {
       parts.push(await filePartFromPath(
         reference.path,
-        parts.length,
+        nextAttachmentIndex(),
         reference,
       ))
     } catch (error) {

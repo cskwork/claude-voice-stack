@@ -5,7 +5,11 @@ import {
   GatewayClientEvent,
   GatewayServerEvent,
 } from '../../shared/realtime-events.mjs'
-import { displayInputText } from '../../shared/input-parts.mjs'
+import {
+  displayInputText,
+  inputFileParts,
+  inputText,
+} from '../../shared/input-parts.mjs'
 import { createLogger } from '../../shared/logger.mjs'
 import { startMacVoiceIO } from './macos-voice-io.mjs'
 import { resamplePcm16 } from './pcm-audio.mjs'
@@ -637,6 +641,8 @@ export function createPersistentTerminalRenderer({
   stdout = process.stdout,
   prompt = '你 > ',
   onLine = async () => {},
+  onPaste = async value => value,
+  onChange = () => {},
   onClose = () => {},
 } = {}) {
   const entries = []
@@ -644,6 +650,9 @@ export function createPersistentTerminalRenderer({
   let draft = []
   let cursor = 0
   let scrollOffset = 0
+  let pasteBuffer = null
+  let pasteQueue = Promise.resolve()
+  const pendingPastes = []
   let status = 'Gateway 连接中 · 麦克风准备中'
   let closed = false
   let closeRequested = false
@@ -814,7 +823,7 @@ export function createPersistentTerminalRenderer({
       if (stdin.isTTY && typeof stdin.setRawMode === 'function') {
         stdin.setRawMode(false)
       }
-      stdout.write('\u001b[?25h\u001b[?1049l')
+      stdout.write('\u001b[?2004l\u001b[?25h\u001b[?1049l')
     },
   }
   const submit = value => {
@@ -828,8 +837,65 @@ export function createPersistentTerminalRenderer({
     closeRequested = true
     onClose()
   }
+  const insert = value => {
+    const inserted = Array.from(value)
+    const start = cursor
+    draft.splice(cursor, 0, ...inserted)
+    cursor += inserted.length
+    return { start, length: inserted.length }
+  }
+  const resolvePaste = (value, insertion) => {
+    pendingPastes.push(insertion)
+    pasteQueue = pasteQueue
+      .then(() => onPaste(value))
+      .then(result => {
+        if (closed) return
+        const replacement = typeof result === 'string'
+          ? result
+          : String(result?.text ?? value)
+        const original = draft
+          .slice(insertion.start, insertion.start + insertion.length)
+          .join('')
+        if (original !== value) return
+        const characters = Array.from(replacement)
+        draft.splice(insertion.start, insertion.length, ...characters)
+        const delta = characters.length - insertion.length
+        for (const pending of pendingPastes) {
+          if (pending !== insertion && pending.start > insertion.start) {
+            pending.start += delta
+          }
+        }
+        if (cursor >= insertion.start + insertion.length) cursor += delta
+        else if (cursor > insertion.start) cursor = insertion.start + characters.length
+        result?.apply?.()
+        onChange(draft.join(''))
+        redraw()
+      })
+      .catch(error => renderer.print(`[附件错误] ${error.message}`))
+      .finally(() => {
+        const index = pendingPastes.indexOf(insertion)
+        if (index >= 0) pendingPastes.splice(index, 1)
+      })
+  }
   const handleKeypress = (value, key = {}) => {
     if (closed) return
+    if (key.name === 'paste-start') {
+      pasteBuffer = ''
+      return
+    }
+    if (key.name === 'paste-end') {
+      const pasted = String(pasteBuffer || '').replace(/[\r\n]+/g, ' ')
+      pasteBuffer = null
+      if (!pasted) return
+      const insertion = insert(pasted)
+      redraw()
+      resolvePaste(pasted, insertion)
+      return
+    }
+    if (pasteBuffer !== null) {
+      pasteBuffer += value || ''
+      return
+    }
     if (key.ctrl && key.name === 'c') {
       requestClose()
       return
@@ -843,10 +909,17 @@ export function createPersistentTerminalRenderer({
       submit(submitted)
       return
     }
+    let changed = false
     if (key.name === 'backspace') {
-      if (cursor > 0) draft.splice(--cursor, 1)
+      if (cursor > 0) {
+        draft.splice(--cursor, 1)
+        changed = true
+      }
     } else if (key.name === 'delete') {
-      if (cursor < draft.length) draft.splice(cursor, 1)
+      if (cursor < draft.length) {
+        draft.splice(cursor, 1)
+        changed = true
+      }
     } else if (key.name === 'left') {
       cursor = Math.max(0, cursor - 1)
     } else if (key.name === 'right') {
@@ -865,10 +938,10 @@ export function createPersistentTerminalRenderer({
     } else if (key.ctrl || key.meta || key.name === 'escape') {
       return
     } else if (value && !/^[\u0000-\u001f\u007f]$/.test(value)) {
-      const inserted = Array.from(value)
-      draft.splice(cursor, 0, ...inserted)
-      cursor += inserted.length
+      insert(value)
+      changed = true
     } else return
+    if (changed) onChange(draft.join(''))
     redraw()
   }
   emitKeypressEvents(stdin)
@@ -877,7 +950,7 @@ export function createPersistentTerminalRenderer({
   }
   stdin.on('keypress', handleKeypress)
   stdout.on?.('resize', redraw)
-  stdout.write('\u001b[?1049h')
+  stdout.write('\u001b[?1049h\u001b[?2004h')
   redraw()
   return renderer
 }
@@ -1015,6 +1088,9 @@ export async function runTui(options = parseArguments(process.argv.slice(2))) {
   let audioBridge = null
   let playback = null
   let handleTerminalLine = async () => {}
+  let stagedInputParts = []
+  let publishStagedInputParts = () => {}
+  let reconcileStagedInputParts = () => {}
   const typedTranscripts = []
   const pendingPermissionTasks = new Set()
   let close = () => {}
@@ -1025,6 +1101,21 @@ export async function runTui(options = parseArguments(process.argv.slice(2))) {
 
   const transcriptRenderer = createPersistentTerminalRenderer({
     onLine: value => handleTerminalLine(value),
+    onPaste: async value => {
+      const parts = await inputPartsFromText(value, [], {
+        attachmentOffset: stagedInputParts.length,
+      })
+      const files = inputFileParts(parts)
+      if (!files.length) return value
+      return {
+        text: inputText(parts),
+        apply() {
+          stagedInputParts = [...stagedInputParts, ...files]
+          publishStagedInputParts()
+        },
+      }
+    },
+    onChange: value => reconcileStagedInputParts(value),
     onClose: () => close(),
   })
   const print = text => transcriptRenderer.print(text)
@@ -1088,6 +1179,21 @@ export async function runTui(options = parseArguments(process.argv.slice(2))) {
         audio: chunk.toString('base64'),
       }))
     }
+  }
+  publishStagedInputParts = () => {
+    if (socket?.readyState !== WebSocket.OPEN) return
+    socket.send(JSON.stringify({
+      type: GatewayClientEvent.INPUT_PARTS,
+      parts: stagedInputParts,
+    }))
+  }
+  reconcileStagedInputParts = value => {
+    const next = stagedInputParts.filter(part => (
+      String(value || '').includes(String(part?.source?.text?.value || ''))
+    ))
+    if (next.length === stagedInputParts.length) return
+    stagedInputParts = next
+    publishStagedInputParts()
   }
 
   const startVoiceIO = audioMode.audioBackend === 'coreaudio'
@@ -1196,7 +1302,10 @@ export async function runTui(options = parseArguments(process.argv.slice(2))) {
 
   const sendTextInput = async text => {
     if (!text.trim()) return
-    const parts = await inputPartsFromText(text)
+    const referencedParts = stagedInputParts.filter(part => (
+      text.includes(String(part?.source?.text?.value || ''))
+    ))
+    const parts = await inputPartsFromText(text, referencedParts)
     if (socket?.readyState !== WebSocket.OPEN) {
       throw new Error('Gateway 尚未连接')
     }
@@ -1205,6 +1314,8 @@ export async function runTui(options = parseArguments(process.argv.slice(2))) {
       parts,
     }))
     const transcript = displayInputText(parts)
+    stagedInputParts = []
+    publishStagedInputParts()
     typedTranscripts.push(transcript)
     transcriptRenderer.finish(userPrefix, transcript)
   }
@@ -1409,6 +1520,7 @@ export async function runTui(options = parseArguments(process.argv.slice(2))) {
         outputEnabled: true,
         takeover: options.takeover === true,
       })))
+      publishStagedInputParts()
       syncActiveTasks().catch(error => {
         print(style(`[任务状态] ${error.message}`, 'yellow'))
       })

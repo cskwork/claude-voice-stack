@@ -41,6 +41,28 @@ test('promotes a directly pasted local path into an attachment', async () => {
   assert.equal(parts[1].source.path, path)
 })
 
+test('numbers pasted images after attachments already staged in the composer', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'qaa-tui-input-'))
+  const path = join(directory, 'third.png')
+  await writeFile(path, 'image')
+
+  const parts = await inputPartsFromText(path, [], { attachmentOffset: 2 })
+
+  assert.equal(parts[0].text, '[Image 3]')
+  assert.equal(parts[1].source.text.value, '[Image 3]')
+})
+
+test('keeps the trusted local path visible for a pasted regular file', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'qaa-tui-input-'))
+  const path = join(directory, 'SKILL.md')
+  await writeFile(path, '# Skill')
+
+  const parts = await inputPartsFromText(path)
+
+  assert.equal(parts[0].text, `@${path}`)
+  assert.equal(parts[1].source.text.value, `@${path}`)
+})
+
 test('replaces a pasted path inside a prompt with an attachment anchor', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'qaa-tui-input-'))
   const path = join(directory, 'cat image.png')

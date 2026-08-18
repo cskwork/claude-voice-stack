@@ -1,12 +1,30 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
+  createInputFilePart,
   displayInputText,
   frontendInputProjection,
   normalizeInputParts,
   parseDataUrl,
   withAttachmentAnchors,
 } from '../shared/input-parts.mjs'
+
+test('creates the same default attachment references for every client', () => {
+  const image = createInputFilePart({
+    mime: 'image/png',
+    filename: 'cat.png',
+    url: 'data:image/png;base64,YQ==',
+    sourceType: 'clipboard',
+  }, 1)
+  const file = createInputFilePart({
+    mime: 'text/markdown',
+    filename: 'SKILL.md',
+    url: 'data:text/markdown;base64,YQ==',
+  })
+  assert.equal(image.source.text.value, '[Image 2]')
+  assert.equal(image.source.type, 'clipboard')
+  assert.equal(file.source.text.value, '@SKILL.md')
+})
 
 test('normalizes OpenCode-style text and image parts', () => {
   const parts = normalizeInputParts([

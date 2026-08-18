@@ -20,9 +20,13 @@ Use `PageUp` / `PageDown` to browse history and `Ctrl-C` to exit at any time.
 In addition to voice, the TUI accepts text, images, and regular files:
 
 - Type directly in the bottom composer and press Enter to send.
-- Paste a local file path to detect and attach that file automatically.
+- Paste a local file path to immediately show an image as `[Image N]` or a
+  regular file as `@absolute-path`, staging it for the next turn.
 - An `@file-path` in the text is sent as an attachment.
 - Enter `/mute` to mute or restore the microphone, or `/help` for all commands.
+
+A staged attachment can accompany either composer text or the next voice turn.
+Deleting its anchor from the composer also removes the staged attachment.
 
 The TUI reads attachment content and sends it to the Gateway. The realtime voice
 frontend receives metadata only. When it delegates through `spawn_thinking`, the

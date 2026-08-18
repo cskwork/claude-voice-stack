@@ -135,6 +135,31 @@ export function inputPartReference(part, index = 0) {
   return part?.filename ? `@${part.filename}` : `[File ${index + 1}]`
 }
 
+export function createInputFilePart({
+  mime,
+  filename,
+  url,
+  sourceType = 'file',
+  path = '',
+  reference = '',
+} = {}, index = 0) {
+  const part = {
+    type: 'file',
+    mime: String(mime || 'application/octet-stream'),
+    ...(filename ? { filename: String(filename) } : {}),
+    url: String(url || ''),
+  }
+  const value = String(reference || inputPartReference(part, index))
+  return {
+    ...part,
+    source: {
+      type: sourceType,
+      ...(path ? { path: String(path) } : {}),
+      text: { value },
+    },
+  }
+}
+
 export function inputPartLabel(part, index = 0) {
   return inputPartReference(part, index).slice(0, 120)
 }
