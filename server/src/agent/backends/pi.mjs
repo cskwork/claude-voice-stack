@@ -4,6 +4,15 @@ import { baseEnvironment, clean, processAcpConnection } from './shared.mjs'
 export const piBackendDriver = {
   id: 'pi',
   label: 'Pi',
+  capabilities: {
+    delegation: true,
+    permissions: true,
+    backendUi: false,
+    nativeSessionHistory: true,
+    externalMcp: true,
+    nativeDelegation: false,
+    sessionMcp: true,
+  },
 
   createProfile({
     root,
@@ -17,7 +26,7 @@ export const piBackendDriver = {
         args: [resolve(root, 'scripts/pi-acp.mjs')],
         cwd: directory,
         env: {
-          ...baseEnvironment(),
+          ...baseEnvironment('pi'),
           ELECTRON_RUN_AS_NODE: '1',
           ...(clean(cliPath) ? { PI_ACP_BIN: clean(cliPath) } : {}),
         },
