@@ -252,13 +252,18 @@ export function frontendInputProjection(parts = [], { accompaniesVoice = false }
       text: { value: inputPartLabel(part, index) },
     },
   }))
+  const metadata = JSON.stringify(attachments)
+    .replaceAll('&', '\\u0026')
+    .replaceAll('<', '\\u003c')
+    .replaceAll('>', '\\u003e')
   return [
     text || (accompaniesVoice
       ? '本轮语音输入同时包含以下附件。'
       : '用户提交了附件，但没有附带文字说明。'),
     '',
-    '可用输入部件（仅元数据；文件内容由 Gateway 保管）：',
-    JSON.stringify(attachments),
+    '<input_parts>',
+    metadata,
+    '</input_parts>',
   ].join('\n')
 }
 

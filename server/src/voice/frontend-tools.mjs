@@ -31,7 +31,7 @@ const spawnThinkingTool = {
           type: 'array',
           items: { type: 'string' },
           maxItems: 8,
-          description: '仅当任务依赖此前轮次标注为“可引用输入”的图片或文件时填写对应 input_N；本轮提交的输入由 Gateway 自动携带。没有相关输入时省略，不得猜造引用。',
+          description: '仅当任务依赖此前轮次标注为“可引用输入”的图片或文件时填写对应 input_N；本轮提交的输入会自动携带。没有相关输入时省略，不得猜造引用。',
         },
       },
       required: ['objective'],
