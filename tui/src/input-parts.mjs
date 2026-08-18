@@ -99,9 +99,9 @@ function pastedFilePath(text) {
   return isAbsolute(value) || /^\.\.?[\\/]/.test(value) ? value : ''
 }
 
-function pastedPathReferences(text) {
+export function pastedPathReferences(text) {
   const references = []
-  const pattern = /(^|\s)((?:file:\/\/|\/|\.\.?[\\/])(?:\\.|[^\s])+)/g
+  const pattern = /(^|\s)((?:file:\/\/|[A-Za-z]:[\\/]|\/|\.\.?[\\/])(?:\\.|[^\s])+)/g
   for (const match of String(text || '').matchAll(pattern)) {
     const value = match[2]
     let path = value.replace(/\\([\\ '"()&;])/g, '$1')

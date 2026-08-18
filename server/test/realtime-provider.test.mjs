@@ -142,22 +142,29 @@ test('carries originating turn metadata to a created realtime response', () => {
 })
 
 test('only reports a queued announcement as completed after response.done', async () => {
-  const frontend = createQwenFrontend({
-    responseStartTimeoutMs: 50,
-    responseCompletionTimeoutMs: 50,
-  })
+  const frontend = createQwenFrontend()
   frontend.ready = true
-  frontend.send = () => {}
+  const responseRequested = Promise.withResolvers()
+  frontend.send = event => {
+    if (event.type === 'response.create') responseRequested.resolve()
+  }
 
   const outcome = frontend.speak('任务完成', 'agent', {
     turnId: 'voice-100-1',
     taskId: 'job-1',
   })
-  await new Promise(resolve => setImmediate(resolve))
+  await responseRequested.promise
   frontend.handleLifecycle({
     type: 'response.created',
     response: { id: 'response-1' },
   })
+  let settled = false
+  outcome.then(() => {
+    settled = true
+  })
+  await Promise.resolve()
+  assert.equal(settled, false)
+
   frontend.handleLifecycle({
     type: 'response.done',
     response: { id: 'response-1', status: 'completed' },

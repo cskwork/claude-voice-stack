@@ -6,6 +6,7 @@ import test from 'node:test'
 import {
   filePartFromPath,
   inputPartsFromText,
+  pastedPathReferences,
 } from '../src/input-parts.mjs'
 
 test('creates OpenCode-style inline file parts from TUI paths', async () => {
@@ -73,6 +74,16 @@ test('replaces a pasted path inside a prompt with an attachment anchor', async (
 
   assert.equal(parts[0].text, '[Image 1] 这是什么？')
   assert.equal(parts[1].filename, 'cat image.png')
+})
+
+test('recognizes an escaped Windows path inside a prompt', () => {
+  const text = 'C:\\Users\\alice\\cat\\ image.png 这是什么？'
+
+  assert.deepEqual(pastedPathReferences(text), [{
+    path: 'C:\\Users\\alice\\cat image.png',
+    start: 0,
+    end: 'C:\\Users\\alice\\cat\\ image.png'.length,
+  }])
 })
 
 test('adds a staged attachment reference to the submitted text', async () => {
