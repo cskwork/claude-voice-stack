@@ -1704,6 +1704,30 @@ export function attachRealtimeGateway(server, {
       const display = displayInputText(parts)
       const projection = frontendInputProjection(parts)
       const inputTurnId = `text_${randomUUID().replaceAll('-', '')}`
+      turnGeneration = ++turnSequence
+      turnId = inputTurnId
+      const inputContext = currentTurn()
+      commitTurn(inputContext)
+      clearResponseCandidate()
+      // Text and attachment submissions are first-class user turns. They must
+      // close any result announcement still occupying the previous turn and
+      // block a newly completed task from speaking over the response now being
+      // generated, just like input_audio_buffer.speech_started does for voice.
+      announcementWindow.beginTurn(inputTurnId)
+      announcementWindow.endSpeech()
+      announcements.dismissActive()
+      send(ws, {
+        type: GatewayServerEvent.PLAYBACK_CLEAR,
+        reason: 'user_interruption',
+      })
+      send(ws, { type: GatewayServerEvent.TURN_STARTED, turnId: inputTurnId })
+      send(ws, {
+        type: GatewayServerEvent.VOICE_STATE,
+        state: 'thinking',
+        turnId: inputTurnId,
+        origin: 'model',
+      })
+      frontend?.cancel()
       pendingInputParts = []
       transcripts.record(inputTurnId, text || display)
       transcripts.recordParts(inputTurnId, inputFileParts(parts))
@@ -1727,7 +1751,7 @@ export function attachRealtimeGateway(server, {
           projection,
           { turnId: inputTurnId },
           {
-            modalities: textOnlySession && event.textOnly === true
+            modalities: event.textOnly === true
               ? ['text']
               : undefined,
           },

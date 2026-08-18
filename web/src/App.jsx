@@ -27,6 +27,7 @@ import { t } from './i18n.js'
 import {
   removeDeliveredTask,
   removeTaskInPhase,
+  taskDeliverySettled,
   taskDetail,
   taskLabel,
   taskView,
@@ -398,15 +399,16 @@ export default function App() {
           const byId = new Map(serverTasks.map(task => [task.id, task]))
           setAgentTasks(items => {
             const known = new Set(items.map(task => task.id))
-            const reconciled = items.map(task => {
+            const reconciled = items.flatMap(task => {
               const current = byId.get(task.id)
-              if (current) return taskView(current, task)
-              if (task.phase !== 'disconnected') return task
-              return {
+              if (current && taskDeliverySettled(current)) return []
+              if (current) return [taskView(current, task)]
+              if (task.phase !== 'disconnected') return [task]
+              return [{
                 ...task,
                 phase: 'failed',
                 error: t('网关重连后未找到这次后台执行，请重新提交。'),
-              }
+              }]
             })
             serverTasks
               .filter(task => (

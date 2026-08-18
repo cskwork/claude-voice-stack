@@ -20,6 +20,13 @@ export function removeDeliveredTask(tasks, taskId) {
   return tasks.filter(task => task.id !== taskId)
 }
 
+export function taskDeliverySettled(task) {
+  return (
+    ['completed', 'failed'].includes(task?.status)
+    && task?.notificationStatus === 'delivered'
+  )
+}
+
 export function removeTaskInPhase(tasks, taskId, phase) {
   return tasks.filter(task => (
     task.id !== taskId || task.phase !== phase

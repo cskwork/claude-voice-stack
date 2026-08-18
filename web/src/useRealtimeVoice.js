@@ -761,6 +761,10 @@ export default function useRealtimeVoice({
   const sendInput = useCallback(parts => sendSocketEvent({
     type: GatewayClientEvent.INPUT_MESSAGE,
     parts,
+    // The same WebUI composer remains available with voice disabled. Request
+    // text output in that state so a missing AudioContext cannot strand the
+    // response or its task-delivery acknowledgement.
+    textOnly: enabledRef.current !== true,
   }), [sendSocketEvent])
 
   const stageInputParts = useCallback(parts => sendSocketEvent({

@@ -8,6 +8,7 @@ import {
   phaseForTask,
   removeDeliveredTask,
   removeTaskInPhase,
+  taskDeliverySettled,
   taskDetail,
   taskLabel,
   taskView,
@@ -83,6 +84,21 @@ test('a late delivery receipt cannot resurrect a removed task card', () => {
     { id: 'other', phase: 'running' },
   ])
   assert.deepEqual(removeDeliveredTask([], 'delivered'), [])
+})
+
+test('reconnect reconciliation recognizes terminal tasks already delivered', () => {
+  assert.equal(taskDeliverySettled({
+    status: 'completed',
+    notificationStatus: 'delivered',
+  }), true)
+  assert.equal(taskDeliverySettled({
+    status: 'completed',
+    notificationStatus: 'delivering',
+  }), false)
+  assert.equal(taskDeliverySettled({
+    status: 'running',
+    notificationStatus: 'delivered',
+  }), false)
 })
 
 test('removes a transient task only while it remains in the expected phase', () => {
