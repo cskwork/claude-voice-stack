@@ -117,7 +117,16 @@ export function buildRecentConversationContext(messages = []) {
   for (const message of candidates.toReversed()) {
     const content = clean(message.content)
     if (!content) continue
-    const line = `${message.role === 'user' ? '用户' : '助手'}: ${content}`
+    const inputSummary = (message.inputs || []).map(input => [
+      clean(input.ref),
+      clean(input.label || input.filename || input.type),
+      clean(input.filename),
+      clean(input.mime),
+    ].filter(Boolean).join(' · ')).filter(Boolean).join('；')
+    const base = `${message.role === 'user' ? '用户' : '助手'}: ${content}`
+    const line = inputSummary
+      ? `${base}（可引用输入：${inputSummary}）`
+      : base
     if (selected.length && used + line.length > MAX_RECENT_CHARS) break
     selected.unshift(line)
     used += line.length

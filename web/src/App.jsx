@@ -22,6 +22,7 @@ import {
   isBuiltinOrbSkin,
   resolveOrbSkinId,
 } from '../../shared/orb-skin-catalog.mjs'
+import { supportsComposerInput } from '../../shared/client-input-capabilities.mjs'
 import { resultLabel } from './presentation.js'
 import { t } from './i18n.js'
 import {
@@ -66,6 +67,7 @@ const orbSkinId = resolveOrbSkinId({
 })
 const autoHideSeconds = desktopAutoHideSeconds(window.location.search)
 const wakeWordEnabled = desktopWakeWordEnabled(window.location.search)
+const composerEnabled = supportsComposerInput(desktopOrbMode ? 'desktop' : 'web')
 
 function getSessionId() {
   const requested = requestedSessionId(window.location.search)
@@ -1287,7 +1289,7 @@ export default function App() {
         </section>)}
       </div>
 
-      {!desktopOrbMode && <MultimodalComposer
+      {composerEnabled && <MultimodalComposer
         onSend={sendComposerInput}
         onStage={voice.stageInputParts}
       />}

@@ -3,6 +3,7 @@ import {
   GatewayClientEvent,
   GatewayServerEvent,
 } from '../../shared/realtime-events.mjs'
+import { clientInputCapabilities } from '../../shared/client-input-capabilities.mjs'
 import { decodePcm, pcmBase64, resample } from './audio.js'
 import { confirmTrackedPlaybackStart } from './playback-lifecycle.js'
 import { t } from './i18n.js'
@@ -487,6 +488,7 @@ export default function useRealtimeVoice({
           wakeWordOnly: wakeWordOnlyRef.current,
           clientType,
           clientLabel,
+          inputCapabilities: clientInputCapabilities(clientType),
           clientStates: clientStatesSignature
             ? clientStatesSignature.split(',')
             : [],

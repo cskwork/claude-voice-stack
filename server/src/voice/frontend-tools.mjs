@@ -27,6 +27,12 @@ const spawnThinkingTool = {
           type: 'string',
           description: '可直接执行的目标，忠实保留用户要求的结果、约束、执行方式，以及本项工作与既有工作的关系。可以根据当前对话消解明确指代，但不得遗漏、推断或改变这些语义，也不要提交占位目标；近期对话会随工作一并提供。',
         },
+        input_refs: {
+          type: 'array',
+          items: { type: 'string' },
+          maxItems: 8,
+          description: '仅当任务依赖此前轮次标注为“可引用输入”的图片或文件时填写对应 input_N；本轮提交的输入由 Gateway 自动携带。没有相关输入时省略，不得猜造引用。',
+        },
       },
       required: ['objective'],
       additionalProperties: false,

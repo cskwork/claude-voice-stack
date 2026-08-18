@@ -34,6 +34,9 @@ Gateway converts the original attachments into ACP ContentBlocks for the backend
 agent. Text anchors such as `[Image 1]` or `@file-path` remain bound to their file
 parts for multi-attachment references, replay, and backend interpretation. Each
 attachment is limited to 8 MB and the per-turn total is limited to 12 MB.
+The Gateway assigns each attachment a stable conversation-local input ID. This
+allows a later text or voice turn to delegate a previously submitted image to
+the backend without reinjecting file bytes into the realtime voice model.
 
 ## macOS
 

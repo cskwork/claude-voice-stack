@@ -49,6 +49,53 @@ test('deduplicates the same message id and retains agent presentations', () => {
   )
 })
 
+test('retains cloned input references for reconnectable frontend context', () => {
+  const sync = new ConversationSync()
+  const inputs = [{
+    ref: 'input_1',
+    type: 'image',
+    label: '[Image 1]',
+    filename: 'cat.png',
+    mime: 'image/png',
+  }]
+  sync.record({
+    ownerId: 'owner',
+    sessionId: 'voice',
+    id: 'image-turn',
+    role: 'user',
+    content: '[Image 1]',
+    source: 'voice-user',
+    inputs,
+  })
+  inputs[0].ref = 'tampered'
+
+  const [message] = sync.frontendContext({ ownerId: 'owner', sessionId: 'voice' })
+  assert.equal(message.inputs[0].ref, 'input_1')
+  message.inputs[0].ref = 'mutated-copy'
+  assert.equal(
+    sync.frontendContext({ ownerId: 'owner', sessionId: 'voice' })[0].inputs[0].ref,
+    'input_1',
+  )
+})
+
+test('restores typed multimodal turns as well as voice turns', () => {
+  const sync = new ConversationSync()
+  sync.record({
+    ownerId: 'owner',
+    sessionId: 'voice',
+    id: 'typed-image-turn',
+    role: 'user',
+    content: '[Image 1]',
+    source: 'text-user',
+    inputs: [{ ref: 'input_1', type: 'image', label: '[Image 1]' }],
+  })
+
+  assert.equal(
+    sync.frontendContext({ ownerId: 'owner', sessionId: 'voice' })[0].inputs[0].ref,
+    'input_1',
+  )
+})
+
 test('recognizes equivalent assistant speech only within the same voice turn', () => {
   const sync = new ConversationSync()
   sync.record({

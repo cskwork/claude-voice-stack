@@ -1,6 +1,7 @@
 export const MAX_INPUT_PARTS = 16
 export const MAX_INPUT_FILE_BYTES = 8 * 1024 * 1024
 export const MAX_INPUT_TOTAL_FILE_BYTES = 12 * 1024 * 1024
+export const INPUT_REF_META_KEY = 'qwen-audio-agent/inputRef'
 
 // Local paths are resolved and inlined by trusted clients (such as the TUI).
 // Never let a remote client turn the Gateway into an arbitrary local-file
@@ -128,6 +129,22 @@ export function inputFileParts(parts = []) {
   return parts.filter(part => part?.type === 'file')
 }
 
+export function inputPartRef(part) {
+  return String(part?._meta?.[INPUT_REF_META_KEY] || '').trim()
+}
+
+export function withInputPartRef(part, ref) {
+  const value = String(ref || '').trim()
+  if (!value) return part
+  return {
+    ...part,
+    _meta: {
+      ...(part?._meta || {}),
+      [INPUT_REF_META_KEY]: value,
+    },
+  }
+}
+
 export function inputPartReference(part, index = 0) {
   const supplied = String(part?.source?.text?.value || '').trim()
   if (supplied) return supplied.slice(0, 2048)
@@ -226,18 +243,22 @@ export function frontendInputProjection(parts = [], { accompaniesVoice = false }
   const files = inputFileParts(parts)
   if (!files.length) return text
   const attachments = files.map((part, index) => ({
-    label: inputPartLabel(part, index),
-    filename: part.filename || null,
+    ...(inputPartRef(part) ? { id: inputPartRef(part) } : {}),
+    type: 'file',
+    ...(part.filename ? { filename: part.filename } : {}),
     mime: part.mime,
+    source: {
+      type: part.source?.type || 'resource',
+      text: { value: inputPartLabel(part, index) },
+    },
   }))
   return [
     text || (accompaniesVoice
       ? '本轮语音输入同时包含以下附件。'
       : '用户提交了附件，但没有附带文字说明。'),
     '',
-    '<user_attachments>',
+    '可用输入部件（仅元数据；文件内容由 Gateway 保管）：',
     JSON.stringify(attachments),
-    '</user_attachments>',
   ].join('\n')
 }
 

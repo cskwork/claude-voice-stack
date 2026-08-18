@@ -38,6 +38,12 @@ test('keeps spawn_thinking as the stable asynchronous work protocol', () => {
     )).length,
     1,
   )
+  const spawn = TOOLS.find(tool => (
+    tool.function.name === SPAWN_THINKING_TOOL_NAME
+  ))
+  assert.deepEqual(spawn.function.parameters.required, ['objective'])
+  assert.equal(spawn.function.parameters.properties.input_refs.type, 'array')
+  assert.equal(spawn.function.parameters.properties.input_refs.maxItems, 8)
 })
 
 function createQwenFrontend(options = {}) {
@@ -46,6 +52,29 @@ function createQwenFrontend(options = {}) {
     ...options,
   })
 }
+
+test('projects input parts through the realtime provider boundary', () => {
+  const frontend = createQwenFrontend()
+  const projection = frontend.projectUserInput([
+    { type: 'text', text: '[Image 1] 这是什么？' },
+    {
+      type: 'file',
+      mime: 'image/png',
+      filename: 'cat.png',
+      url: 'data:image/png;base64,aGVsbG8=',
+      source: { type: 'clipboard', text: { value: '[Image 1]' } },
+      _meta: { 'qwen-audio-agent/inputRef': 'input_1' },
+    },
+  ])
+  const text = projection.conversationItem.content[0].text
+
+  assert.match(text, /\[Image 1\] 这是什么？/)
+  assert.match(text, /"id":"input_1"/)
+  assert.match(text, /"type":"file"/)
+  assert.match(text, /"source":\{"type":"clipboard","text":\{"value":"\[Image 1\]"\}\}/)
+  assert.match(text, /"mime":"image\/png"/)
+  assert.doesNotMatch(text, /aGVsbG8=/)
+})
 
 test('rejects a provider error before the realtime session becomes ready', () => {
   const frontend = createQwenFrontend()

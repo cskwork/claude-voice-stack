@@ -9,6 +9,7 @@ import { AnnouncementWindow } from './announcement/announcement-window.mjs'
 import { config } from '../core/config.mjs'
 import { logger } from '../core/logger.mjs'
 import { conversationSync } from '../conversation/conversation-sync.mjs'
+import { InputAssetRegistry } from './input-asset-registry.mjs'
 import { normalizeClientContext } from '../conversation/frontend-agent-context.mjs'
 import {
   createRealtimeFrontend,
@@ -45,7 +46,6 @@ import {
 } from './response-lifecycle.mjs'
 import {
   displayInputText,
-  frontendInputProjection,
   inputFileParts,
   inputText,
   normalizeInputParts,
@@ -121,6 +121,7 @@ export function attachRealtimeGateway(server, {
   backendAvailability = null,
   respondPermission,
   permissionPolicy,
+  inputAssets = new InputAssetRegistry(),
 }) {
   const wss = new WebSocketServer({ noServer: true, maxPayload: 20 * 1024 * 1024 })
   const activeVoiceClients = new ActiveVoiceClients()
@@ -388,6 +389,7 @@ export function attachRealtimeGateway(server, {
         })
         if (state === 'sleeping') enterSleep()
       },
+      inputAssets,
     })
     const currentTurn = () => ({
       turnId,
@@ -930,13 +932,18 @@ export function attachRealtimeGateway(server, {
           rememberInputTurn(event.item_id, currentTurn())
         }
         if (pendingInputParts.length) {
-          const attachedParts = pendingInputParts
+          const attachedParts = inputAssets.registerParts({
+            ownerId,
+            sessionId,
+            turnId,
+            parts: pendingInputParts,
+          })
           pendingInputParts = []
           transcripts.recordParts(turnId, attachedParts)
-          frontend?.appendUserContext(frontendInputProjection(
+          frontend?.appendUserInputContext(
             attachedParts,
             { accompaniesVoice: true },
-          ))
+          )
             .catch(error => send(ws, {
               type: GatewayServerEvent.ERROR,
               message: `附件上下文没有成功送达语音前台：${error.message}`,
@@ -1035,6 +1042,9 @@ export function attachRealtimeGateway(server, {
           content: transcript,
           source: 'voice-user',
           turnId: transcriptTurn.turnId,
+          inputs: inputAssets.metadataForParts(
+            transcripts.parts(transcriptTurn.turnId),
+          ),
         })
         send(ws, {
           type: 'transcript.final',
@@ -1702,10 +1712,15 @@ export function attachRealtimeGateway(server, {
         send(ws, { type: GatewayServerEvent.ERROR, message: error.message })
         return
       }
+      const inputTurnId = `text_${randomUUID().replaceAll('-', '')}`
+      parts = inputAssets.registerParts({
+        ownerId,
+        sessionId,
+        turnId: inputTurnId,
+        parts,
+      })
       const text = inputText(parts)
       const display = displayInputText(parts)
-      const projection = frontendInputProjection(parts)
-      const inputTurnId = `text_${randomUUID().replaceAll('-', '')}`
       turnGeneration = ++turnSequence
       turnId = inputTurnId
       const inputContext = currentTurn()
@@ -1741,6 +1756,7 @@ export function attachRealtimeGateway(server, {
         content: display,
         source: 'text-user',
         turnId: inputTurnId,
+        inputs: inputAssets.metadataForParts(parts),
       })
       send(ws, {
         type: GatewayServerEvent.TRANSCRIPT_FINAL,
@@ -1749,8 +1765,8 @@ export function attachRealtimeGateway(server, {
         turnId: inputTurnId,
       })
       ensureFrontend()
-        .then(() => frontend.sendUserText(
-          projection,
+        .then(() => frontend.sendUserInput(
+          parts,
           { turnId: inputTurnId },
         ))
         .catch(reportFrontendError)
@@ -1856,6 +1872,16 @@ export function attachRealtimeGateway(server, {
           && Array.isArray(event.clientStates)
           && event.clientStates.includes('sleeping')
         ) ? ['sleeping'] : []
+        clientContext.inputCapabilities = (
+          event.inputCapabilities
+          && typeof event.inputCapabilities === 'object'
+        ) ? {
+            text: event.inputCapabilities.text === true,
+            audio: event.inputCapabilities.audio === true,
+            image: event.inputCapabilities.image === true,
+            resource: event.inputCapabilities.resource === true,
+          }
+          : null
         // A desktop that advertises the sleeping state owns its inactivity
         // policy. Keep Gateway's legacy automatic timer only for clients that
         // cannot request an explicit synchronized sleep transition.

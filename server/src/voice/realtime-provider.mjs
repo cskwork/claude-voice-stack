@@ -9,6 +9,7 @@ import {
   isResponseActivityEvent,
   realtimeResponseId,
 } from './response-lifecycle.mjs'
+import { frontendInputProjection } from '../../../shared/input-parts.mjs'
 
 // Re-export provider-agnostic tools and instructions so existing callers
 // (tests, tool-call-handler, bootstrap) continue to work without changes.
@@ -258,6 +259,45 @@ export class RealtimeFrontend {
         modalities ? { modalities } : undefined,
       ))
     })
+  }
+
+  projectUserInput(parts, options = {}) {
+    const custom = this.provider.projectUserInput?.({
+      parts,
+      options,
+      protocol: this.protocol,
+      modelCapabilities: this.modelCapabilities,
+      transportCapabilities: this.transportCapabilities,
+    })
+    if (custom) return custom
+    const content = frontendInputProjection(parts, options)
+    return content
+      ? { conversationItem: this.protocol.userTextItem(content) }
+      : null
+  }
+
+  async applyUserInput(parts, options = {}) {
+    const projection = this.projectUserInput(parts, options)
+    if (!projection) return false
+    for (const event of projection.beforeEvents || []) this.send(event)
+    if (projection.conversationItem) {
+      await this.createConversationItem(projection.conversationItem)
+    }
+    for (const event of projection.afterEvents || []) this.send(event)
+    return true
+  }
+
+  sendUserInput(parts, context = {}, { modalities } = {}) {
+    return this.enqueueResponse('model', context, async () => {
+      if (!await this.applyUserInput(parts)) return false
+      this.send(this.protocol.responseCreate(
+        modalities ? { modalities } : undefined,
+      ))
+    })
+  }
+
+  appendUserInputContext(parts, options = {}) {
+    return this.enqueueAction(() => this.applyUserInput(parts, options))
   }
 
   appendUserContext(text) {

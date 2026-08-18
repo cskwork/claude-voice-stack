@@ -66,6 +66,23 @@ test('builds bounded recent conversation separately from system instructions', (
   assert.match(recent, /助手: 正在继续处理/)
 })
 
+test('describes prior input references without embedding their file data', () => {
+  const recent = buildRecentConversationContext([{
+    role: 'user',
+    content: '[Image 1]',
+    inputs: [{
+      ref: 'input_1',
+      type: 'image',
+      label: '[Image 1]',
+      filename: 'cat.png',
+      mime: 'image/png',
+    }],
+  }])
+
+  assert.match(recent, /可引用输入：input_1 · \[Image 1\] · cat\.png · image\/png/)
+  assert.doesNotMatch(recent, /data:image/)
+})
+
 test('keeps client capabilities out of the runtime prose context', () => {
   const desktop = buildFrontendContext({
     client: { states: ['sleeping'] },

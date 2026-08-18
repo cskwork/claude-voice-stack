@@ -11,6 +11,7 @@ import {
   inputText,
 } from '../../shared/input-parts.mjs'
 import { createLogger } from '../../shared/logger.mjs'
+import { clientInputCapabilities } from '../../shared/client-input-capabilities.mjs'
 import { startMacVoiceIO } from './macos-voice-io.mjs'
 import { resamplePcm16 } from './pcm-audio.mjs'
 import { startPortAudioVoiceIO } from './portaudio-voice-io.mjs'
@@ -119,6 +120,7 @@ export function connectMessage({
       : { outputEnabled: outputEnabled === true }),
     clientType: 'cli',
     clientLabel: 'CLI',
+    inputCapabilities: clientInputCapabilities('cli'),
     takeover: takeover === true,
     workingDirectory,
     timeZone,

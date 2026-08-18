@@ -40,8 +40,19 @@ test('normalizes OpenCode-style text and image parts', () => {
   assert.equal(parts.length, 2)
   assert.equal(parseDataUrl(parts[1].url).bytes, 5)
   assert.equal(displayInputText(parts), '分析 [Image 1]')
-  assert.match(frontendInputProjection(parts), /<user_attachments>/)
+  assert.match(frontendInputProjection(parts), /可用输入部件/)
   assert.match(frontendInputProjection(parts), /screen\.png/)
+})
+
+test('does not trust server-owned input references supplied by a client', () => {
+  const [part] = normalizeInputParts([{
+    type: 'file',
+    mime: 'image/png',
+    url: 'data:image/png;base64,YQ==',
+    _meta: { 'qwen-audio-agent/inputRef': 'input_999' },
+  }])
+
+  assert.equal('_meta' in part, false)
 })
 
 test('rejects mismatched data URL MIME types', () => {

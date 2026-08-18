@@ -98,6 +98,7 @@ export class ConversationSync {
     turnId = null,
     taskId = null,
     taskIds = [],
+    inputs = [],
   }) {
     const normalized = clean(content)
     if (!id || !normalized) return null
@@ -111,6 +112,7 @@ export class ConversationSync {
         turnId,
         taskId,
         taskIds: [...new Set((taskIds || []).filter(Boolean))],
+        inputs: (inputs || []).map(input => ({ ...input })),
       })
       return { ...existing }
     }
@@ -123,6 +125,7 @@ export class ConversationSync {
       turnId,
       taskId,
       taskIds: [...new Set((taskIds || []).filter(Boolean))],
+      inputs: (inputs || []).map(input => ({ ...input })),
       createdAt: Date.now(),
     }
     state.messages.push(message)
@@ -137,7 +140,10 @@ export class ConversationSync {
   list({ ownerId, sessionId }) {
     this.prune()
     return (this.peek(ownerId, sessionId)?.messages || [])
-      .map(message => ({ ...message }))
+      .map(message => ({
+        ...message,
+        inputs: (message.inputs || []).map(input => ({ ...input })),
+      }))
   }
 
   hasEquivalentAssistantSpeech({
@@ -167,6 +173,7 @@ export class ConversationSync {
     return messages.filter(message => (
       [
         'voice-user',
+        'text-user',
         'realtime-direct',
         'agent-presentation',
       ].includes(message.source)
