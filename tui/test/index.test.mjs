@@ -255,12 +255,15 @@ test('uses macOS AEC and selectable PortAudio duplex modes elsewhere', () => {
   assert.match(fullDuplexFallbackHint(linuxFull), /--audio-mode half/)
 })
 
-test('keeps a terminal input line active while asynchronous output arrives', async () => {
+test('keeps a fixed composer active while asynchronous output arrives', async () => {
   const stdin = new PassThrough()
   const stdout = new PassThrough()
   stdin.isTTY = true
+  const rawModes = []
+  stdin.setRawMode = value => rawModes.push(value)
   stdout.isTTY = true
   stdout.columns = 80
+  stdout.rows = 12
   const submitted = []
   let closeRequests = 0
   const renderer = createPersistentTerminalRenderer({
@@ -270,18 +273,26 @@ test('keeps a terminal input line active while asynchronous output arrives', asy
     onClose: () => { closeRequests += 1 },
   })
 
-  stdin.write('你好\n')
-  await new Promise(resolve => setImmediate(resolve))
+  stdin.write('你好')
   renderer.update('你 >', '语音预览')
   renderer.print('[状态] 后台处理中')
+  renderer.setStatus('Gateway 已连接 · 麦克风已开启')
   renderer.finish('qwen-audio >', '完成')
+  stdin.write('\n')
+  await new Promise(resolve => setImmediate(resolve))
   stdin.write('\u0003')
   await new Promise(resolve => setImmediate(resolve))
   renderer.close()
 
   assert.deepEqual(submitted, ['你好'])
   assert.equal(closeRequests, 1)
-  assert.match(stdout.read().toString(), /后台处理中/)
+  assert.deepEqual(rawModes, [true, false])
+  const output = stdout.read().toString()
+  assert.match(output, /\u001b\[\?1049h/)
+  assert.match(output, /后台处理中/)
+  assert.match(output, /Gateway 已连接 · 麦克风已开启/)
+  assert.match(output, /你 > 你好/)
+  assert.match(output, /\u001b\[\?1049l/)
 })
 
 test('drops queued microphone frames whenever half-duplex capture is gated', () => {

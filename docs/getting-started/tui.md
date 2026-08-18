@@ -5,15 +5,24 @@
 | Platform | Default Mode | Interruption Method |
 | --- | --- | --- |
 | macOS | Full-duplex with echo cancellation | Speak directly |
-| Linux / Windows | Half-duplex | Press `x` during playback |
+| Linux / Windows | Half-duplex | Enter `/interrupt` |
+
+## Terminal Layout
+
+The TUI uses a full-screen, two-region layout. The scrollable upper region shows
+conversation history, live voice transcripts, task state, and connection logs.
+Gateway and microphone state plus a persistent text composer stay fixed at the
+bottom. Asynchronous output and reconnect attempts do not interrupt text editing.
+Use `PageUp` / `PageDown` to browse history and `Ctrl-C` to exit at any time.
 
 ## Text and Attachment Input
 
 In addition to voice, the TUI accepts text, images, and regular files:
 
-- Press `t` to enter text. An `@file-path` in the text is sent as an attachment.
-- Press `a` to select an image or file for the next voice or text turn.
-- Press `c` to clear attachments that have not been sent.
+- Type directly in the bottom composer and press Enter to send.
+- Paste a local file path to detect and attach that file automatically.
+- An `@file-path` in the text is sent as an attachment.
+- Enter `/mute` to mute or restore the microphone, or `/help` for all commands.
 
 The TUI reads attachment content and sends it to the Gateway. The realtime voice
 frontend receives metadata only. When it delegates through `spawn_thinking`, the
@@ -31,7 +40,7 @@ without additional configuration. The CoreAudio helper program is compiled by de
 ## Linux / Windows
 
 By default, half-duplex mode is used via the bundled Python audio bridge using `sounddevice` / PortAudio:
-the microphone is paused during reply playback, only supporting manual interruption with the `x` key, and resumes after playback ends or is interrupted.
+the microphone is paused during reply playback. Enter `/interrupt` to stop playback manually; capture resumes after playback ends or is interrupted.
 Before first use, install `sounddevice` and the system PortAudio.
 
 You can also enable full-duplex mode without echo cancellation:
