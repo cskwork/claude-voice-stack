@@ -4,6 +4,7 @@ import { loadRuntimeEnvironment } from '../../../shared/runtime-environment.mjs'
 import {
   backendDefinition,
   backendNames,
+  effectiveBackendPermissionMode,
   normalizeBackendProtocol,
   resolveBackendOwnership,
 } from '../../../shared/backend-catalog.mjs'
@@ -121,17 +122,23 @@ const managedOpenClawBailian = (
   && Boolean(process.env.DASHSCOPE_API_KEY)
   && !process.env.OPENCLAW_CONFIG_PATH
 )
-const backendPermissionMode = String(
+const requestedBackendPermissionMode = String(
   process.env.QWEN_AUDIO_AGENT_BACKEND_PERMISSION_MODE || 'native',
 ).toLowerCase()
 if (
   configuredAgentProtocol
-  && !['native', 'full'].includes(backendPermissionMode)
+  && !['native', 'full'].includes(requestedBackendPermissionMode)
 ) {
   throw new Error(
-    `不支持的后台权限模式：${backendPermissionMode}（可选 native、full）`,
+    `不支持的后台权限模式：${requestedBackendPermissionMode}（可选 native、full）`,
   )
 }
+// 无权限审批机制的后台（alwaysFullPermission，如 Pi）无论配置什么都以
+// full 运行，这里直接归一化为真实生效的模式，健康状态据此上报。
+const backendPermissionMode = effectiveBackendPermissionMode(
+  configuredAgentProtocol,
+  requestedBackendPermissionMode,
+)
 const requestedAgentProtocol = configuredAgentProtocol
 const sharedBackendAgent = String(
   process.env.QWEN_AUDIO_AGENT_BACKEND_AGENT || '',

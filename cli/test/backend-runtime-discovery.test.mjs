@@ -59,6 +59,7 @@ function command(path, {
     ] : []),
     ...(capturePiBin ? [
       'printf "%s\\n" "PI_BIN=${PI_BIN:-}" >> "$CAPTURE"',
+      'printf "%s\\n" "PI_ACP_PI_COMMAND=${PI_ACP_PI_COMMAND:-}" >> "$CAPTURE"',
     ] : []),
     '',
   ].join('\n'))
@@ -477,9 +478,30 @@ test('Pi ACP prefers an installed adapter and pins its package fallback', {
       'pi-acp',
       '--help',
     ])
-    assert.equal(
-      installed.at(-1),
+    // The adapter must receive the resolved pi executable through the
+    // variable pi-acp actually reads (PI_ACP_PI_COMMAND), not only PI_BIN.
+    assert.deepEqual(installed.slice(-2), [
       `PI_BIN=${resolve(binary.bin, 'pi')}`,
+      `PI_ACP_PI_COMMAND=${resolve(binary.bin, 'pi')}`,
+    ])
+    // An explicit PI_BIN outside PATH is forwarded to the adapter verbatim.
+    const explicit = run('scripts/pi-acp.mjs', binary, {
+      PI_ACP_RUNTIME: 'auto',
+      PI_BIN: '/opt/pi/bin/pi',
+    }, ['--help'])
+    assert.deepEqual(explicit.slice(-2), [
+      'PI_BIN=/opt/pi/bin/pi',
+      'PI_ACP_PI_COMMAND=/opt/pi/bin/pi',
+    ])
+    // A user-provided PI_ACP_PI_COMMAND takes precedence over PI_BIN.
+    const overridden = run('scripts/pi-acp.mjs', binary, {
+      PI_ACP_RUNTIME: 'auto',
+      PI_BIN: '/opt/pi/bin/pi',
+      PI_ACP_PI_COMMAND: '/usr/local/bin/pi',
+    }, ['--help'])
+    assert.equal(
+      overridden.at(-1),
+      'PI_ACP_PI_COMMAND=/usr/local/bin/pi',
     )
     assert.deepEqual(run('scripts/pi-acp.mjs', packageRuntime, {
       PI_ACP_RUNTIME: 'package',

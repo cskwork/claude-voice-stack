@@ -509,8 +509,11 @@ Agent 和任务 Agent 设置 `permission: "allow"`，Codex 会使用
 
 Pi 是特例：它没有任何内置沙箱或权限审批机制，适配器 pi-acp 也未实现 ACP
 `session/request_permission`，因此无论配置哪种权限模式，Pi 都始终等效
-`full` 权限运行——这不是“支持 `full`”，而是根本不存在审批环节。只在可信
-项目和可信提示词环境中使用。
+`full` 权限运行——这不是“支持 `full`”，而是根本不存在审批环节。Pi 通过
+`alwaysFullPermission` 后台能力声明这一点：配置解析、Gateway 健康状态与桌面端
+都会归一化并展示真实生效的 `full`（而不是具有误导性的 `native`），桌面端首次
+切换到 Pi 时还会弹出原生对话框要求明确确认。只在可信项目和可信提示词环境中
+使用。
 
 OpenClaw 的执行授权同时受 exec approvals、elevated 和执行 host 等配置约束，
 无法由一个统一开关安全、完整地表达；选择 `full` 时 Gateway 会明确拒绝启动，

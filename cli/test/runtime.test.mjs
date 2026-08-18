@@ -440,13 +440,31 @@ test('derives generic ACP without an HTTP backend', () => {
 })
 
 test('derives named local ACP backends without an HTTP URL', () => {
-  for (const backend of ['kimi', 'hermes', 'codebuddy', 'codex', 'claude', 'pi']) {
+  for (const backend of ['kimi', 'hermes', 'codebuddy', 'codex', 'claude']) {
     assert.deepEqual(resolveBackend({
       backend,
     }, {}), {
       protocol: backend,
       ownership: 'owned',
       permissionMode: 'native',
+      agentId: '',
+      baseUrl: null,
+    })
+  }
+})
+
+test('Pi always resolves to its effective full permission mode', () => {
+  // Pi 没有权限审批机制，CLI 解析必须与健康状态一致地上报 full。
+  for (const configured of [undefined, 'native', 'full']) {
+    assert.deepEqual(resolveBackend({
+      backend: 'pi',
+      ...(configured
+        ? { backendPermissionMode: configured }
+        : {}),
+    }, {}), {
+      protocol: 'pi',
+      ownership: 'owned',
+      permissionMode: 'full',
       agentId: '',
       baseUrl: null,
     })

@@ -28,6 +28,7 @@ const USER_CONFIG_TEMPLATE = [
   '# 可选 openclaw、opencode、qoder、qwen、kimi、hermes、codebuddy、codex、claude、deepseek、pi、acp 或 none',
   'AGENT_PROTOCOL=',
   '# 权限模式：native（后台自行询问）或 full（最高权限；仅支持安全映射的后端）',
+  '# Pi 没有权限审批机制，无论配置什么都始终生效 full',
   '# QWEN_AUDIO_AGENT_BACKEND_PERMISSION_MODE=native',
   '# 可选：显式覆盖后台模型；留空时使用 Agent 原有模型',
   '# QWEN_AUDIO_AGENT_BACKEND_MODEL=',

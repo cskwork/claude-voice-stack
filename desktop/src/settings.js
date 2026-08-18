@@ -411,6 +411,7 @@ function renderBackendOptions(currentValue) {
       requiresConfirmation: false,
       configurationRequired: false,
       configurable: false,
+      alwaysFullPermission: false,
       reason: t('当前不可用'),
       title: '',
     })
@@ -479,6 +480,16 @@ function renderBackendOptions(currentValue) {
     name.textContent = state.label
     name.title = state.label
     row.append(name)
+
+    if (state.alwaysFullPermission) {
+      const badge = document.createElement('span')
+      badge.className = 'backend-permission-badge'
+      badge.textContent = t('始终最高权限')
+      badge.title = t(
+        '该后台没有权限审批机制，任何配置下都以最高权限运行',
+      )
+      row.append(badge)
+    }
 
     const runtimeReady = backendRuntimeReady(state, {
       selectedBackend: settings?.agentProtocol,

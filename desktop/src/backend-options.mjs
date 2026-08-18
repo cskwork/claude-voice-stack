@@ -34,6 +34,7 @@ export function backendOptionStates(report) {
     requiresConfirmation: false,
     configurationRequired: false,
     configurable: false,
+    alwaysFullPermission: false,
     reason: '',
     title: '',
   }]
@@ -68,6 +69,7 @@ export function backendOptionStates(report) {
           ready ? 'installed' : 'not-installed'
         )
       ),
+      alwaysFullPermission: item.alwaysFullPermission === true,
       statusLabel: configurationRequired
         ? '待配置'
         : ready ? '已安装' : shortReason(item.issues),

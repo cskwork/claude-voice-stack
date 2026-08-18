@@ -827,6 +827,17 @@ select {
   color: var(--warning);
 }
 
+.backend-permission-badge {
+  flex-shrink: 0;
+  padding: 0 6px;
+  border: 1px solid var(--warning);
+  border-radius: 4px;
+  color: var(--warning);
+  font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
 .backend-progress {
   color: var(--info);
 }

@@ -138,6 +138,12 @@ const ENGLISH = {
   '即将执行官方安装脚本': 'Official install script will run',
   '该后台 Agent 没有 npm 安装包，主进程将执行官方安装脚本：\n\n{command}\n\n请确认你信任该脚本来源后再继续。': 'This backend Agent has no npm package. The app will run its official install script:\n\n{command}\n\nContinue only if you trust the script source.',
   '执行': 'Run',
+  '始终最高权限': 'Always full permission',
+  '该后台没有权限审批机制，任何配置下都以最高权限运行': 'This backend has no permission approval mechanism and always runs with full privileges.',
+  '{label} 没有权限审批机制': '{label} has no permission approval mechanism',
+  '{label} 没有内置沙箱，也不会就任何操作请求确认：无论权限模式如何配置，它都始终以最高权限（full）运行，可以直接执行命令、读写文件。请确认只在可信项目与可信提示词环境中使用。': '{label} has no built-in sandbox and never asks for confirmation: regardless of the configured permission mode it always runs with full privileges and can execute commands and read or write files directly. Continue only in trusted projects and trusted prompt environments.',
+  '我已了解，继续使用': 'I understand, continue',
+  '已取消切换到 {label}': 'Switch to {label} cancelled',
   '皮肤包': 'Skin package',
 }
 

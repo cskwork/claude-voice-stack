@@ -568,7 +568,11 @@ Pi is a special case: it has no built-in sandbox or permission approval mechanis
 and its adapter pi-acp does not implement ACP `session/request_permission`. Pi
 therefore always runs with the equivalent of `full` permissions no matter which
 permission mode is configured — this is not "support for `full`" but the absence of
-any approval step. Use it only in trusted projects and trusted prompt environments.
+any approval step. Pi declares this through the `alwaysFullPermission` backend
+capability: configuration resolution, the Gateway health status, and the desktop app
+all normalize and display the effective `full` mode (never the misleading `native`),
+and the desktop app asks for explicit confirmation in a native dialog the first time
+you switch to Pi. Use it only in trusted projects and trusted prompt environments.
 
 OpenClaw's execution authorization is simultaneously constrained by exec approvals, elevated,
 and execution host configurations, and cannot be safely and completely expressed by a single
