@@ -288,7 +288,13 @@ test('backs off repeated health spawns after any local ACP startup failure', asy
   const first = await adapter.health()
   const second = await adapter.health()
   assert.equal(first.ok, false)
-  assert.deepEqual(second, first)
+  // retryAfterMs 随真实时钟递减，两次调用跨毫秒边界时会差 1ms；
+  // 对它断言范围，其余字段保持严格相等。
+  assert.ok(second.retryAfterMs > 0 && second.retryAfterMs <= 30_000)
+  assert.deepEqual(
+    { ...second, retryAfterMs: 0 },
+    { ...first, retryAfterMs: 0 },
+  )
   assert.equal(starts, 1)
 
   adapter.lastHealthFailure.at -= 30_001
