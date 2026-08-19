@@ -34,8 +34,16 @@ export function insertByTurn(items, message) {
   if (matching.length) {
     insertAt = message.role === 'user' ? matching[0] : matching.at(-1) + 1
   } else {
+    // 只有语音 turn 自带可比较的时间戳；文字 turn（text_*）无法定时，
+    // 按到达顺序追加，且不参与时间比较——否则文字轮会被误判为
+    // “最晚”，导致后续语音消息全部插到列表顶部。
     const timestamp = turnTimestamp(message.turnId)
-    insertAt = items.findIndex(item => turnTimestamp(item.turnId) > timestamp)
+    insertAt = Number.isFinite(timestamp)
+      ? items.findIndex(item => {
+          const existing = turnTimestamp(item.turnId)
+          return Number.isFinite(existing) && existing > timestamp
+        })
+      : -1
     if (insertAt < 0) insertAt = items.length
   }
   const next = [...items]
