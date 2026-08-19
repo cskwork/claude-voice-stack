@@ -8,6 +8,7 @@ const definitions = new Map([
     id: 'opencode',
     label: 'OpenCode',
     workspaceEnvironment: 'OPENCODE_WORKSPACE',
+    skills: { installer: 'opencode' },
     setup: {
       command: 'opencode',
       executableEnvironment: 'OPENCODE_BIN',
@@ -39,6 +40,7 @@ const definitions = new Map([
     id: 'openclaw',
     label: 'OpenClaw',
     workspaceEnvironment: 'QWEN_AUDIO_AGENT_OPENCLAW_WORKSPACE',
+    skills: { installer: 'openclaw' },
     setup: {
       command: 'openclaw',
       executableEnvironment: 'OPENCLAW_BIN',
@@ -77,6 +79,7 @@ const definitions = new Map([
     id: 'qoder',
     label: 'Qoder',
     workspaceEnvironment: 'QODER_WORKSPACE',
+    skills: { installer: 'qoder' },
     setup: {
       command: 'qodercli',
       executableEnvironment: ['QODERCLI_PATH', 'QODER_CLI_PATH'],
@@ -98,6 +101,7 @@ const definitions = new Map([
     id: 'qwen',
     label: 'Qwen Code',
     workspaceEnvironment: 'QWEN_CODE_WORKSPACE',
+    skills: { installer: 'qwen-code' },
     setup: {
       command: 'qwen',
       executableEnvironment: 'QWEN_CODE_BIN',
@@ -122,6 +126,8 @@ const definitions = new Map([
     id: 'kimi',
     label: 'Kimi Code',
     workspaceEnvironment: 'KIMI_WORKSPACE',
+    // kimi 读开放标准通用目录 ~/.agents/skills（skills.sh 同名映射）。
+    skills: { installer: 'kimi-code-cli' },
     setup: {
       command: 'kimi',
       executableEnvironment: 'KIMI_CODE_BIN',
@@ -143,6 +149,8 @@ const definitions = new Map([
     id: 'hermes',
     label: 'Hermes',
     workspaceEnvironment: 'HERMES_WORKSPACE',
+    // Hermes 官方唯一技能目录在用户主目录，无项目级约定。
+    skills: { installer: 'hermes-agent' },
     setup: {
       command: 'hermes',
       executableEnvironment: 'HERMES_BIN',
@@ -168,6 +176,7 @@ const definitions = new Map([
     id: 'codebuddy',
     label: 'CodeBuddy',
     workspaceEnvironment: 'CODEBUDDY_WORKSPACE',
+    skills: { installer: 'codebuddy' },
     setup: {
       command: 'codebuddy',
       executableEnvironment: 'CODEBUDDY_BIN',
@@ -189,6 +198,7 @@ const definitions = new Map([
     id: 'codex',
     label: 'Codex',
     workspaceEnvironment: 'CODEX_WORKSPACE',
+    skills: { installer: 'codex' },
     setup: {
       command: 'codex',
       executableEnvironment: 'CODEX_PATH',
@@ -221,6 +231,7 @@ const definitions = new Map([
     id: 'claude',
     label: 'Claude Code',
     workspaceEnvironment: 'CLAUDE_WORKSPACE',
+    skills: { installer: 'claude-code' },
     setup: {
       command: 'claude',
       executableEnvironment: 'CLAUDE_CODE_EXECUTABLE',
@@ -252,6 +263,9 @@ const definitions = new Map([
     id: 'deepseek',
     label: 'DeepSeek',
     workspaceEnvironment: 'DEEPSEEK_HARNESS_WORKSPACE',
+    // skills.sh 暂无 dsh 专属安装器，将来支持后改为对应 installer 即可；
+    // 当前 dsh 读开放标准目录 ~/.agents/skills，已可被动受益。
+    skills: { installer: null },
     setup: {
       command: 'dsh',
       executableEnvironment: 'DEEPSEEK_HARNESS_BIN',
@@ -313,6 +327,8 @@ const definitions = new Map([
     id: 'acp',
     label: 'ACP Agent',
     workspaceEnvironment: 'ACP_WORKSPACE',
+    // 通用 ACP 接入的 agent 由用户自带，技能目录约定未知；显式声明无约定。
+    skills: null,
     setup: {
       commandEnvironment: 'ACP_COMMAND',
       integration: 'generic',
@@ -331,6 +347,45 @@ const definitions = new Map([
 
 export function backendDefinition(protocol) {
   return definitions.get(normalizeBackendProtocol(protocol)) || null
+}
+
+// skills.sh（npx skills）的 agent id 形态：kebab-case。限定字符集防止
+// installer 声明被拼接进命令参数时注入额外 flag。
+const SKILLS_INSTALLER_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
+
+// skills 声明是后台接入协议的必填项：要么声明其在 skills.sh 的安装器
+// agent id（installer: null 表示经通用目录被动覆盖，无需专属安装），
+// 要么显式 skills: null 表示无技能约定。缺失即视为接入不完整，
+// 注册与测试直接失败，避免新后台遗漏 SKILL 支持决策。skills.sh
+// 未支持的新后台应按其官方扩展点（src/agents.ts）提 PR。
+export function validateBackendSkillsSpec(definition) {
+  if (definition?.skills === undefined) {
+    throw new Error(`后台 ${definition?.id} 缺少 skills 声明（声明 skills.sh 安装器，无约定时显式 null）`)
+  }
+  const spec = definition.skills
+  if (spec === null) return null
+  if (spec?.installer === null) return spec
+  if (
+    typeof spec?.installer !== 'string'
+    || !SKILLS_INSTALLER_PATTERN.test(spec.installer)
+  ) {
+    throw new Error(`后台 ${definition.id} 的 skills.installer 无效：${spec?.installer}`)
+  }
+  return spec
+}
+
+export function backendSkillsSpec(protocol) {
+  const definition = backendDefinition(protocol)
+  if (!definition) return null
+  return validateBackendSkillsSpec(definition)
+}
+
+// 供 skill install 透传时组装显式 -a 名单：不依赖 skills.sh 的本机检测
+//（检测基于特征目录存在性，hermes 未装 CLI、openclaw 被产品隔离时会漏）。
+export function skillsInstallerAgents() {
+  return [...new Set(backendDefinitions()
+    .map(definition => validateBackendSkillsSpec(definition)?.installer)
+    .filter(Boolean))]
 }
 
 export function backendNames() {

@@ -1,6 +1,9 @@
 import { dirname, resolve } from 'path'
 import { fileURLToPath } from 'url'
-import { loadRuntimeEnvironment } from '../../../shared/runtime-environment.mjs'
+import {
+  defaultBackendWorkspace,
+  loadRuntimeEnvironment,
+} from '../../../shared/runtime-environment.mjs'
 import {
   backendDefinition,
   backendNames,
@@ -40,7 +43,7 @@ export function resolveBackendWorkspace(
   const configured = env[definition.workspaceEnvironment]
   return configured
     ? resolve(root, configured)
-    : resolve(configDirectory, `workspaces/${definition.id}`)
+    : defaultBackendWorkspace(configDirectory)
 }
 
 export function resolveAcpArgs(value) {

@@ -97,6 +97,71 @@ test('starts the Gateway by default without acquiring a UI lock', async () => {
   ])
 })
 
+test('dispatches skill commands straight to the skills CLI', async () => {
+  const target = harness()
+  const skillCalls = []
+  target.dependencies.skillTools = {
+    addSkills: (source, options) => {
+      skillCalls.push(['add', source, options.skills, options.list, options.agents])
+      return { stdout: 'installed skill output\n' }
+    },
+    listSkills: () => {
+      skillCalls.push(['list'])
+      return { stdout: 'skill listing\n' }
+    },
+    removeSkill: name => {
+      skillCalls.push(['remove', name])
+      return { stdout: 'removed\n' }
+    },
+    updateSkills: () => {
+      skillCalls.push(['update'])
+      return { stdout: 'updated\n' }
+    },
+    presentAgents: () => ['claude-code', 'opencode'],
+  }
+  const output = () => target.calls
+    .filter(call => call[0] === 'stdout')
+    .map(call => call[1])
+    .join('')
+
+  assert.equal(
+    await main(
+      ['skill', 'install', 'owner/repo', '--skill', 'review'],
+      target.dependencies,
+    ),
+    0,
+  )
+  // 安装目标是“本机存在的后台 ∪ 当前后台”名单，而非全量。
+  assert.deepEqual(
+    skillCalls[0],
+    ['add', 'owner/repo', ['review'], false, ['claude-code', 'opencode']],
+  )
+  assert.match(output(), /installed skill output/)
+  assert.match(output(), /gateway restart/)
+
+  skillCalls.length = 0
+  target.calls.length = 0
+  assert.equal(
+    await main(['skill', 'install', 'owner/repo', '--list'], target.dependencies),
+    0,
+  )
+  assert.deepEqual(skillCalls[0], ['add', 'owner/repo', [], true, undefined])
+  // --list 只枚举，不输出安装后的生效提示。
+  assert.doesNotMatch(output(), /gateway restart/)
+
+  skillCalls.length = 0
+  assert.equal(await main(['skill', 'list'], target.dependencies), 0)
+  assert.deepEqual(skillCalls, [['list']])
+
+  skillCalls.length = 0
+  assert.equal(await main(['skill', 'remove', 'review'], target.dependencies), 0)
+  assert.deepEqual(skillCalls, [['remove', 'review']])
+
+  skillCalls.length = 0
+  assert.equal(await main(['skill', 'update'], target.dependencies), 0)
+  assert.deepEqual(skillCalls, [['update']])
+})
+
 test('marks only an explicitly addressed OpenClaw Gateway as external', async () => {
   const managed = harness()
   managed.dependencies.env = { AGENT_PROTOCOL: 'openclaw' }

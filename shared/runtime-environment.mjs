@@ -6,6 +6,7 @@ import {
   linkSync,
   lstatSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   unlinkSync,
   writeFileSync,
@@ -266,6 +267,13 @@ function migrateLegacyMemory({
   return Boolean(user.length || memory.length)
 }
 
+// 所有后台 Agent 共享同一个默认 workspace。历史上按后台隔离（workspaces/<id>）
+// 是为了各自的 AGENTS.md 指令模板，该机制已被 session 级指令注入取代；共享目录
+// 让用户切换后台时能无缝继续同一份工作，也让 SKILL 等资产只需同步到一处。
+export function defaultBackendWorkspace(configDirectory) {
+  return resolve(configDirectory, 'workspace')
+}
+
 function resolveBackendWorkspaces(env, root, configDirectory) {
   return Object.fromEntries(backendDefinitions()
     .filter(definition => definition.workspaceEnvironment)
@@ -274,11 +282,39 @@ function resolveBackendWorkspaces(env, root, configDirectory) {
       return [definition.id, {
         directory: configured
           ? resolve(root, configured)
-          : resolve(configDirectory, `workspaces/${definition.id}`),
+          : defaultBackendWorkspace(configDirectory),
         environment: definition.workspaceEnvironment,
         managed: !configured,
       }]
     }))
+}
+
+// 旧版本按后台隔离的 workspaces/<id>/ 目录里可能有用户文件。只提示位置，
+// 不自动迁移、不删除，由用户决定是否手动移动到共享 workspace。
+function collectLegacyWorkspaceNotices(configDirectory, sharedWorkspace) {
+  const notices = []
+  for (const definition of backendDefinitions()) {
+    if (!definition.workspaceEnvironment) continue
+    const legacyDirectory = resolve(
+      configDirectory,
+      `workspaces/${definition.id}`,
+    )
+    let entries
+    try {
+      entries = readdirSync(legacyDirectory)
+    } catch (error) {
+      if (error.code !== 'ENOENT' && error.code !== 'ENOTDIR') throw error
+      continue
+    }
+    if (entries.length) {
+      notices.push({
+        backend: definition.id,
+        legacyDirectory,
+        sharedWorkspace,
+      })
+    }
+  }
+  return notices
 }
 
 function codeBuddyModelName(env) {
@@ -448,6 +484,7 @@ export function loadRuntimeEnvironment({
     root,
     configDirectory,
   )
+  const sharedWorkspace = defaultBackendWorkspace(configDirectory)
   const workspace = id => backendWorkspaces[id]?.directory || ''
   const openCodeWorkspace = workspace('opencode')
   const openClawWorkspace = workspace('openclaw')
@@ -463,6 +500,7 @@ export function loadRuntimeEnvironment({
     ? resolve(root, env.QWEN_AUDIO_AGENT_OPENCLAW_STATE_DIR)
     : resolve(configDirectory, 'backends/openclaw/state')
   let migratedFiles = []
+  let legacyWorkspaceNotices = []
   if (prepareBackendRuntime && !readOnly) {
     migratePrivateFile(
       resolve(root, 'runtime/frontend-memory.json'),
@@ -483,6 +521,10 @@ export function loadRuntimeEnvironment({
       }
       env[entry.environment] = entry.directory
     }
+    legacyWorkspaceNotices = collectLegacyWorkspaceNotices(
+      configDirectory,
+      sharedWorkspace,
+    )
     if (backendWorkspaces.codebuddy?.managed) {
       ensureCodeBuddyTemplate(
         resolve(root, 'config/codebuddy/workspace/.codebuddy/models.json'),
@@ -509,6 +551,7 @@ export function loadRuntimeEnvironment({
     frontendMemoryPath,
     frontendNotesPath,
     taskStatePath,
+    sharedWorkspace,
     openCodeWorkspace,
     openClawWorkspace,
     qoderWorkspace,
@@ -521,6 +564,7 @@ export function loadRuntimeEnvironment({
     acpWorkspace,
     openClawStateDirectory,
     migratedFiles,
+    legacyWorkspaceNotices,
     loadedFiles,
     generatedSecret: secret.generated,
     statePath: secret.statePath,

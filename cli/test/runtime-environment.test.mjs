@@ -220,46 +220,25 @@ test('keeps managed backend data outside the installation directory', () => {
     generateSecret: false,
   })
 
+  // 所有后台默认共享同一个托管 workspace，均在安装目录之外。
   assert.equal(
+    result.sharedWorkspace,
+    resolve(result.configDirectory, 'workspace'),
+  )
+  for (const workspace of [
     result.openCodeWorkspace,
-    resolve(result.configDirectory, 'workspaces/opencode'),
-  )
-  assert.equal(
     result.openClawWorkspace,
-    resolve(result.configDirectory, 'workspaces/openclaw'),
-  )
-  assert.equal(
     result.qoderWorkspace,
-    resolve(result.configDirectory, 'workspaces/qoder'),
-  )
-  assert.equal(
     result.qwenCodeWorkspace,
-    resolve(result.configDirectory, 'workspaces/qwen'),
-  )
-  assert.equal(
     result.kimiWorkspace,
-    resolve(result.configDirectory, 'workspaces/kimi'),
-  )
-  assert.equal(
     result.hermesWorkspace,
-    resolve(result.configDirectory, 'workspaces/hermes'),
-  )
-  assert.equal(
     result.codeBuddyWorkspace,
-    resolve(result.configDirectory, 'workspaces/codebuddy'),
-  )
-  assert.equal(
     result.codexWorkspace,
-    resolve(result.configDirectory, 'workspaces/codex'),
-  )
-  assert.equal(
     result.claudeWorkspace,
-    resolve(result.configDirectory, 'workspaces/claude'),
-  )
-  assert.equal(
     result.acpWorkspace,
-    resolve(result.configDirectory, 'workspaces/acp'),
-  )
+  ]) {
+    assert.equal(workspace, result.sharedWorkspace)
+  }
   assert.equal(
     result.openClawStateDirectory,
     resolve(result.configDirectory, 'backends/openclaw/state'),
@@ -292,6 +271,31 @@ test('keeps managed backend data outside the installation directory', () => {
   assert.equal(
     existsSync(resolve(result.openCodeWorkspace, 'AGENTS.md')),
     false,
+  )
+})
+
+test('reports legacy per-backend workspaces without touching them', () => {
+  const target = fixture()
+  const configDirectory = resolve(target.homeDirectory, '.config/qwaudio')
+  const legacyDirectory = resolve(configDirectory, 'workspaces/qwen')
+  mkdirSync(legacyDirectory, { recursive: true })
+  writeFileSync(resolve(legacyDirectory, 'notes.md'), 'user data\n')
+
+  const result = loadRuntimeEnvironment({
+    root: target.root,
+    homeDirectory: target.homeDirectory,
+    env: {},
+    generateSecret: false,
+  })
+  assert.deepEqual(result.legacyWorkspaceNotices, [{
+    backend: 'qwen',
+    legacyDirectory,
+    sharedWorkspace: result.sharedWorkspace,
+  }])
+  // 只提示，不迁移不删除。
+  assert.equal(
+    readFileSync(resolve(legacyDirectory, 'notes.md'), 'utf8'),
+    'user data\n',
   )
 })
 
