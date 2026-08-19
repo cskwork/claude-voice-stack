@@ -4,19 +4,24 @@ The Backend Agent handles tasks that require tools, file operations, or sustaine
 
 ## Supported Agents
 
-| Backend Agent | Integration Method | Setup Requirements | Recommendation |
-| --- | --- | --- | --- |
-| None | N/A | Frontend-only mode, no configuration needed | ★★★★★ |
-| OpenCode | Native ACP | Supports one-click install and Bailian configuration | ★★★★★ |
-| OpenClaw | Built-in ACP bridge | Supports one-click install and Bailian configuration | ★★★★★ |
-| Qoder | Native ACP | Supports one-click install, requires user configuration | ★★★★★ |
-| Qwen Code | Native ACP | Supports one-click install, requires user configuration | ★★★★☆ |
-| Kimi Code | Native ACP | Supports one-click install, requires user configuration | ★★★★★ |
-| Hermes | Native ACP | Supports one-click install, requires user configuration | ★★★★☆ |
-| CodeBuddy | Native ACP | Supports one-click install, requires user configuration | ★★★★☆ |
-| Codex | External ACP adapter | Supports one-click install of both the core and adapter, requires user configuration | ★★★★☆ |
-| Claude Code | External ACP adapter | Supports one-click install of both the core and adapter, requires user configuration | ★★★★☆ |
-| DeepSeek | Native ACP (experimental) | Supports one-click install, requires a DeepSeek API key | ★★★★☆ |
+| Backend Agent | Integration Method | Setup Requirements | Skills | Recommendation |
+| --- | --- | --- | --- | --- |
+| None | N/A | Frontend-only mode, no configuration needed | — | ★★★★★ |
+| OpenCode | Native ACP | Supports one-click install and Bailian configuration | `~/.config/opencode/skills/` | ★★★★★ |
+| OpenClaw | Built-in ACP bridge | Supports one-click install and Bailian configuration | `~/.openclaw/skills/` | ★★★★★ |
+| Qoder | Native ACP | Supports one-click install, requires user configuration | `~/.qoder/skills/` | ★★★★★ |
+| Qwen Code | Native ACP | Supports one-click install, requires user configuration | `~/.qwen/skills/` | ★★★★☆ |
+| Kimi Code | Native ACP | Supports one-click install, requires user configuration | `~/.agents/skills/` | ★★★★★ |
+| Hermes | Native ACP | Supports one-click install, requires user configuration | `~/.hermes/skills/` | ★★★★☆ |
+| CodeBuddy | Native ACP | Supports one-click install, requires user configuration | `~/.codebuddy/skills/` | ★★★★☆ |
+| Codex | External ACP adapter | Supports one-click install of both the core and adapter, requires user configuration | `~/.codex/skills/` | ★★★★☆ |
+| Claude Code | External ACP adapter | Supports one-click install of both the core and adapter, requires user configuration | `~/.claude/skills/` | ★★★★☆ |
+| DeepSeek | Native ACP (experimental) | Supports one-click install, requires a DeepSeek API key | `~/.agents/skills/` | ★★★★☆ |
+
+Skills install once through `qwenaudio skill install` (a branded entry point
+for the standard skills.sh installer) and land in every backend's user-level
+directory above automatically. See
+[Skill Management](../configuration.md#skill-management).
 
 The recommendation rating reflects the current integration completeness, compatibility, and extent of real-world verification: five stars indicates a fully tested and recommended integration, while four stars indicates ongoing development or incomplete verification of the same scope.
 

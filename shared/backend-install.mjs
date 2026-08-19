@@ -123,7 +123,7 @@ export function installSupport(id, {
   if (!spec) {
     return {
       supported: false,
-      reason: '通用 ACP 后台需自行安装，并通过 ACP_COMMAND 配置',
+      reason: '通用 ACP 接入的 Agent 需自行安装，并通过 ACP_COMMAND 配置',
     }
   }
   if (!steps.length) {

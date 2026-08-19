@@ -132,6 +132,72 @@ test('rejects invalid install targets and misplaced flags', () => {
   )
 })
 
+test('parses skill passthrough commands', () => {
+  const install = parseArguments(
+    ['skill', 'install', 'owner/repo', '--skill', 'pdf-tools', '--skill', 'review'],
+    {},
+  )
+  assert.equal(install.command, 'skill')
+  assert.equal(install.skillAction, 'install')
+  assert.equal(install.skillTarget, 'owner/repo')
+  assert.deepEqual(install.skillNames, ['pdf-tools', 'review'])
+  assert.equal(install.skillList, false)
+
+  const list = parseArguments(
+    ['skill', 'install', 'https://github.com/vercel-labs/skills', '--list'],
+    {},
+  )
+  assert.equal(list.skillTarget, 'https://github.com/vercel-labs/skills')
+  assert.equal(list.skillList, true)
+
+  const installed = parseArguments(['skill', 'list'], {})
+  assert.equal(installed.skillAction, 'list')
+  assert.equal(installed.skillTarget, '')
+
+  const remove = parseArguments(['skill', 'remove', 'pdf-tools'], {})
+  assert.equal(remove.skillAction, 'remove')
+  assert.equal(remove.skillTarget, 'pdf-tools')
+
+  const update = parseArguments(['skill', 'update'], {})
+  assert.equal(update.skillAction, 'update')
+})
+
+test('rejects incomplete or misplaced skill arguments', () => {
+  assert.throws(() => parseArguments(['skill'], {}), /skill 需要子命令/)
+  assert.throws(() => parseArguments(['skill', 'publish'], {}), /skill 需要子命令/)
+  assert.throws(
+    () => parseArguments(['skill', 'install'], {}),
+    /需要技能来源/,
+  )
+  assert.throws(
+    () => parseArguments(['skill', 'remove'], {}),
+    /需要技能名称/,
+  )
+  assert.throws(
+    () => parseArguments(['skill', 'install', 'owner/repo', '--skill'], {}),
+    /--skill 缺少参数/,
+  )
+  assert.throws(
+    () => parseArguments(['skill', 'list', '--skill', 'x'], {}),
+    /--skill 只适用于 skill install/,
+  )
+  assert.throws(
+    () => parseArguments(['skill', 'remove', 'x', '--list'], {}),
+    /--list 只适用于 skill install/,
+  )
+  assert.throws(
+    () => parseArguments(
+      ['skill', 'install', 'owner/repo', '--list', '--skill', 'x'],
+      {},
+    ),
+    /--list 与 --skill 不能同时使用/,
+  )
+  assert.throws(
+    () => parseArguments(['install', 'codex', '--skill', 'x'], {}),
+    /--skill 只适用于 skill install/,
+  )
+})
+
 test('rejects the removed backend mode option', () => {
   assert.throws(() => parseArguments([
     'gateway',

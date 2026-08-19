@@ -844,6 +844,16 @@ export function attachRealtimeGateway(server, {
       if (event.type === 'task.permission.resolved') {
         const authorizationId = event.permission?.id
         if (authorizationId) {
+          // 已进入对话的权限询问被其它通道（如 WebUI 按钮）处理后，把结果
+          // 静默回注模型上下文：避免模型不知情而重复追问，或把用户随后的
+          // 口头确认误报为“请求已失效”。
+          if (announcedPermissions.has(authorizationId) && frontend?.ready) {
+            frontend.appendUserInputContext([{
+              type: 'text',
+              text: '（系统提示：刚才的后台权限请求已处理完毕，任务继续执行；'
+                + '无需再询问或回应该请求。）',
+            }]).catch(() => {})
+          }
           announcedPermissions.delete(authorizationId)
           frontend?.cancelResponses((context, origin) => (
             origin === 'permission'

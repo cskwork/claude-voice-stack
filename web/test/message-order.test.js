@@ -237,3 +237,36 @@ test('keeps asynchronous announcements as new live-tail turns', () => {
   assert.equal(turns[1].standalone, true)
   assert.equal(turns[1].messages[0].id, 'announcement')
 })
+
+test('appends voice messages after earlier text-turn history', () => {
+  // 文字轮的 turnId（text_*）没有时间戳；此前会被误判为"最晚"，
+  // 导致后续语音消息全部插到列表顶部而不可见。
+  const afterText = [
+    { id: 'user:text_a', role: 'user', turnId: 'text_a', content: '文字提问' },
+    { id: 'voice:r1', role: 'assistant', turnId: 'text_a', content: '文字回复' },
+  ]
+  const withVoiceUser = insertByTurn(afterText, {
+    id: 'user:voice-200-1',
+    role: 'user',
+    turnId: 'voice-200-1',
+    content: '语音提问',
+  })
+  assert.equal(withVoiceUser.at(-1).id, 'user:voice-200-1')
+
+  const withVoiceReply = insertByTurn(withVoiceUser, {
+    id: 'voice:r2',
+    role: 'assistant',
+    turnId: 'voice-200-1',
+    content: '语音回复',
+  })
+  assert.equal(withVoiceReply.at(-1).id, 'voice:r2')
+
+  // 反向：语音轮之后的文字消息同样追加在末尾。
+  const withText = insertByTurn(withVoiceReply, {
+    id: 'user:text_b',
+    role: 'user',
+    turnId: 'text_b',
+    content: '再发文字',
+  })
+  assert.equal(withText.at(-1).id, 'user:text_b')
+})
