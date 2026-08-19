@@ -11,6 +11,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 import {
+  effectiveOrbSkin,
   importSkin,
   listSkins,
   removeSkin,
@@ -270,4 +271,17 @@ test('listSkins skips broken packages and mismatched directory names', t => {
     'firefly--lingxiaotian',
   ])
   assert.deepEqual(listSkins(join(root, 'missing')), [])
+})
+
+test('effectiveOrbSkin falls back to fluid when the package is missing', t => {
+  const root = temporaryRoot(t)
+  const skinsRoot = join(root, 'skins')
+  writeSkin(join(skinsRoot, 'firefly--lingxiaotian'))
+  assert.equal(
+    effectiveOrbSkin('firefly--lingxiaotian', { skinsRoot }),
+    'firefly--lingxiaotian',
+  )
+  assert.equal(effectiveOrbSkin('goo', { skinsRoot }), 'goo')
+  assert.equal(effectiveOrbSkin('missing--skin', { skinsRoot }), 'fluid')
+  assert.equal(effectiveOrbSkin('', { skinsRoot }), 'fluid')
 })

@@ -320,6 +320,16 @@ export async function importSkin({
   }
 }
 
+// 生效皮肤：内置 id 直接用；导入皮肤需皮肤包仍在（pet.json 存在），
+// 缺失回退 fluid——被选中的皮肤目录被手动删除后不许留下空白悬浮球。
+export function effectiveOrbSkin(orbSkin, { skinsRoot }) {
+  if (isBuiltinOrbSkin(orbSkin)) return orbSkin
+  if (existsSync(join(skinsRoot, String(orbSkin || ''), 'pet.json'))) {
+    return orbSkin
+  }
+  return 'fluid'
+}
+
 export function removeSkin({ id, skinsRoot }) {
   const skinId = String(id || '').trim()
   // id 模式校验同时排除了路径分隔符，join 不会逃出 skins 目录。

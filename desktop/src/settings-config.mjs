@@ -452,6 +452,34 @@ export function realtimeSettingsConfigured(settings = {}) {
   }
 }
 
+// Applies a just-saved settings patch to a live environment, mirroring the
+// key mapping of updateSettingsContent. Without this the desktop process
+// keeps serving the values it loaded first — the config file is only read
+// into environment slots that are still unset, so a freshly saved API Key
+// would look ignored until the app itself restarts.
+export function applySettingsEnvironment(settings = {}, env = process.env) {
+  const normalized = normalizeSettings(settings)
+  const backend = backendDefinition(normalized.agentProtocol)
+  const entries = Object.entries(SETTING_KEYS)
+    .filter(([field]) => settings[field] !== undefined)
+    .map(([field, key]) => [key, normalized[field]])
+  if (settings.backendUrl !== undefined && backend?.baseUrlEnvironment) {
+    entries.push([backend.baseUrlEnvironment, normalized.backendUrl])
+  }
+  const credentialEnvironment = backend?.externalService?.credentialEnvironment
+  if (settings.backendCredential !== undefined && credentialEnvironment) {
+    entries.push([credentialEnvironment, normalized.backendCredential])
+  }
+  for (const [key, value] of entries) {
+    const text = String(value ?? '')
+    // A cleared value releases the slot so runtime defaults apply again,
+    // instead of pinning the stale override forever.
+    if (text === '') delete env[key]
+    else env[key] = text
+  }
+  return env
+}
+
 export function updateSettingsContent(content = '', settings = {}) {
   const normalized = normalizeSettings(settings)
   const values = Object.fromEntries(

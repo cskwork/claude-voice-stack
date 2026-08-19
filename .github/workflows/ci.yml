@@ -35,6 +35,10 @@ jobs:
       - run: npm run build
       - if: ${{ matrix.os == 'macos-latest' && matrix.node == '22.22.2' }}
         run: npm run test:desktop-smoke
+      # 真实消费者验收：打包 → 装进只含已声明依赖的裸消费者 → CLI 与
+      # Gateway 契约全链路。跑在基线 Node 上，一并证明基线可用。
+      - if: ${{ matrix.os == 'ubuntu-latest' && matrix.node == '22.22.2' }}
+        run: QWEN_AUDIO_CONSUMER_PROBE=1 node --test test/consumer-install.test.mjs
       - run: node scripts/verify-package.mjs
 
   release-check:

@@ -14,6 +14,10 @@ export const GatewayClientEvent = Object.freeze({
   PLAYBACK_STARTED: 'playback.started',
   PLAYBACK_ENDED: 'playback.ended',
   PLAYBACK_CANCELLED: 'playback.cancelled',
+  // Confirms that a host-requested suspension took effect on this client. A
+  // host must not wait for it: pressing a key to record is latency sensitive,
+  // so the acknowledgement only feeds status display and timeout healing.
+  INPUT_SUSPEND_ACK: 'input.suspend.ack',
 })
 
 export const GatewayServerEvent = Object.freeze({
@@ -27,6 +31,12 @@ export const GatewayServerEvent = Object.freeze({
   VOICE_SLEEP: 'voice.sleep',
   TURN_STARTED: 'turn.started',
   PLAYBACK_CLEAR: 'playback.clear',
+  // Commands a client to stop and resume audio capture outright, so an
+  // external controller can take the microphone. This is the input-side
+  // counterpart of PLAYBACK_CLEAR and is stronger than the client-declared
+  // INPUT_MUTE: no capture, no wake word detection.
+  INPUT_SUSPEND: 'input.suspend',
+  INPUT_RESUME: 'input.resume',
   AUDIO_DELTA: 'audio.delta',
   AUDIO_DONE: 'audio.done',
   RESPONSE_STARTED: 'response.started',
