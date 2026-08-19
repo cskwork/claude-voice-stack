@@ -159,6 +159,7 @@ const realtimeFrontend = resolveRealtimeFrontendConfiguration(process.env)
 
 export const config = {
   root,
+  configDirectory: runtimeEnvironment.configDirectory,
   host: process.env.HOST || '127.0.0.1',
   // PORT=0 lets an embedded host (e.g. the desktop app) fall back to a
   // random loopback port and learn it from the child process report.

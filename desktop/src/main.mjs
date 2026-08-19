@@ -17,7 +17,7 @@ import {
   readFileSync,
   writeFileSync,
 } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { parseEnv } from 'node:util'
 import {
@@ -62,6 +62,9 @@ import {
   desktopOrbBounds,
   desktopSurfaceLayout,
 } from './desktop-surface-layout.mjs'
+import { createOrbPlacement } from './orb-placement.mjs'
+import { bindOrbShell, configureOrbWindow } from './orb-shell.mjs'
+import { createSettingsStore } from './settings-store.mjs'
 import {
   withBackendLifecycle,
 } from '../../shared/backend-install.mjs'
@@ -73,8 +76,10 @@ import {
   parseSettings,
   realtimeSettingsConfigured,
   updateSettingsContent,
+  applySettingsEnvironment,
 } from './settings-config.mjs'
 import {
+  effectiveOrbSkin as resolveEffectiveOrbSkin,
   importSkin,
   listSkins,
   removeSkin,
@@ -82,7 +87,6 @@ import {
 } from './skin-store.mjs'
 import {
   BUILTIN_ORB_SKINS,
-  isBuiltinOrbSkin,
 } from '../../shared/orb-skin-catalog.mjs'
 import {
   startDesktopRendererServer,
@@ -141,12 +145,21 @@ const logger = createLogger({
   fileName: 'desktop.log',
 })
 const skinsRoot = skinsDirectory(runtimeEnvironment.configDirectory)
+// 悬浮球摆位：记住用户拖到的位置，重启后回到原位；显示器变化时夹取
+// 到仍然存在的屏幕。状态经 settings-store 存进配置目录的 ui-state.json。
+const desktopSettingsStore = createSettingsStore({
+  configDir: runtimeEnvironment.configDirectory,
+})
+const orbPlacement = createOrbPlacement({
+  getDisplays: () => screen.getAllDisplays(),
+  orbSize: { width: DESKTOP_ORB_WIDTH, height: DESKTOP_ORB_HEIGHT },
+  loadState: () => desktopSettingsStore.orbPosition.load(),
+  saveState: state => desktopSettingsStore.orbPosition.save(state),
+})
 
-// 生效皮肤：内置 id 直接用；导入皮肤需皮肤包仍在，缺失回退 fluid。
+// 生效皮肤：内置 id 直接用；导入皮肤缺包时回退 fluid（skin-store 单一实现）。
 function effectiveOrbSkin(orbSkin) {
-  if (isBuiltinOrbSkin(orbSkin)) return orbSkin
-  if (existsSync(join(skinsRoot, orbSkin, 'pet.json'))) return orbSkin
-  return 'fluid'
+  return resolveEffectiveOrbSkin(orbSkin, { skinsRoot })
 }
 logger.info('desktop.starting', {
   version: app.getVersion(),
@@ -187,7 +200,6 @@ const preloadPath = resolve(here, 'preload.cjs')
 let mainWindow = null
 let settingsWindow = null
 let rendererServer = null
-let dragState = null
 let desktopTaskCount = 0
 let desktopTaskPlacement = 'below'
 let desktopOrbOffsetX = 0
@@ -522,6 +534,7 @@ function createWindow() {
   const { workArea } = screen.getPrimaryDisplay()
   const width = DESKTOP_ORB_WIDTH
   const height = DESKTOP_ORB_HEIGHT
+  const initialPosition = orbPlacement.initialPosition()
   const window = new BrowserWindow({
     width,
     height,
@@ -529,8 +542,8 @@ function createWindow() {
     minHeight: height,
     maxWidth: workArea.width,
     maxHeight: workArea.height,
-    x: workArea.x + workArea.width - width - 24,
-    y: workArea.y + 24,
+    x: initialPosition.x,
+    y: initialPosition.y,
     frame: false,
     transparent: true,
     resizable: false,
@@ -554,7 +567,8 @@ function createWindow() {
     },
   })
 
-  window.setAlwaysOnTop(true, 'floating')
+  // 悬浮层级与全屏空间可见性统一走 orb-shell 契约（与嵌入宿主同一配方）。
+  configureOrbWindow(window)
   configurePermissions(window)
 
   window.webContents.setWindowOpenHandler(({ url }) => {
@@ -568,7 +582,7 @@ function createWindow() {
   })
   window.once('ready-to-show', () => window.show())
   window.on('blur', () => {
-    dragState = null
+    orbShell.cancelDrag()
   })
   window.on('closed', () => {
     if (mainWindow === window) {
@@ -637,61 +651,20 @@ function showSettings() {
   settingsWindow = createSettingsWindow()
 }
 
-function validPoint(point) {
-  return (
-    Number.isFinite(point?.x)
-    && Number.isFinite(point?.y)
-  )
-}
-
-function validWindowPosition(x, y) {
-  return (
-    Number.isSafeInteger(x)
-    && Number.isSafeInteger(y)
-    && x >= -2_147_483_648
-    && x <= 2_147_483_647
-    && y >= -2_147_483_648
-    && y <= 2_147_483_647
-  )
-}
-
-ipcMain.on('qwen-audio-agent:drag-start', (event, point) => {
-  if (!mainWindow || event.sender !== mainWindow.webContents || !validPoint(point)) return
-  const [windowX, windowY] = mainWindow.getPosition()
-  dragState = {
-    pointerX: point.x,
-    pointerY: point.y,
-    windowX,
-    windowY,
-  }
-})
-
-ipcMain.on('qwen-audio-agent:drag-move', (event, point) => {
-  if (
-    !mainWindow
-    || event.sender !== mainWindow.webContents
-    || !dragState
-    || !validPoint(point)
-  ) return
-  const x = Math.round(dragState.windowX + point.x - dragState.pointerX)
-  const y = Math.round(dragState.windowY + point.y - dragState.pointerY)
-  if (!validWindowPosition(x, y)) {
-    logger.warn('desktop.drag_position_invalid', { x, y })
-    dragState = null
-    return
-  }
-  try {
-    mainWindow.setPosition(x, y)
-  } catch (error) {
-    logger.warn('desktop.drag_position_failed', { x, y, error })
-    dragState = null
-  }
-})
-
-ipcMain.on('qwen-audio-agent:drag-end', event => {
-  if (!mainWindow || event.sender !== mainWindow.webContents) return
-  dragState = null
-  updateDesktopTaskSurface(desktopTaskCount)
+// 悬浮球 IPC（拖拽、生命周期、打开设置、请求退出）统一走 orb-shell 契约
+// 绑定：桌面版与嵌入宿主共用同一份实现，防止两个外壳漂移。
+const orbShell = bindOrbShell({
+  ipc: ipcMain,
+  getWindow: () => mainWindow,
+  presence: desktopPresence,
+  logger,
+  onOpenSettings: () => showSettings(),
+  onQuit: () => app.quit(),
+  onDragEnd: () => {
+    const [x, y] = mainWindow.getPosition()
+    orbPlacement.recordPosition({ x, y })
+    updateDesktopTaskSurface(desktopTaskCount)
+  },
 })
 
 function updateDesktopTaskSurface(value) {
@@ -740,17 +713,6 @@ ipcMain.on('qwen-audio-agent:task-card-count', (event, value) => {
   updateDesktopTaskSurface(value)
 })
 
-ipcMain.on('qwen-audio-agent:open-settings', event => {
-  if (mainWindow && event.sender === mainWindow.webContents) showSettings()
-})
-
-ipcMain.handle('qwen-audio-agent:lifecycle-load', event => {
-  if (!mainWindow || event.sender !== mainWindow.webContents) {
-    throw new Error('无权读取桌面状态')
-  }
-  return { state: desktopPresence.state }
-})
-
 ipcMain.handle('qwen-audio-agent:wake-shortcut-pause', event => {
   if (!settingsWindow || event.sender !== settingsWindow.webContents) {
     throw new Error('无权修改显示快捷键')
@@ -764,29 +726,6 @@ ipcMain.handle('qwen-audio-agent:wake-shortcut-resume', event => {
     throw new Error('无权修改显示快捷键')
   }
   return desktopPresence.resumeShortcut()
-})
-
-ipcMain.handle('qwen-audio-agent:enter-hide', event => {
-  if (!mainWindow || event.sender !== mainWindow.webContents) {
-    throw new Error('无权修改桌面状态')
-  }
-  return { state: desktopPresence.hide('inactivity') }
-})
-
-ipcMain.on('qwen-audio-agent:wake', event => {
-  if (mainWindow && event.sender === mainWindow.webContents) {
-    desktopPresence.wake('orb')
-  }
-})
-
-ipcMain.on('qwen-audio-agent:lifecycle-ready', event => {
-  if (
-    mainWindow
-    && event.sender === mainWindow.webContents
-    && desktopPresence.state === 'waking'
-  ) {
-    desktopPresence.ready()
-  }
 })
 
 ipcMain.on('qwen-audio-agent:open-external', async (event, value) => {
@@ -1260,6 +1199,9 @@ ipcMain.handle('qwen-audio-agent:settings-save', async (event, settings) => {
   }
   setupRequired = false
   lastRuntimeError = ''
+  // 把刚保存的设置同步进本进程环境：config.env 只填充未设置的槽位，
+  // 不写回的话本进程会继续沿用首次加载的旧值（如兼容性检查用的旧 Key）。
+  applySettingsEnvironment(settings)
   process.env.QWEN_AUDIO_AGENT_URL = appOrigin
   process.env.QWEN_AUDIO_ORB_STYLE = normalized.orbStyle
   process.env.QWEN_AUDIO_ORB_SKIN = normalized.orbSkin
@@ -1315,10 +1257,6 @@ ipcMain.handle('qwen-audio-agent:skin-remove', async (event, id) => {
   const removed = removeSkin({ id, skinsRoot })
   if (removed) logger.info('skin.removed', { id: String(id) })
   return { removed }
-})
-
-ipcMain.on('qwen-audio-agent:quit', event => {
-  if (mainWindow && event.sender === mainWindow.webContents) app.quit()
 })
 
 if (!app.requestSingleInstanceLock()) {

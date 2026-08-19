@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import {
+  applySettingsEnvironment,
   normalizeSettings,
   parseSettings,
   realtimeSettingsConfigured,
@@ -571,4 +572,24 @@ test('rejects external mode for unsupported backends and missing addresses', () 
     backendOwnership: 'external',
     backendUrl: 'wss://user:secret@openclaw.example.test',
   }), /不能包含用户名或密码/)
+})
+
+test('applies a saved settings patch to the live environment', () => {
+  const env = {
+    DASHSCOPE_API_KEY: 'stale-key',
+    QWEN_AUDIO_REALTIME_MODEL: 'old-model',
+    UNRELATED: 'kept',
+  }
+  // 只写回本次保存的字段：config.env 只填充未设置的槽位，不同步会让
+  // 本进程继续沿用首次加载的旧值，刚保存的 Key 看起来像被忽略。
+  applySettingsEnvironment({ dashscopeApiKey: 'fresh-key' }, env)
+  assert.equal(env.DASHSCOPE_API_KEY, 'fresh-key')
+  assert.equal(env.QWEN_AUDIO_REALTIME_MODEL, 'old-model')
+  assert.equal(env.UNRELATED, 'kept')
+})
+
+test('a cleared setting releases its environment slot', () => {
+  const env = { QWEN_AUDIO_AGENT_BACKEND_MODEL: 'pinned-model' }
+  applySettingsEnvironment({ backendModel: '' }, env)
+  assert.equal('QWEN_AUDIO_AGENT_BACKEND_MODEL' in env, false)
 })
