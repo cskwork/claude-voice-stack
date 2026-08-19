@@ -43,8 +43,12 @@ test('save persists 0600, applies the environment, and satisfies the gate', t =>
   assert.equal(store.ready(), true)
   // An in-process restart must observe what was just written.
   assert.equal(env.DASHSCOPE_API_KEY, 'sk-host')
-  const mode = statSync(store.path).mode & 0o777
-  assert.equal(mode, 0o600)
+  // Windows has no POSIX permission bits; the private mode is only
+  // assertable where chmod means something.
+  if (process.platform !== 'win32') {
+    const mode = statSync(store.path).mode & 0o777
+    assert.equal(mode, 0o600)
+  }
   assert.match(readFileSync(store.path, 'utf8'), /DASHSCOPE_API_KEY=sk-host/)
   assert.ok(store.path.endsWith(SETTINGS_FILE))
 })
@@ -66,8 +70,10 @@ test('ui state merges patches and survives corruption', t => {
   const merged = store.saveUiState({ b: 2 })
   assert.deepEqual(merged, { a: 1, b: 2 })
   assert.ok(store.uiStatePath.endsWith(UI_STATE_FILE))
-  const mode = statSync(store.uiStatePath).mode & 0o777
-  assert.equal(mode, 0o600)
+  if (process.platform !== 'win32') {
+    const mode = statSync(store.uiStatePath).mode & 0o777
+    assert.equal(mode, 0o600)
+  }
 
   chmodSync(store.uiStatePath, 0o600)
   writeFileSync(store.uiStatePath, 'not json')
