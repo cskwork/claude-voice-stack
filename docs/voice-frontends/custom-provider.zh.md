@@ -6,40 +6,23 @@
 import { createGatewayApplication } from 'qwen-audio-agent/gateway-application'
 import {
   createRealtimeProviderRegistry,
-  createQwenRealtimeProvider,
-  openAiCompatibleProtocol,
 } from 'qwen-audio-agent/realtime-provider'
-
-const settings = loadProductSettings()
-const provider = createQwenRealtimeProvider({
-  key: 'private-realtime',
-  label: 'Private Realtime',
-  visibility: 'gateway-only',
-  model: () => settings.model,
-  voice: () => settings.voice,
-  isConfigured: () => Boolean(settings.url && settings.token),
-  url: () => settings.url,
-  headers: () => ({ Authorization: `Bearer ${settings.token}` }),
-  createProtocol: ({ connectionId }) => ({
-    ...openAiCompatibleProtocol,
-    connectionMessages: () => [{ type: 'start', connectionId }],
-  }),
-})
+import { privateRealtimeProvider } from './private-realtime-provider.mjs'
 
 const realtimeProviderRegistry = createRealtimeProviderRegistry({
-  providers: [provider],
-  defaultProvider: provider.key,
+  providers: [privateRealtimeProvider],
+  defaultProvider: privateRealtimeProvider.key,
 })
 
 createGatewayApplication({
   realtimeProviderRegistry,
-  realtimeProvider: provider.key,
+  realtimeProvider: privateRealtimeProvider.key,
 })
 ```
 
 扩展边界如下：
 
-- `createQwenRealtimeProvider()` 复用 Qwen Audio 的 Session、工具与结果播报语义；URL、请求头、模型和音色仍由宿主配置。
+- 每个 Provider 都是独立适配器，完整拥有自己的 URL、认证、模型、Session 和错误分类语义；不要通过改造另一个 Provider 来承载业务差异。
 - `url()`、`headers()`、`model()` 可从宿主配置闭包读取服务地址、令牌和模型；Gateway 不要求为业务 Provider 增加环境变量。
 - `createProtocol()` 每条 Realtime 连接调用一次，适合生成连接级 ID 和隔离状态。
 - `connectionMessages()` 在 WebSocket 打开后、`session.update` 之前发送原始握手帧。

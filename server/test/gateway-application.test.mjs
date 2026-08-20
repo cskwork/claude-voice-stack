@@ -3,16 +3,29 @@ import { once } from 'node:events'
 import test from 'node:test'
 import { createGatewayApplication } from '../src/app/gateway-application.mjs'
 import { config } from '../src/core/config.mjs'
-import { createQwenRealtimeProvider } from '../src/voice/providers/dashscope.mjs'
 import { createRealtimeProviderRegistry } from '../src/voice/providers/provider-registry.mjs'
+import { openAiCompatibleProtocol } from '../src/voice/providers/openai-compatible-protocol.mjs'
 
 test('constructs an injectable Gateway without binding a port on import', async () => {
   const inputAssets = { kind: 'test-input-assets' }
-  const privateProvider = createQwenRealtimeProvider({
+  const privateProvider = {
     key: 'private-realtime',
+    label: 'Private Realtime',
     visibility: 'gateway-only',
+    inputSampleRate: 16000,
+    outputSampleRate: 24000,
+    protocol: openAiCompatibleProtocol,
+    model: () => 'private-model',
+    voice: () => null,
     isConfigured: () => true,
-  })
+    url: () => 'wss://private.example/realtime',
+    headers: () => ({}),
+    classifyError: () => 'other',
+    buildSession: () => ({}),
+    buildSpeakResponse: () => ({}),
+    buildResultInjection: () => ({}),
+    buildPermissionInjection: () => ({}),
+  }
   const realtimeProviderRegistry = createRealtimeProviderRegistry({
     providers: [privateProvider],
   })

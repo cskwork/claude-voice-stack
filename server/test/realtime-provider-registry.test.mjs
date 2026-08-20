@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { openAiCompatibleProtocol } from '../src/voice/providers/openai-compatible-protocol.mjs'
-import { createQwenRealtimeProvider } from '../src/voice/providers/dashscope.mjs'
 import {
   createRealtimeProviderRegistry,
   defineRealtimeProvider,
@@ -51,32 +50,6 @@ test('defines a provider only after validating its extension contract', () => {
     () => defineRealtimeProvider({ key: 'broken', label: 'Broken' }),
     /缺少 model\(\)/,
   )
-})
-
-test('creates a host-configured Qwen provider without DashScope globals', () => {
-  const settings = {
-    url: 'wss://private.example/realtime',
-    token: 'private-token',
-    model: 'qwen-audio-3.0-realtime-plus',
-  }
-  const provider = createQwenRealtimeProvider({
-    key: 'private-qwen',
-    visibility: 'gateway-only',
-    model: () => settings.model,
-    voice: () => 'Cherry',
-    isConfigured: () => Boolean(settings.url && settings.token),
-    url: () => settings.url,
-    headers: () => ({ Authorization: `Bearer ${settings.token}` }),
-    createProtocol: () => ({ ...openAiCompatibleProtocol }),
-  })
-
-  assert.equal(validateRealtimeProvider(provider), provider)
-  assert.equal(provider.url(), settings.url)
-  assert.equal(provider.model(), settings.model)
-  assert.deepEqual(provider.headers(), {
-    Authorization: 'Bearer private-token',
-  })
-  assert.equal(provider.buildSession({ configured: false }).voice, 'Cherry')
 })
 
 test('keeps gateway-only providers out of public provider discovery', () => {
