@@ -24,7 +24,10 @@ import {
   GATEWAY_PROTOCOL_VERSION,
 } from '../core/gateway-protocol.mjs'
 import { attachRealtimeGateway } from '../voice/realtime-gateway.mjs'
-import { describeActiveRealtime } from '../voice/realtime-provider.mjs'
+import {
+  defaultRealtimeProviderRegistry,
+  describeActiveRealtime,
+} from '../voice/realtime-provider.mjs'
 import { InputArbitration } from '../voice/input-arbitration.mjs'
 import { SessionPermissionPolicy } from '../voice/session-permission-policy.mjs'
 import {
@@ -46,6 +49,8 @@ export function createGatewayApplication({
   logger = defaultLogger,
   parentPort = process.parentPort,
   autoStart = true,
+  realtimeProviderRegistry = defaultRealtimeProviderRegistry,
+  realtimeProvider = config.audioProvider,
 } = {}) {
 const inputAssetRegistry = inputAssets || new InputAssetRegistry({
   sessionTtlMs: config.conversationSessionTtlMs,
@@ -219,7 +224,9 @@ app.get('/readyz', (req, res) => {
 app.get('/api/health', (req, res) => {
   const backend = agent.status()
   const backendDescription = agent.describe()
-  const realtime = describeActiveRealtime()
+  const realtime = describeActiveRealtime(realtimeProvider, {
+    registry: realtimeProviderRegistry,
+  })
   res.json({
     // Gateway liveness is independent from optional backend readiness.
     ok: true,
@@ -469,6 +476,8 @@ realtimeGateway = attachRealtimeGateway(server, {
   permissionPolicy,
   inputAssets: inputAssetRegistry,
   inputArbitration,
+  realtimeProviderRegistry,
+  defaultRealtimeProvider: realtimeProvider,
 })
 const start = () => {
   if (server.listening) return server
@@ -491,7 +500,7 @@ const start = () => {
     logger.info('gateway.ready', {
       origin,
       backend: config.agentProtocol || 'none',
-      realtimeProvider: config.audioProvider,
+      realtimeProvider,
     }, `qwen-audio-agent running at ${origin}`)
   })
   return server

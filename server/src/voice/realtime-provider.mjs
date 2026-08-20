@@ -1,7 +1,9 @@
 import WebSocket from 'ws'
 import { randomUUID } from 'node:crypto'
 import {
+  defaultRealtimeProviderRegistry,
   resolveRealtimeProvider,
+  validateRealtimeProtocol,
   validateRealtimeProvider,
 } from './providers/registry.mjs'
 import { buildRecentConversationContext } from '../conversation/frontend-agent-context.mjs'
@@ -31,9 +33,14 @@ export {
 // Re-export registry symbols for backward compatibility.
 export {
   REALTIME_PROVIDERS,
+  createRealtimeProviderRegistry,
+  defaultRealtimeProviderRegistry,
+  RealtimeProviderRegistry,
   resolveRealtimeProvider,
   listRealtimeProviders,
   describeActiveRealtime,
+  validateRealtimeProtocol,
+  validateRealtimeProvider,
 } from './providers/registry.mjs'
 
 function normalizedEvents(value) {
@@ -85,10 +92,14 @@ export class RealtimeFrontend {
     responseCompletionTimeoutMs,
   } = {}) {
     this.provider = validateRealtimeProvider(provider)
-    this.protocol = provider.protocol
-    if (!this.protocol) {
-      throw new Error(`Realtime Provider ${provider.key || provider.label} 缺少 protocol`)
-    }
+    this.connectionId = randomUUID()
+    this.protocol = validateRealtimeProtocol(
+      provider.createProtocol?.({
+        connectionId: this.connectionId,
+        provider,
+      }) ?? provider.protocol,
+      provider.key || provider.label,
+    )
     this.capabilities = { ...DEFAULT_CAPABILITIES, ...provider.capabilities }
     this.modelProfile = provider.modelProfile?.() || null
     this.modelCapabilities = this.modelProfile?.modelCapabilities || null
@@ -148,6 +159,23 @@ export class RealtimeFrontend {
         if (error) reject(error)
         else resolve()
       }
+      ws.on('open', () => {
+        try {
+          const messages = normalizedEvents(
+            this.protocol.connectionMessages?.({
+              connectionId: this.connectionId,
+              provider: this.provider,
+            }),
+          )
+          for (const message of messages) {
+            ws.send(JSON.stringify(message))
+          }
+        } catch (error) {
+          this.onError?.(error)
+          finish(error)
+          ws.terminate()
+        }
+      })
       ws.on('error', error => {
         this.onError?.(error)
         finish(error)
@@ -788,9 +816,14 @@ export class RealtimeFrontend {
 }
 
 export function createRealtimeFrontend(options = {}) {
-  const { providerName, ...rest } = options
+  const {
+    providerName,
+    provider,
+    providerRegistry = defaultRealtimeProviderRegistry,
+    ...rest
+  } = options
   return new RealtimeFrontend({
     ...rest,
-    provider: resolveRealtimeProvider(providerName),
+    provider: provider || providerRegistry.resolve(providerName),
   })
 }

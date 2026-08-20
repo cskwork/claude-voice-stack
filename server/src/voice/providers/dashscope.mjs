@@ -1,5 +1,6 @@
 import { config, realtimeUrl } from '../../core/config.mjs'
 import {
+  listDashScopeRealtimeModelProfiles,
   resolveDashScopeRealtimeModelProfile,
 } from '../../../../shared/realtime-provider-catalog.mjs'
 import {
@@ -27,10 +28,6 @@ function classifyError(message) {
   return 'other'
 }
 
-function activeModelProfile() {
-  return resolveDashScopeRealtimeModelProfile(config.audioModel)
-}
-
 function responseModalities(profile) {
   const capabilities = profile.modelCapabilities
   return [
@@ -39,92 +36,131 @@ function responseModalities(profile) {
   ].filter(Boolean)
 }
 
-export const dashscopeProvider = {
-  key: 'dashscope',
-  label: 'Qwen-Audio-Realtime',
-  inputSampleRate: 16000,
-  outputSampleRate: 24000,
-  protocol: openAiCompatibleProtocol,
+export function createQwenRealtimeProvider({
+  key = 'dashscope',
+  label = 'Qwen-Audio-Realtime',
+  aliases = ['qwen'],
+  visibility = 'public',
+  inputSampleRate = 16000,
+  outputSampleRate = 24000,
+  protocol = openAiCompatibleProtocol,
+  createProtocol,
+  model = () => config.audioModel,
+  voice,
+  isConfigured = () => Boolean(config.dashscopeApiKey),
+  url = () => realtimeUrl(config.audioRealtimeBaseUrl, model()),
+  headers = () => ({ Authorization: `Bearer ${config.dashscopeApiKey}` }),
+  classifyProviderError = classifyError,
+  configurationSignature,
+  missingConfigurationMessage = '请先配置 DASHSCOPE_API_KEY',
+  connectTimeoutMessage = '连接 Qwen Audio Realtime 超时',
+} = {}) {
+  const activeModelProfile = () => (
+    resolveDashScopeRealtimeModelProfile(model())
+  )
+  const resolveVoice = voice || (() => (
+    config.audioVoice || activeModelProfile().sessionDefaults.voice
+  ))
+  const provider = {
+    key,
+    label,
+    aliases,
+    visibility,
+    inputSampleRate,
+    outputSampleRate,
+    protocol,
 
-  get capabilities() {
-    return {
-      perResponseInstructions: true,
-      conversationItemIdEcho: activeModelProfile().family !== 'omni',
-    }
-  },
-
-  model: () => config.audioModel,
-  modelProfile: activeModelProfile,
-  voice: () => config.audioVoice || activeModelProfile().sessionDefaults.voice,
-  isConfigured: () => Boolean(config.dashscopeApiKey),
-  missingConfigurationMessage: '请先配置 DASHSCOPE_API_KEY',
-  connectTimeoutMessage: '连接 Qwen Audio Realtime 超时',
-
-  url: () => realtimeUrl(config.audioRealtimeBaseUrl, config.audioModel),
-  headers: () => ({ Authorization: `Bearer ${config.dashscopeApiKey}` }),
-  classifyError,
-
-  buildSession: ({ configured, agentContext }) => {
-    const profile = activeModelProfile()
-    const session = {
-      instructions: buildFrontendInstructions(agentContext),
-    }
-    if (profile.modelCapabilities.functionCalling) {
-      session.tools = frontendTools(agentContext)
-    }
-    if (!configured) {
-      session.modalities = responseModalities(profile)
-      if (profile.modelCapabilities.audioOutput) {
-        session.voice = dashscopeProvider.voice()
-        session.output_audio_format = 'pcm'
+    get capabilities() {
+      return {
+        perResponseInstructions: true,
+        conversationItemIdEcho: activeModelProfile().family !== 'omni',
       }
-      if (profile.transportCapabilities.audioInput) {
-        session.input_audio_format = 'pcm'
+    },
+
+    model,
+    modelCatalog: listDashScopeRealtimeModelProfiles,
+    modelProfile: activeModelProfile,
+    voice: resolveVoice,
+    isConfigured,
+    missingConfigurationMessage,
+    connectTimeoutMessage,
+
+    url,
+    headers,
+    classifyError: classifyProviderError,
+
+    buildSession: ({ configured, agentContext }) => {
+      const profile = activeModelProfile()
+      const session = {
+        instructions: buildFrontendInstructions(agentContext),
       }
-      session.turn_detection = profile.transportCapabilities.audioInput
-        ? profile.sessionDefaults.turnDetection
-        : null
-    }
-    return session
-  },
-
-  buildSpeakResponse: content => ({
-    conversation: 'none',
-    modalities: responseModalities(activeModelProfile()),
-    instructions: speakResponseInstructions(content),
-  }),
-
-  buildResultInjection: content => ({
-    item: {
-      type: 'message',
-      role: 'user',
-      content: [{ type: 'input_text', text: content }],
+      if (profile.modelCapabilities.functionCalling) {
+        session.tools = frontendTools(agentContext)
+      }
+      if (!configured) {
+        session.modalities = responseModalities(profile)
+        if (profile.modelCapabilities.audioOutput) {
+          session.voice = provider.voice()
+          session.output_audio_format = 'pcm'
+        }
+        if (profile.transportCapabilities.audioInput) {
+          session.input_audio_format = 'pcm'
+        }
+        session.turn_detection = profile.transportCapabilities.audioInput
+          ? profile.sessionDefaults.turnDetection
+          : null
+      }
+      return session
     },
-    response: {
+
+    buildSpeakResponse: content => ({
+      conversation: 'none',
       modalities: responseModalities(activeModelProfile()),
-      tool_choice: 'none',
-      instructions: resultResponseInstructions,
-    },
-  }),
+      instructions: speakResponseInstructions(content),
+    }),
 
-  buildPermissionInjection: permission => ({
-    item: {
-      type: 'message',
-      role: 'user',
-      content: [{
-        type: 'input_text',
-        text: [
-          '<backend_permission_request>',
-          `authorization_id=${permission.id}`,
-          `operation=${permission.summary}`,
-          '</backend_permission_request>',
-        ].join('\n'),
-      }],
-    },
-    response: {
-      modalities: responseModalities(activeModelProfile()),
-      tool_choice: 'none',
-      instructions: permissionResponseInstructions,
-    },
-  }),
+    buildResultInjection: content => ({
+      item: {
+        type: 'message',
+        role: 'user',
+        content: [{ type: 'input_text', text: content }],
+      },
+      response: {
+        modalities: responseModalities(activeModelProfile()),
+        tool_choice: 'none',
+        instructions: resultResponseInstructions,
+      },
+    }),
+
+    buildPermissionInjection: permission => ({
+      item: {
+        type: 'message',
+        role: 'user',
+        content: [{
+          type: 'input_text',
+          text: [
+            '<backend_permission_request>',
+            `authorization_id=${permission.id}`,
+            `operation=${permission.summary}`,
+            '</backend_permission_request>',
+          ].join('\n'),
+        }],
+      },
+      response: {
+        modalities: responseModalities(activeModelProfile()),
+        tool_choice: 'none',
+        instructions: permissionResponseInstructions,
+      },
+    }),
+  }
+  if (configurationSignature) {
+    provider.configurationSignature = configurationSignature
+  }
+  if (createProtocol) {
+    delete provider.protocol
+    provider.createProtocol = createProtocol
+  }
+  return provider
 }
+
+export const dashscopeProvider = createQwenRealtimeProvider()
