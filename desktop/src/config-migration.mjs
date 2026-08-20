@@ -1,9 +1,9 @@
 import {
   copyFileSync,
+  cpSync,
   chmodSync,
   existsSync,
   mkdirSync,
-  statSync,
   writeFileSync,
 } from 'node:fs'
 import { resolve } from 'node:path'
@@ -28,10 +28,10 @@ export function resolveDesktopConfigDirectory({ env, userDataDirectory }) {
   return resolve(userDataDirectory)
 }
 
-// 旧版本桌面版曾把资产复制到自己的目录并各自演化。切换到共享资产层时，
-// 把桌面侧仍较新的资产一次性回填到共享目录：被覆盖的共享侧文件先备份为
-// <名称>.pre-merge.bak；state.env 是本地身份，共享侧已存在时保留（桌面侧
-// 的签名作废，重新签发即可）。幂等：桌面目录写入回填标记后不再执行。
+// 旧版本桌面版曾持有自己的资产副本。切到共享用户资产层时，只补齐共享
+// 目录里缺失的内容；若两边都存在，绝不按时间戳猜测或覆盖，旧桌面文件
+// 仍原样保留，便于用户手工核对。workspace 也按同一原则整体迁移。
+// 幂等：桌面目录写入回填标记后不再执行。
 export function backfillSharedAssets({ desktopDir, dataDir }) {
   if (!desktopDir || !dataDir) {
     return { backfilled: false, reason: 'missing-directories' }
@@ -51,20 +51,22 @@ export function backfillSharedAssets({ desktopDir, dataDir }) {
     if (!existsSync(from)) continue
     const to = resolve(target, name)
     if (existsSync(to)) {
-      if (name === 'state.env') {
-        skipped.push(name)
-        continue
-      }
-      if (statSync(to).mtimeMs >= statSync(from).mtimeMs) {
-        skipped.push(name)
-        continue
-      }
-      copyFileSync(to, `${to}.pre-merge.bak`)
-      chmodSync(`${to}.pre-merge.bak`, 0o600)
+      skipped.push(name)
+      continue
     }
     copyFileSync(from, to)
     chmodSync(to, 0o600)
     copied.push(name)
+  }
+  const workspaceFrom = resolve(source, 'workspace')
+  const workspaceTo = resolve(target, 'workspace')
+  if (existsSync(workspaceFrom)) {
+    if (existsSync(workspaceTo)) {
+      skipped.push('workspace')
+    } else {
+      cpSync(workspaceFrom, workspaceTo, { recursive: true, preserveTimestamps: true })
+      copied.push('workspace')
+    }
   }
   mkdirSync(source, { recursive: true, mode: 0o700 })
   writeFileSync(

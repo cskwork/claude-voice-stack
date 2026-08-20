@@ -26,6 +26,7 @@ function harness({ ownsProcesses = false } = {}) {
       signalSource: new EventEmitter(),
       prepareEnvironment: () => ({
         configDirectory: '/home/user/.config/qwaudio',
+        dataDirectory: '/home/user/.config/qwaudio',
         configPath: '/home/user/.config/qwaudio/config.env',
       }),
       inspectSetups: options => {
@@ -355,7 +356,30 @@ test('passes the configured local Gateway host and port to its service', async (
   assert.deepEqual(install[2].serviceEnvironment, {
     HOST: '127.0.0.1',
     PORT: '3200',
+    QWAUDIO_DATA_DIR: '/home/user/.config/qwaudio',
   })
+})
+
+test('passes a custom shared profile directory to the background service', async () => {
+  const target = harness()
+  target.dependencies.prepareEnvironment = () => ({
+    configDirectory: '/home/user/.config/qwaudio-runtime',
+    dataDirectory: '/home/user/.config/qwaudio-profile',
+    configPath: '/home/user/.config/qwaudio-profile/config.env',
+  })
+  target.dependencies.manageService = async (action, options) => {
+    target.calls.push(['service', action, options])
+    return { installed: true, running: true, logPath: null }
+  }
+
+  assert.equal(await main(['gateway', 'install'], target.dependencies), 0)
+  const install = target.calls.find(call => (
+    call[0] === 'service' && call[1] === 'install'
+  ))
+  assert.equal(
+    install[2].serviceEnvironment.QWAUDIO_DATA_DIR,
+    '/home/user/.config/qwaudio-profile',
+  )
 })
 
 test('rejects a remote Gateway URL for the local background service', async () => {

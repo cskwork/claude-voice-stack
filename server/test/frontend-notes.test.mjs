@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { spawn } from 'node:child_process'
 import {
   existsSync,
   mkdtempSync,
@@ -162,4 +163,33 @@ test('reloads from disk when another instance updated the shared file', t => {
   cli.add('owner-a', { list: '购物清单', items: ['鸡蛋'] })
   const final = desktop.show('owner-a', '购物清单')
   assert.deepEqual(final.items.map(item => item.text), ['牛奶', '面包', '鸡蛋'])
+})
+
+test('serializes concurrent writes from independent Gateway processes', async t => {
+  const root = mkdtempSync(join(tmpdir(), 'frontend-notes-processes-'))
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  const filePath = join(root, 'frontend-notes.json')
+  const moduleUrl = new URL('../src/conversation/frontend-notes.mjs', import.meta.url).href
+  const items = Array.from({ length: 12 }, (_, index) => `item-${index}`)
+  const script = `
+    import { FrontendNotesStore } from ${JSON.stringify(moduleUrl)}
+    const store = new FrontendNotesStore({ filePath: process.argv[1] })
+    store.add('owner-a', { list: 'shared', items: [process.argv[2]] })
+  `
+  await Promise.all(items.map(item => new Promise((resolvePromise, rejectPromise) => {
+    const child = spawn(process.execPath, ['--input-type=module', '-e', script, filePath, item], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    let stderr = ''
+    child.stderr.setEncoding('utf8')
+    child.stderr.on('data', chunk => { stderr += chunk })
+    child.once('error', rejectPromise)
+    child.once('exit', code => {
+      if (code === 0) resolvePromise()
+      else rejectPromise(new Error(`child exited ${code}: ${stderr}`))
+    })
+  })))
+
+  const result = new FrontendNotesStore({ filePath }).show('owner-a', 'shared')
+  assert.deepEqual(result.items.map(item => item.text).sort(), items.sort())
 })

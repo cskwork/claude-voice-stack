@@ -19,12 +19,14 @@ configuration. Runtime state — `gateway.lock`, `tasks.json`, ACP session state
 skins — stays in each edition's own directory: `~/.config/qwaudio` for the CLI and the system
 application data directory for the desktop edition (`~/Library/Application Support/Qwen Audio
 Agent` on macOS, `~/.config/Qwen Audio Agent` on Linux, `%APPDATA%\Qwen Audio Agent` on Windows).
-Both editions can therefore run simultaneously without interfering, though this is rarely needed
-in practice. Desktop installations upgrading from older versions backfill any assets that are
-newer in the desktop directory into the shared layer once (the replaced shared file is kept as
-`<name>.pre-merge.bak`; an existing shared `state.env` identity is never overwritten). When
-`QWAUDIO_CONFIG_DIR` is explicitly set, the desktop edition respects it and keeps assets and
-runtime state together in that directory, preserving full isolation for profile scenarios.
+Both editions can therefore run simultaneously as independent Gateway processes, sessions, tasks,
+and logs while sharing the user's assistant profile. Desktop installations upgrading from older
+versions copy only assets missing from the shared layer, including an old `workspace/`; when an
+asset exists on both sides, neither copy is overwritten or merged automatically. When
+`QWAUDIO_CONFIG_DIR` is explicitly set, the desktop edition respects it and keeps assets and runtime
+state together in that directory, preserving full isolation for profile scenarios. Writes to shared
+memory and notes are serialized across processes so simultaneous Desktop and CLI updates are not
+silently lost.
 
 The configuration priority is fixed as:
 

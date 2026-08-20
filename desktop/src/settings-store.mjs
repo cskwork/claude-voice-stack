@@ -10,9 +10,18 @@
 // config.env is the carrier for settings, which keeps an embedded instance
 // readable by the same tooling as a standalone install. Window state that has
 // no meaning as an environment variable goes to ui-state.json beside it.
-import { chmodSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { randomUUID } from 'node:crypto'
+import {
+  chmodSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs'
 import { resolve } from 'node:path'
 import { parseEnv } from 'node:util'
+import { withFileTransaction } from '../../shared/file-transaction-lock.mjs'
 import { gatewaySetupStatus } from '../../shared/gateway-setup.mjs'
 import {
   applySettingsEnvironment,
@@ -50,10 +59,18 @@ function readTextFile(path) {
 }
 
 function writePrivateFile(path, content) {
-  writeFileSync(path, content, { encoding: 'utf8', mode: PRIVATE_FILE_MODE })
-  // A pre-existing file keeps its own mode on write, so the permission is
-  // asserted rather than assumed.
-  chmodSync(path, PRIVATE_FILE_MODE)
+  const temporary = `${path}.${process.pid}.${randomUUID()}.tmp`
+  try {
+    writeFileSync(temporary, content, { encoding: 'utf8', mode: PRIVATE_FILE_MODE })
+    chmodSync(temporary, PRIVATE_FILE_MODE)
+    renameSync(temporary, path)
+    chmodSync(path, PRIVATE_FILE_MODE)
+  } catch (error) {
+    try {
+      unlinkSync(temporary)
+    } catch {}
+    throw error
+  }
 }
 
 /**
@@ -137,8 +154,11 @@ export function createSettingsStore({
 
     save(settings) {
       ensureDirectory()
-      const content = updateSettingsContent(readTextFile(settingsPath), settings)
-      writePrivateFile(settingsPath, content)
+      const content = withFileTransaction(settingsPath, () => {
+        const next = updateSettingsContent(readTextFile(settingsPath), settings)
+        writePrivateFile(settingsPath, next)
+        return next
+      })
       // Keep this process consistent with what was just persisted, so a
       // subsequent in-process start does not keep serving the value the
       // environment happened to hold first.
