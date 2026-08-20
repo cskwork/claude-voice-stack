@@ -11,7 +11,7 @@ const ACTIVE_TASK_PHASES = new Set([
 
 const ACTIVE_VOICE_STATES = new Set([
   'listening',
-  'thinking',
+  'processing',
   'speaking',
 ])
 

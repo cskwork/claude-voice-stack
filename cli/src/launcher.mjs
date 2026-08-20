@@ -306,7 +306,14 @@ export async function main(argv, {
       'start',
       'restart',
     ].includes(options.gatewayAction)
-      ? gatewayServiceEnvironment(options.url)
+      ? {
+          ...gatewayServiceEnvironment(options.url),
+          // A background service does not inherit the invoking shell. Preserve
+          // the shared profile directory explicitly, including custom profiles.
+          ...(environment.dataDirectory
+            ? { QWAUDIO_DATA_DIR: environment.dataDirectory }
+            : {}),
+        }
       : {}
     const serviceOptions = {
       configDirectory: environment.configDirectory,

@@ -122,10 +122,22 @@ export function attachRealtimeGateway(server, {
   respondPermission,
   permissionPolicy,
   inputAssets = new InputAssetRegistry(),
+  inputArbitration = null,
 }) {
   const wss = new WebSocketServer({ noServer: true, maxPayload: 20 * 1024 * 1024 })
   const activeVoiceClients = new ActiveVoiceClients()
   const voiceConnections = new Map()
+
+  // A suspension is global, not per owner: the host is taking the machine's
+  // microphone, so every connected client has to let go of it. The subscription
+  // lives as long as this WebSocket server.
+  inputArbitration?.subscribe(status => {
+    for (const clients of voiceConnections.values()) {
+      for (const client of clients) {
+        client.applyInputSuspension?.(status)
+      }
+    }
+  })
 
   const broadcastVoiceOwnership = ownerId => {
     const active = activeVoiceClients.active(ownerId)
@@ -178,6 +190,10 @@ export function attachRealtimeGateway(server, {
     let userSpeaking = false
     let inputEnabled = false
     let outputEnabled = false
+    // Set only by host arbitration. Unlike inputEnabled (which the client
+    // declares about itself) this means the client has been ordered to stop
+    // capturing, so nothing here may re-enable audio on its own.
+    let inputSuspended = inputArbitration?.suspended === true
     let nonVoiceClient = false
     let pendingInputParts = []
     // Realtime front end for this session. Defaults to the configured provider
@@ -294,6 +310,30 @@ export function attachRealtimeGateway(server, {
     const voiceClient = {
       ws,
       descriptor,
+      // Commands this client to release or reclaim the microphone. Playback
+      // stops together with capture: a host that is recording must not pick up
+      // this Gateway's own speech.
+      applyInputSuspension: status => {
+        const suspend = status.suspended === true
+        if (suspend === inputSuspended) return
+        inputSuspended = suspend
+        if (suspend) {
+          // Buffered audio predates the suspension and is no longer wanted.
+          pendingAudio = []
+          sleepController?.disable()
+          frontend?.cancel()
+          send(ws, { type: GatewayServerEvent.PLAYBACK_CLEAR, reason: 'input_suspended' })
+          send(ws, {
+            type: GatewayServerEvent.INPUT_SUSPEND,
+            owner: status.owner,
+            reason: status.reason,
+            expiresAt: status.expiresAt,
+          })
+          return
+        }
+        send(ws, { type: GatewayServerEvent.INPUT_RESUME })
+        prepareSleepMode()
+      },
       realtimeStatus: () => realtimeConnectionStatus({
         provider: sessionProvider,
         blockedError: realtimeBlockedError,
@@ -992,7 +1032,7 @@ export function attachRealtimeGateway(server, {
           expectResponseFor(stoppedTurn)
           send(ws, {
             type: 'voice.state',
-            state: 'thinking',
+            state: 'processing',
             turnId: stoppedTurn.turnId,
             origin: 'model',
           })
@@ -1004,7 +1044,7 @@ export function attachRealtimeGateway(server, {
         if (!inputTurns.isInvalid(event.item_id)) {
           send(ws, {
             type: 'voice.state',
-            state: 'thinking',
+            state: 'processing',
             turnId: committedInputTurn.turnId,
             origin: 'model',
           })
@@ -1597,6 +1637,9 @@ export function attachRealtimeGateway(server, {
       if (
         !config.wakeWordEnabled
         || nonVoiceClient
+        // A suspended client is not capturing, so there is nothing for the wake
+        // word to listen to and nothing that may wake this session.
+        || inputSuspended
         || wakeDetectorPromise
       ) return
       if (wakeDetector) {
@@ -1750,7 +1793,7 @@ export function attachRealtimeGateway(server, {
       send(ws, { type: GatewayServerEvent.TURN_STARTED, turnId: inputTurnId })
       send(ws, {
         type: GatewayServerEvent.VOICE_STATE,
-        state: 'thinking',
+        state: 'processing',
         turnId: inputTurnId,
         origin: 'model',
       })
@@ -1817,6 +1860,17 @@ export function attachRealtimeGateway(server, {
     })
 
     send(ws, { type: GatewayServerEvent.VOICE_STATE, state: 'idle' })
+    // A client connecting mid-suspension has to learn about it before it opens
+    // a microphone.
+    if (inputSuspended) {
+      const status = inputArbitration.status()
+      send(ws, {
+        type: GatewayServerEvent.INPUT_SUSPEND,
+        owner: status.owner,
+        reason: status.reason,
+        expiresAt: status.expiresAt,
+      })
+    }
     ws.on('message', raw => {
       let event
       try {
@@ -1958,7 +2012,13 @@ export function attachRealtimeGateway(server, {
           if (wakeDetector) acceptSleepingAudio(event.audio)
           return
         }
-        if (!inputEnabled || !activeVoiceClients.isActive(ownerId, voiceClient)) {
+        if (
+          !inputEnabled
+          // Defence in depth: a client that has not yet acted on the suspension
+          // must not be able to feed audio through it.
+          || inputSuspended
+          || !activeVoiceClients.isActive(ownerId, voiceClient)
+        ) {
           return
         }
         if (frontend?.ready) frontend.appendAudio(event.audio)
@@ -2050,6 +2110,11 @@ export function attachRealtimeGateway(server, {
         explicitSleepRequested = false
         if (sleeping) wakeFromSleep()
         else sleepController.recordActivity()
+      } else if (event.type === GatewayClientEvent.INPUT_SUSPEND_ACK) {
+        connectionLogger.debug('input.suspend_acknowledged', {
+          clientType: descriptor.type,
+          owner: String(event.owner || '') || null,
+        })
       }
     })
 

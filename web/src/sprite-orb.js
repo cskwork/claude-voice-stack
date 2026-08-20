@@ -1,6 +1,6 @@
-// 精灵皮肤动画模型：对齐 Codex App 开源实现（codex-rs/tui/src/pets）。
-// 轨道 = { frames: [{spriteIndex, durationMs}], loopStart, fallback }；
-// loopStart 为 null 表示 one-shot，播完总时长后交棒 fallback 轨道。
+// 精灵皮肤动画模型：基础图集对齐 Codex Pet，pet.json 可用
+// animations.{name}.{frames,fps} 精确描述生成式皮肤的有效帧。
+// 动画生命周期由悬浮球状态机控制，皮肤不能通过 loop/fallback 改写。
 
 const DEFAULT_COLUMNS = 8
 const DEFAULT_FRAME_WIDTH = 192
@@ -22,23 +22,20 @@ function idleAnimation() {
   }
 }
 
-// 状态动画 = 该行帧序列重复 3 遍 + 拼接 idle 帧，loopStart 指向 idle 段——
-// 动作播 3 遍后自动沉降回 idle 循环，持续态不会一直播动作。
-function appStateAnimation(
+function rowAnimation(
   rowIndex,
   frameCount,
   frameDurationMs,
   finalFrameDurationMs,
 ) {
-  const primary = Array.from({ length: frameCount }, (_, column) => ({
-    spriteIndex: rowIndex * DEFAULT_COLUMNS + column,
-    durationMs: column === frameCount - 1
-      ? finalFrameDurationMs
-      : frameDurationMs,
-  }))
   return {
-    frames: [...primary, ...primary, ...primary, ...idleAnimation().frames],
-    loopStart: primary.length * 3,
+    frames: Array.from({ length: frameCount }, (_, column) => ({
+      spriteIndex: rowIndex * DEFAULT_COLUMNS + column,
+      durationMs: column === frameCount - 1
+        ? finalFrameDurationMs
+        : frameDurationMs,
+    })),
+    loopStart: null,
     fallback: 'idle',
   }
 }
@@ -46,67 +43,83 @@ function appStateAnimation(
 export function defaultAnimations() {
   return {
     'idle': idleAnimation(),
-    'running-right': appStateAnimation(1, 8, 120, 220),
-    'running-left': appStateAnimation(2, 8, 120, 220),
-    'waving': appStateAnimation(3, 4, 140, 280),
-    'jumping': appStateAnimation(4, 5, 140, 280),
-    'failed': appStateAnimation(5, 8, 140, 240),
-    'waiting': appStateAnimation(6, 6, 150, 260),
-    'running': appStateAnimation(7, 6, 120, 220),
-    'review': appStateAnimation(8, 6, 150, 280),
-    // 后台任务进行中：running-left 行持续循环不沉降，“跑去干活了”。
-    'working': rowLoopAnimation(2, 8, 120, 220),
-    // 后台在等你确认：jumping 行持续循环，跳跃求关注。
-    'attention': rowLoopAnimation(4, 5, 140, 280),
-  }
-}
-
-// 持续循环的行动画：不拼接 idle 沉降段，状态存续期间一直播放。
-function rowLoopAnimation(
-  rowIndex,
-  frameCount,
-  frameDurationMs,
-  finalFrameDurationMs,
-) {
-  const { frames } = appStateAnimation(
-    rowIndex,
-    frameCount,
-    frameDurationMs,
-    finalFrameDurationMs,
-  )
-  return {
-    frames: frames.slice(0, frameCount),
-    loopStart: 0,
-    fallback: 'idle',
+    'running-right': rowAnimation(1, 8, 120, 220),
+    'running-left': rowAnimation(2, 8, 120, 220),
+    'waving': rowAnimation(3, 4, 140, 280),
+    'jumping': rowAnimation(4, 5, 140, 280),
+    'failed': rowAnimation(5, 8, 140, 240),
+    'waiting': rowAnimation(6, 6, 150, 260),
+    'running': rowAnimation(7, 6, 120, 220),
+    'review': rowAnimation(8, 6, 150, 280),
   }
 }
 
 // 语音状态 → 动画名。状态由 orb-presentation.js 的仲裁器产出：
-// 对话态（idle/listening/thinking/speaking）与后台/系统态
+// 对话态（idle/listening/processing/speaking）与后台/系统态
 // （attention/working/occupied/error/connecting/waking/hidden）。
-export function spriteAnimationForOrbState({ state, dragging = false } = {}) {
-  if (dragging) return 'running-right'
+export function spriteAnimationForOrbState({
+  state,
+  baseAnimation = 'idle',
+} = {}) {
   switch (state) {
     case 'listening':
-    case 'connecting':
       return 'waiting'
-    case 'thinking':
+    case 'processing':
       return 'review'
-    case 'occupied':
-      return 'running'
     case 'working':
-      return 'working'
-    case 'attention':
-      return 'attention'
+      return 'running'
     case 'speaking':
       return 'waving'
+    case 'starting':
+      return 'waiting'
     case 'waking':
-      // 出现时挥手打招呼（jumping 行让给 attention）。
       return 'waving'
     case 'error':
       return 'failed'
     default:
-      return 'idle'
+      return baseAnimation
+  }
+}
+
+export function spritePlaybackSelection({
+  state,
+  baseWorking = false,
+  dragDirection = '',
+  cue = null,
+} = {}) {
+  const fallback = baseWorking || state === 'working' ? 'running' : 'idle'
+  const stateAnimation = spriteAnimationForOrbState({
+    state,
+    baseAnimation: fallback,
+  })
+  if (dragDirection === 'left' || dragDirection === 'right') {
+    return {
+      name: `running-${dragDirection}`,
+      key: `drag:${dragDirection}`,
+      loop: true,
+      completion: 'none',
+      fallback,
+    }
+  }
+  if (cue?.id && cue.name) {
+    return {
+      name: cue.name,
+      key: `cue:${cue.id}`,
+      loop: false,
+      completion: 'cue',
+      fallback,
+    }
+  }
+  return {
+    name: stateAnimation,
+    key: `state:${state}:${stateAnimation}`,
+    loop: (
+      state === 'starting'
+      || stateAnimation === 'idle'
+      || stateAnimation === 'running'
+    ),
+    completion: 'none',
+    fallback,
   }
 }
 
@@ -141,7 +154,8 @@ export function frameRect(geometry, spriteIndex) {
   }
 }
 
-// 合并 pet.json 可选 animations 覆盖与默认轨道表，并校验帧索引与 fallback。
+// 合并 pet.json 可选 animations 覆盖与默认轨道表。皮肤只控制有效帧与
+// 帧率；旧清单里的 loop/fallback 会被有意忽略。
 export function resolveAnimations(manifest = {}, frameCount = 0) {
   const animations = defaultAnimations()
   const specs = manifest.animations
@@ -157,8 +171,8 @@ export function resolveAnimations(manifest = {}, frameCount = 0) {
       const durationMs = 1000 / fps
       animations[name] = {
         frames: spec.frames.map(spriteIndex => ({ spriteIndex, durationMs })),
-        loopStart: (spec.loop ?? true) ? 0 : null,
-        fallback: spec.fallback || 'idle',
+        loopStart: name === 'idle' ? 0 : null,
+        fallback: 'idle',
       }
     }
   }
@@ -171,9 +185,6 @@ export function resolveAnimations(manifest = {}, frameCount = 0) {
       ) {
         throw new Error(`皮肤动画 ${name} 引用了越界的帧索引`)
       }
-    }
-    if (!animations[animation.fallback]) {
-      throw new Error(`皮肤动画 ${name} 的 fallback 不存在`)
     }
   }
   return animations

@@ -19,8 +19,13 @@ import {
 import { FrontendMemoryService } from '../conversation/frontend-memory-service.mjs'
 import { MarkdownContextStore } from '../conversation/markdown-context-store.mjs'
 import { enforceSameOrigin } from '../core/request-security.mjs'
+import {
+  GATEWAY_CAPABILITIES,
+  GATEWAY_PROTOCOL_VERSION,
+} from '../core/gateway-protocol.mjs'
 import { attachRealtimeGateway } from '../voice/realtime-gateway.mjs'
 import { describeActiveRealtime } from '../voice/realtime-provider.mjs'
+import { InputArbitration } from '../voice/input-arbitration.mjs'
 import { SessionPermissionPolicy } from '../voice/session-permission-policy.mjs'
 import {
   taskManager as defaultTaskManager,
@@ -51,6 +56,9 @@ const identityManager = new IdentityManager({
   mode: config.identityMode,
   personalOwnerId: config.personalOwnerId,
 })
+// 麦克风抢占控制面：外部宿主（输入法、平台应用）需要录音时通过
+// /api/input/suspend 宣告，Gateway 责成所有客户端停采；持有过期自动恢复。
+const inputArbitration = new InputArbitration({ logger })
 taskManager.configureRetention({
   terminalTtlMs: config.taskTerminalTtlMs,
   pendingNotificationTtlMs: config.taskPendingNotificationTtlMs,
@@ -216,8 +224,12 @@ app.get('/api/health', (req, res) => {
     // Gateway liveness is independent from optional backend readiness.
     ok: true,
     status: 'ready',
+    // Contract surface: clients branch on a capability, not a product version.
+    protocolVersion: GATEWAY_PROTOCOL_VERSION,
+    capabilities: GATEWAY_CAPABILITIES,
     gatewayInstanceId: process.env.QWEN_AUDIO_GATEWAY_INSTANCE_ID || null,
     gatewayStartedAt: process.env.QWEN_AUDIO_GATEWAY_STARTED_AT || null,
+    inputSuspension: inputArbitration.status(),
     voiceConfigured: realtime.configured,
     realtimeProvider: realtime.provider,
     realtimeLabel: realtime.label,
@@ -247,6 +259,33 @@ app.get('/api/health', (req, res) => {
       ...backend,
     },
   })
+})
+
+// Host control plane for microphone arbitration. The host announces that it is
+// taking the microphone and the Gateway commands its clients to stop capturing.
+// Both calls are idempotent per owner, and a suspension expires on its own so a
+// host that crashes cannot silence the Gateway for good.
+app.post('/api/input/suspend', (req, res) => {
+  try {
+    return res.json(inputArbitration.suspend({
+      owner: req.body?.owner,
+      reason: req.body?.reason,
+      ttlMs: req.body?.ttlMs,
+    }))
+  } catch (error) {
+    if (error?.code === 'QWAUDIO_INPUT_OWNER_REQUIRED') {
+      return res.status(400).json({ error: error.message, code: error.code })
+    }
+    throw error
+  }
+})
+
+app.post('/api/input/resume', (req, res) => {
+  res.json(inputArbitration.resume({ owner: req.body?.owner }))
+})
+
+app.get('/api/input', (req, res) => {
+  res.json(inputArbitration.status())
 })
 
 app.get('/api/backend/ui', async (req, res, next) => {
@@ -375,6 +414,17 @@ app.get('/api/tasks/:id/events', (req, res) => {
 })
 
 const webDist = webDistributionPath()
+// Imported orb skins live under the config directory. The orb page fetches
+// `skins/<id>/...` relative to its own origin, so serving them here means a
+// host that points a window at the Gateway needs no separate asset server.
+// Static assets only, no fallback to index.html for missing files.
+app.use('/skins', express.static(resolve(config.configDirectory, 'skins'), {
+  index: false,
+  redirect: false,
+  dotfiles: 'ignore',
+  // Imports and removals must be visible on the next orb reload.
+  setHeaders: response => response.setHeader('cache-control', 'no-store'),
+}), (req, res) => res.status(404).json({ error: 'not found' }))
 app.use(express.static(webDist))
 app.get('*', (req, res) => res.sendFile(resolve(webDist, 'index.html')))
 app.use((error, req, res, next) => {
@@ -418,6 +468,7 @@ realtimeGateway = attachRealtimeGateway(server, {
   ),
   permissionPolicy,
   inputAssets: inputAssetRegistry,
+  inputArbitration,
 })
 const start = () => {
   if (server.listening) return server
@@ -425,12 +476,17 @@ const start = () => {
     const address = server.address()
     const port = address && typeof address === 'object' ? address.port : config.port
     const origin = `http://${config.host}:${port}`
+    const readyReport = {
+      type: 'qwen-audio-agent:gateway-ready',
+      origin,
+      instanceId: process.env.QWEN_AUDIO_GATEWAY_INSTANCE_ID || null,
+    }
     if (parentPort) {
-      parentPort.postMessage({
-        type: 'qwen-audio-agent:gateway-ready',
-        origin,
-        instanceId: process.env.QWEN_AUDIO_GATEWAY_INSTANCE_ID || null,
-      })
+      // Electron utilityProcess.
+      parentPort.postMessage(readyReport)
+    } else if (process.send) {
+      // Plain Node child_process.fork — how a non-Electron host embeds us.
+      process.send(readyReport)
     }
     logger.info('gateway.ready', {
       origin,
@@ -448,6 +504,9 @@ const close = () => {
     backendAvailability.close()
     unsubscribeOfflineNotifications?.()
     reminderScheduler?.close()
+    // A Gateway that stops serving cannot honour a resume, so held state must
+    // not survive into the next run.
+    inputArbitration.close()
     await realtimeGateway?.close?.()
     await taskStore?.flush?.()
     if (!server.listening) return
@@ -475,6 +534,7 @@ return {
     coordinator,
     frontendMemoryService,
     identityManager,
+    inputArbitration,
     inputAssets: inputAssetRegistry,
     notesStore,
     permissionPolicy,

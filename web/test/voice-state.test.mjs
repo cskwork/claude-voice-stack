@@ -139,10 +139,9 @@ test('shows agent and announcement playback even when it belongs to an older tur
   }, 'voice-200-2'), true)
 })
 
-test('shows local microphone activity immediately without changing model state', () => {
-  assert.equal(visualVoiceState('idle', true, true), 'listening')
-  assert.equal(visualVoiceState('thinking', true, true), 'listening')
-  assert.equal(visualVoiceState('speaking', true, true), 'listening')
-  assert.equal(visualVoiceState('thinking', false, true), 'thinking')
-  assert.equal(visualVoiceState('idle', true, false), 'idle')
+test('keeps visual state semantic instead of inferring it from local volume', () => {
+  assert.equal(visualVoiceState('idle'), 'idle')
+  assert.equal(visualVoiceState('listening'), 'listening')
+  assert.equal(visualVoiceState('processing'), 'processing')
+  assert.equal(visualVoiceState('speaking'), 'speaking')
 })

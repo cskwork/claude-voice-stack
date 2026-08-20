@@ -3,7 +3,7 @@ import {
   frameAtElapsed,
   frameRect,
   resolveAnimations,
-  spriteAnimationForOrbState,
+  spritePlaybackSelection,
   spriteGeometry,
 } from './sprite-orb.js'
 
@@ -13,13 +13,18 @@ import {
 export default function DesktopSpriteOrb({
   skin,
   state,
-  dragging = false,
+  baseWorking = false,
+  dragDirection = '',
+  cue = null,
+  onCueComplete,
   onError,
 }) {
   const canvasRef = useRef(null)
   const onErrorRef = useRef(onError)
+  const onCueCompleteRef = useRef(onCueComplete)
   const [assets, setAssets] = useState(null)
   onErrorRef.current = onError
+  onCueCompleteRef.current = onCueComplete
 
   useEffect(() => {
     let cancelled = false
@@ -61,7 +66,12 @@ export default function DesktopSpriteOrb({
     }
   }, [skin])
 
-  const animationName = spriteAnimationForOrbState({ state, dragging })
+  const playback = spritePlaybackSelection({
+    state,
+    baseWorking,
+    dragDirection,
+    cue,
+  })
 
   useEffect(() => {
     if (!assets) return undefined
@@ -69,14 +79,30 @@ export default function DesktopSpriteOrb({
     const context = canvas?.getContext('2d')
     if (!context) return undefined
     const { image, geometry, animations } = assets
-    let track = animations[animationName] || animations.idle
+    const selected = animations[playback.name] || animations.idle
+    let track = {
+      ...selected,
+      loopStart: playback.loop ? 0 : null,
+      fallback: 'idle',
+    }
     let startedAt = performance.now()
     let timer = 0
+    let completed = false
     const draw = () => {
       let frame = frameAtElapsed(track, performance.now() - startedAt)
       if (!frame) {
-        // one-shot 播完交棒 fallback 轨道。
-        track = animations[track.fallback] || animations.idle
+        if (!completed) {
+          completed = true
+          if (playback.completion === 'cue') {
+            onCueCompleteRef.current?.(cue.id)
+          }
+        }
+        const fallback = animations[playback.fallback] || animations.idle
+        track = {
+          ...fallback,
+          loopStart: 0,
+          fallback: 'idle',
+        }
         startedAt = performance.now()
         frame = frameAtElapsed(track, 0)
         if (!frame) return
@@ -99,7 +125,15 @@ export default function DesktopSpriteOrb({
     }
     draw()
     return () => clearTimeout(timer)
-  }, [assets, animationName])
+  }, [
+    assets,
+    cue?.id,
+    playback.completion,
+    playback.fallback,
+    playback.key,
+    playback.loop,
+    playback.name,
+  ])
 
   if (!assets) return <div className="stage sprite-orb" />
   return (

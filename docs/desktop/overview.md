@@ -33,6 +33,10 @@ v1 is 1536x1872 with 9 rows, v2 is 1536x2288 with 11 rows). Assets from the
 Codex pet ecosystem work without any conversion, and no Codex installation
 is required.
 
+Generated skins may use the optional `animations.frames/fps` extension to
+describe each standard action's effective frames and speed. See the
+[desktop pet skin protocol](./pet-skin-spec.md).
+
 To import a skin you already downloaded, open "Settings → Application →
 Appearance", click "Import Skin…", and select the skin folder, its
 `pet.json`, or a zip archive. Imported skins are stored under `skins/` in
@@ -40,12 +44,27 @@ the desktop data directory and appear in the appearance dropdown alongside
 the built-in styles. Selecting an imported skin enables the "Delete"
 button next to it; built-in appearances cannot be deleted.
 
-The orb maps voice and task states to pet animations: waiting while
-listening, reviewing while thinking, waving while speaking or greeting you
-on wake, running left continuously while background tasks are executing,
-jumping continuously while a task waits for your confirmation, running
-while another frontend holds the voice channel, and the failed pose on
-errors. Conversation states always take priority over background states.
+The desktop does not flatten every business signal into one "Agent state".
+Lifecycle, runtime readiness, voice interaction, and background work remain
+separate; skins consume only stable presentation states and one-shot events.
+
+| System semantics | Skin action | Playback |
+| --- | --- | --- |
+| Idle | `idle` | Loop continuously |
+| Confirmed user speech | `waiting` | Play once, then restore the base action |
+| Input committed, awaiting the first response | `review` | Play once; this does not claim access to model-internal "thinking" |
+| Playback starts | `waving` | Play once, with subtle playback motion retained |
+| Background work active | `running` | Loop as the base action |
+| Application starting | `waiting` | Loop continuously |
+| First readiness or wake | `waving` | Play once |
+| Runtime or task failure | `failed` | Play once |
+| Pointer hover | `jumping` | Play once |
+| Left/right drag | `running-left` / `running-right` | Loop while dragging |
+
+Permission waits, ownership by another frontend, and detailed connection
+phases remain useful business states, but do not select separate sprite
+tracks. A transient action restores idle, or running when background work is
+still active. Front-end-only mode skips backend readiness.
 Skin packages are static assets only (JSON + WebP) and are validated on
 import; if a selected skin package is removed, the orb falls back to the
 built-in appearance.

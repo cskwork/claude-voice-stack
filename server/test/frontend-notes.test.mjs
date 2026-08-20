@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { spawn } from 'node:child_process'
 import {
   existsSync,
   mkdtempSync,
@@ -144,4 +145,51 @@ test('rolls back additions when persistence is unavailable', t => {
   assert.throws(() => store.add('owner-a', { list: '购物清单', items: ['牛奶'] }))
   assert.deepEqual(store.lists('owner-a'), [])
   assert.equal(store.health().persistenceEnabled, false)
+})
+
+test('reloads from disk when another instance updated the shared file', t => {
+  const root = mkdtempSync(join(tmpdir(), 'frontend-notes-shared-'))
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  const filePath = join(root, 'frontend-notes.json')
+  // 桌面版与 CLI 双开时是两个进程各持一个 store 实例读写同一文件。
+  const cli = new FrontendNotesStore({ filePath })
+  const desktop = new FrontendNotesStore({ filePath })
+  cli.add('owner-a', { list: '购物清单', items: ['牛奶'] })
+  // 另一实例写入后，本实例的下一次读写要先看到磁盘上的最新内容，
+  // 而不是用自己的旧缓存整份覆盖回去。
+  desktop.add('owner-a', { list: '购物清单', items: ['面包'] })
+  const merged = cli.show('owner-a', '购物清单')
+  assert.deepEqual(merged.items.map(item => item.text), ['牛奶', '面包'])
+  cli.add('owner-a', { list: '购物清单', items: ['鸡蛋'] })
+  const final = desktop.show('owner-a', '购物清单')
+  assert.deepEqual(final.items.map(item => item.text), ['牛奶', '面包', '鸡蛋'])
+})
+
+test('serializes concurrent writes from independent Gateway processes', async t => {
+  const root = mkdtempSync(join(tmpdir(), 'frontend-notes-processes-'))
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  const filePath = join(root, 'frontend-notes.json')
+  const moduleUrl = new URL('../src/conversation/frontend-notes.mjs', import.meta.url).href
+  const items = Array.from({ length: 12 }, (_, index) => `item-${index}`)
+  const script = `
+    import { FrontendNotesStore } from ${JSON.stringify(moduleUrl)}
+    const store = new FrontendNotesStore({ filePath: process.argv[1] })
+    store.add('owner-a', { list: 'shared', items: [process.argv[2]] })
+  `
+  await Promise.all(items.map(item => new Promise((resolvePromise, rejectPromise) => {
+    const child = spawn(process.execPath, ['--input-type=module', '-e', script, filePath, item], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    let stderr = ''
+    child.stderr.setEncoding('utf8')
+    child.stderr.on('data', chunk => { stderr += chunk })
+    child.once('error', rejectPromise)
+    child.once('exit', code => {
+      if (code === 0) resolvePromise()
+      else rejectPromise(new Error(`child exited ${code}: ${stderr}`))
+    })
+  })))
+
+  const result = new FrontendNotesStore({ filePath }).show('owner-a', 'shared')
+  assert.deepEqual(result.items.map(item => item.text).sort(), items.sort())
 })
