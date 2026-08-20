@@ -1,5 +1,6 @@
 import { config, realtimeUrl } from '../../core/config.mjs'
 import {
+  listDashScopeRealtimeModelProfiles,
   resolveDashScopeRealtimeModelProfile,
 } from '../../../../shared/realtime-provider-catalog.mjs'
 import {
@@ -42,6 +43,7 @@ function responseModalities(profile) {
 export const dashscopeProvider = {
   key: 'dashscope',
   label: 'Qwen-Audio-Realtime',
+  aliases: ['qwen'],
   inputSampleRate: 16000,
   outputSampleRate: 24000,
   protocol: openAiCompatibleProtocol,
@@ -54,6 +56,7 @@ export const dashscopeProvider = {
   },
 
   model: () => config.audioModel,
+  modelCatalog: listDashScopeRealtimeModelProfiles,
   modelProfile: activeModelProfile,
   voice: () => config.audioVoice || activeModelProfile().sessionDefaults.voice,
   isConfigured: () => Boolean(config.dashscopeApiKey),

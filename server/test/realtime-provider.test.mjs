@@ -1860,6 +1860,78 @@ test('connects to an OpenAI Realtime-compatible speech-to-speech server', async 
   })
 })
 
+test('sends provider connection messages before regular realtime traffic', async t => {
+  const server = new WebSocketServer({ host: '127.0.0.1', port: 0 })
+  await new Promise(resolve => server.once('listening', resolve))
+
+  const received = []
+  const traffic = new Promise(resolve => {
+    server.once('connection', socket => {
+      socket.on('message', raw => {
+        const message = JSON.parse(raw.toString())
+        received.push(message)
+        if (message.type === 'start') {
+          socket.send(JSON.stringify({
+            type: 'session.created',
+            route: message.route,
+          }))
+        } else if (message.type === 'session.update') {
+          socket.send(JSON.stringify({
+            type: 'session.updated',
+            route: message.route,
+          }))
+          resolve()
+        }
+      })
+    })
+  })
+  const address = server.address()
+  let protocolConnectionId = ''
+  const frontend = new RealtimeFrontend({
+    provider: {
+      ...REALTIME_PROVIDERS.qwen,
+      key: 'connection-message-test',
+      isConfigured: () => true,
+      url: () => `ws://127.0.0.1:${address.port}/v1/realtime`,
+      createProtocol: ({ connectionId }) => {
+        protocolConnectionId = connectionId
+        return {
+          ...REALTIME_PROVIDERS.qwen.protocol,
+          connectionMessages: () => [{
+            type: 'start',
+            route: connectionId,
+          }],
+          encodeOutgoing: payload => ({
+            ...REALTIME_PROVIDERS.qwen.protocol.encodeOutgoing(payload),
+            route: connectionId,
+          }),
+          normalizeIncoming: event => {
+            if (event.route !== connectionId) return []
+            const { route: _route, ...normalized } = event
+            return normalized
+          },
+        }
+      },
+    },
+  })
+  t.after(async () => {
+    frontend.close()
+    await new Promise(resolve => server.close(resolve))
+  })
+
+  await frontend.connect()
+  await traffic
+
+  assert.ok(protocolConnectionId)
+  assert.deepEqual(received.map(message => message.type), [
+    'start',
+    'session.update',
+  ])
+  assert.equal(received[0].route, protocolConnectionId)
+  assert.equal(received[1].route, protocolConnectionId)
+  assert.equal(frontend.ready, true)
+})
+
 test('rejects connect fast when speech-to-speech reports its single session slot is busy', async t => {
   // s2s 服务为单 session 槽：旧连接关闭后槽异步释放，若立即重连（例如语音
   // 唤醒）会收到 session_limit_reached。该错误必须快速 reject（而非卡死），

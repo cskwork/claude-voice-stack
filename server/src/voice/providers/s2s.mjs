@@ -30,6 +30,7 @@ function classifyError(message) {
 export const s2sProvider = {
   key: 'speech-to-speech',
   label: 'Hugging Face Speech-to-Speech',
+  aliases: ['s2s'],
   inputSampleRate: INPUT_SAMPLE_RATE,
   outputSampleRate: OUTPUT_SAMPLE_RATE,
   // Fully local ASR -> LLM -> TTS can take substantially longer than a cloud

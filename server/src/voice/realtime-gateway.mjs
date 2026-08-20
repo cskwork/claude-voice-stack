@@ -13,8 +13,8 @@ import { InputAssetRegistry } from './input-asset-registry.mjs'
 import { normalizeClientContext } from '../conversation/frontend-agent-context.mjs'
 import {
   createRealtimeFrontend,
+  defaultRealtimeProviderRegistry,
   realtimeEventErrorMessage,
-  resolveRealtimeProvider,
 } from './realtime-provider.mjs'
 import { isAllowedOrigin } from '../core/request-security.mjs'
 import { taskManager } from '../task/task-manager.mjs'
@@ -123,6 +123,8 @@ export function attachRealtimeGateway(server, {
   permissionPolicy,
   inputAssets = new InputAssetRegistry(),
   inputArbitration = null,
+  realtimeProviderRegistry = defaultRealtimeProviderRegistry,
+  defaultRealtimeProvider = config.audioProvider,
 }) {
   const wss = new WebSocketServer({ noServer: true, maxPayload: 20 * 1024 * 1024 })
   const activeVoiceClients = new ActiveVoiceClients()
@@ -198,7 +200,7 @@ export function attachRealtimeGateway(server, {
     let pendingInputParts = []
     // Realtime front end for this session. Defaults to the configured provider
     // and can be switched by the client through the connect event.
-    let sessionProvider = config.audioProvider
+    let sessionProvider = defaultRealtimeProvider
     let descriptor = clientDescriptor()
     let responseTurnCandidate = null
     let responseStartWatchdog = null
@@ -1451,6 +1453,7 @@ export function attachRealtimeGateway(server, {
       let createdFrontend
       createdFrontend = createRealtimeFrontend({
         providerName: sessionProvider,
+        providerRegistry: realtimeProviderRegistry,
         agentContext: {
           client: clientContext,
           memories: memoryService?.list(ownerId, { limit: 64 }) || [],
@@ -1702,7 +1705,7 @@ export function attachRealtimeGateway(server, {
     const attemptWakeConnect = attempt => {
       ensureFrontend().catch(error => {
         const provider =
-          frontend?.provider ?? resolveRealtimeProvider(sessionProvider)
+          frontend?.provider ?? realtimeProviderRegistry.resolve(sessionProvider)
         const classification =
           provider.classifyError?.(error.message) ?? 'other'
         if (
@@ -1827,7 +1830,8 @@ export function attachRealtimeGateway(server, {
 
     const acceptSleepingAudio = audio => {
       try {
-        const sampleRate = resolveRealtimeProvider(sessionProvider).inputSampleRate
+        const sampleRate = realtimeProviderRegistry.resolve(sessionProvider)
+          .inputSampleRate
         if (wakeDetector?.accept(audio, sampleRate)) wakeFromSleep()
       } catch (error) {
         sleeping = false
@@ -1895,7 +1899,7 @@ export function attachRealtimeGateway(server, {
         // not look like a working session on the wrong provider.
         if (event.provider && event.provider !== sessionProvider) {
           try {
-            const requested = resolveRealtimeProvider(event.provider)
+            const requested = realtimeProviderRegistry.resolve(event.provider)
             sessionProvider = requested.key
             realtimeBlockedError = ''
             const staleFrontend = frontend
