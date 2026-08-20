@@ -33,22 +33,6 @@ const DEFAULT_FRAME_SPEC = Object.freeze({
   rows: 9,
 })
 const V2_DEFAULT_ROWS = 11
-// 渲染端默认轨道名，自定义 animations 的 fallback 必须落在
-// 自定义名或这张表内。
-export const DEFAULT_ANIMATION_NAMES = Object.freeze([
-  'idle',
-  'running-right',
-  'running-left',
-  'waving',
-  'jumping',
-  'failed',
-  'waiting',
-  'running',
-  'review',
-  'working',
-  'attention',
-])
-
 export function skinsDirectory(configDirectory) {
   return join(configDirectory, 'skins')
 }
@@ -125,10 +109,6 @@ function validateAnimations(manifest, frameCount) {
   if (!specs || typeof specs !== 'object' || Array.isArray(specs)) {
     throw new Error('皮肤包 animations 必须是对象')
   }
-  const names = new Set([
-    ...DEFAULT_ANIMATION_NAMES,
-    ...Object.keys(specs),
-  ])
   for (const [name, spec] of Object.entries(specs)) {
     if (!spec || typeof spec !== 'object' || Array.isArray(spec)) {
       throw new Error(`皮肤包动画 ${name} 定义必须是对象`)
@@ -151,11 +131,6 @@ function validateAnimations(manifest, frameCount) {
         throw new Error(
           `皮肤包动画 ${name} 的 fps 必须在 0 到 ${MAX_ANIMATION_FPS} 之间`,
         )
-      }
-    }
-    if (spec.fallback !== undefined && spec.fallback !== '') {
-      if (!names.has(spec.fallback)) {
-        throw new Error(`皮肤包动画 ${name} 的 fallback ${spec.fallback} 不存在`)
       }
     }
   }

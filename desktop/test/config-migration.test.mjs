@@ -5,7 +5,6 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
-  utimesSync,
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -27,11 +26,10 @@ function withDirectories(fn) {
   }
 }
 
-function seed(directory, name, content, epochSeconds) {
+function seed(directory, name, content) {
   mkdirSync(directory, { recursive: true })
   const path = join(directory, name)
   writeFileSync(path, content, 'utf8')
-  utimesSync(path, epochSeconds, epochSeconds)
   return path
 }
 
@@ -56,28 +54,25 @@ test('falls back to the Electron userData directory without override', () => {
   )
 })
 
-test('backfills newer desktop assets and keeps a backup of the shared copy', () => {
+test('never overwrites an existing shared asset', () => {
   withDirectories(({ desktopDir, dataDir }) => {
-    seed(desktopDir, 'MEMORY.md', '# MEMORY desktop\n', 2000)
-    seed(dataDir, 'MEMORY.md', '# MEMORY cli\n', 1000)
+    seed(desktopDir, 'MEMORY.md', '# MEMORY desktop\n')
+    seed(dataDir, 'MEMORY.md', '# MEMORY cli\n')
     const result = backfillSharedAssets({ desktopDir, dataDir })
-    assert.equal(result.backfilled, true)
-    assert.deepEqual(result.copied, ['MEMORY.md'])
+    assert.equal(result.backfilled, false)
+    assert.deepEqual(result.copied, [])
+    assert.deepEqual(result.skipped, ['MEMORY.md'])
     assert.equal(
       readFileSync(join(dataDir, 'MEMORY.md'), 'utf8'),
-      '# MEMORY desktop\n',
-    )
-    assert.equal(
-      readFileSync(join(dataDir, 'MEMORY.md.pre-merge.bak'), 'utf8'),
       '# MEMORY cli\n',
     )
   })
 })
 
-test('leaves shared assets that are newer than the desktop copies', () => {
+test('does not use timestamps to choose between two user assets', () => {
   withDirectories(({ desktopDir, dataDir }) => {
-    seed(desktopDir, 'config.env', 'DASHSCOPE_API_KEY=sk-desktop\n', 1000)
-    seed(dataDir, 'config.env', 'DASHSCOPE_API_KEY=sk-cli\n', 2000)
+    seed(desktopDir, 'config.env', 'DASHSCOPE_API_KEY=sk-desktop\n')
+    seed(dataDir, 'config.env', 'DASHSCOPE_API_KEY=sk-cli\n')
     const result = backfillSharedAssets({ desktopDir, dataDir })
     assert.equal(result.backfilled, false)
     assert.deepEqual(result.skipped, ['config.env'])
@@ -85,14 +80,13 @@ test('leaves shared assets that are newer than the desktop copies', () => {
       readFileSync(join(dataDir, 'config.env'), 'utf8'),
       'DASHSCOPE_API_KEY=sk-cli\n',
     )
-    assert.equal(existsSync(join(dataDir, 'config.env.pre-merge.bak')), false)
   })
 })
 
 test('never overwrites an existing shared state.env identity', () => {
   withDirectories(({ desktopDir, dataDir }) => {
-    seed(desktopDir, 'state.env', 'QWEN_AUDIO_AGENT_AUTH_SECRET=desktop\n', 2000)
-    seed(dataDir, 'state.env', 'QWEN_AUDIO_AGENT_AUTH_SECRET=cli\n', 1000)
+    seed(desktopDir, 'state.env', 'QWEN_AUDIO_AGENT_AUTH_SECRET=desktop\n')
+    seed(dataDir, 'state.env', 'QWEN_AUDIO_AGENT_AUTH_SECRET=cli\n')
     const result = backfillSharedAssets({ desktopDir, dataDir })
     assert.deepEqual(result.skipped, ['state.env'])
     assert.equal(
@@ -104,8 +98,8 @@ test('never overwrites an existing shared state.env identity', () => {
 
 test('copies desktop assets missing from the shared directory', () => {
   withDirectories(({ desktopDir, dataDir }) => {
-    seed(desktopDir, 'USER.md', '# USER desktop\n', 2000)
-    seed(desktopDir, 'tasks.json', '{"version":1}\n', 2000)
+    seed(desktopDir, 'USER.md', '# USER desktop\n')
+    seed(desktopDir, 'tasks.json', '{"version":1}\n')
     const result = backfillSharedAssets({ desktopDir, dataDir })
     assert.deepEqual(result.copied, ['USER.md'])
     assert.equal(
@@ -117,12 +111,36 @@ test('copies desktop assets missing from the shared directory', () => {
   })
 })
 
+test('moves an old desktop workspace only when the shared workspace is absent', () => {
+  withDirectories(({ desktopDir, dataDir }) => {
+    seed(join(desktopDir, 'workspace'), 'notes.txt', 'desktop workspace\n')
+    const result = backfillSharedAssets({ desktopDir, dataDir })
+    assert.deepEqual(result.copied, ['workspace'])
+    assert.equal(
+      readFileSync(join(dataDir, 'workspace/notes.txt'), 'utf8'),
+      'desktop workspace\n',
+    )
+  })
+})
+
+test('keeps both workspaces intact when a shared workspace already exists', () => {
+  withDirectories(({ desktopDir, dataDir }) => {
+    seed(join(desktopDir, 'workspace'), 'desktop.txt', 'desktop\n')
+    seed(join(dataDir, 'workspace'), 'cli.txt', 'cli\n')
+    const result = backfillSharedAssets({ desktopDir, dataDir })
+    assert.deepEqual(result.skipped, ['workspace'])
+    assert.equal(existsSync(join(dataDir, 'workspace/desktop.txt')), false)
+    assert.equal(readFileSync(join(dataDir, 'workspace/cli.txt'), 'utf8'), 'cli\n')
+    assert.equal(readFileSync(join(desktopDir, 'workspace/desktop.txt'), 'utf8'), 'desktop\n')
+  })
+})
+
 test('runs exactly once per desktop directory', () => {
   withDirectories(({ desktopDir, dataDir }) => {
-    seed(desktopDir, 'MEMORY.md', '# MEMORY desktop\n', 2000)
+    seed(desktopDir, 'MEMORY.md', '# MEMORY desktop\n')
     const first = backfillSharedAssets({ desktopDir, dataDir })
     assert.equal(first.backfilled, true)
-    seed(desktopDir, 'USER.md', '# USER late\n', 3000)
+    seed(desktopDir, 'USER.md', '# USER late\n')
     const again = backfillSharedAssets({ desktopDir, dataDir })
     assert.equal(again.backfilled, false)
     assert.equal(again.reason, 'already-backfilled')

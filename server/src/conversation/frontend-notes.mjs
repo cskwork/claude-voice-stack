@@ -7,6 +7,7 @@ import {
 } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { dirname } from 'node:path'
+import { withFileTransaction } from '../../../shared/file-transaction-lock.mjs'
 
 const MAX_LISTS_PER_OWNER = 20
 const MAX_ITEMS_PER_LIST = 100
@@ -121,6 +122,19 @@ export class FrontendNotesStore {
     this.users = new Map()
     this.ownerAccess = new Map()
     this.load()
+  }
+
+  writeTransaction(action) {
+    return withFileTransaction(this.filePath, () => {
+      // The lock must be acquired before reloading. Otherwise another Gateway
+      // can commit between the reload and persist phases and be overwritten.
+      if (this.filePath && !this.persistenceDisabled) {
+        this.users = new Map()
+        this.ownerAccess = new Map()
+        this.load()
+      }
+      return action()
+    })
   }
 
   fileContentHash() {
@@ -295,7 +309,9 @@ export class FrontendNotesStore {
 
   lists(ownerId) {
     this.refreshIfChanged()
-    this.pruneOwners()
+    // Expiry is persisted by the next write transaction. A read must not turn
+    // into an unlocked cross-process write.
+    this.pruneOwners({ persist: false })
     const safeOwnerId = String(ownerId)
     this.touch(safeOwnerId)
     return [...(this.users.get(safeOwnerId) || new Map()).values()]
@@ -319,8 +335,11 @@ export class FrontendNotesStore {
     }
   }
 
-  add(ownerId, { list, items = [] } = {}) {
-    this.refreshIfChanged()
+  add(ownerId, input = {}) {
+    return this.writeTransaction(() => this.addUnlocked(ownerId, input))
+  }
+
+  addUnlocked(ownerId, { list, items = [] } = {}) {
     this.pruneOwners()
     const safeOwnerId = String(ownerId)
     const safeName = clean(list, MAX_LIST_NAME_CHARS)
@@ -391,8 +410,11 @@ export class FrontendNotesStore {
     return { status: 'ok', list: listEntry.name, added, duplicates }
   }
 
-  remove(ownerId, { list, items = [] } = {}) {
-    this.refreshIfChanged()
+  remove(ownerId, input = {}) {
+    return this.writeTransaction(() => this.removeUnlocked(ownerId, input))
+  }
+
+  removeUnlocked(ownerId, { list, items = [] } = {}) {
     this.pruneOwners()
     const safeOwnerId = String(ownerId)
     const safeItems = items
@@ -451,7 +473,10 @@ export class FrontendNotesStore {
   }
 
   clear(ownerId, list) {
-    this.refreshIfChanged()
+    return this.writeTransaction(() => this.clearUnlocked(ownerId, list))
+  }
+
+  clearUnlocked(ownerId, list) {
     this.pruneOwners()
     const safeOwnerId = String(ownerId)
     const lists = this.users.get(safeOwnerId) || new Map()
@@ -478,7 +503,10 @@ export class FrontendNotesStore {
   }
 
   drop(ownerId, list) {
-    this.refreshIfChanged()
+    return this.writeTransaction(() => this.dropUnlocked(ownerId, list))
+  }
+
+  dropUnlocked(ownerId, list) {
     this.pruneOwners()
     const safeOwnerId = String(ownerId)
     const lists = this.users.get(safeOwnerId) || new Map()

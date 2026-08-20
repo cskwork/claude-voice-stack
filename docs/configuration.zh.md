@@ -18,10 +18,11 @@
 `~/.config/qwaudio`，桌面版为系统标准应用数据目录（macOS 为
 `~/Library/Application Support/Qwen Audio Agent`，Linux 为
 `~/.config/Qwen Audio Agent`，Windows 为 `%APPDATA%\Qwen Audio Agent`）。因此两者
-可以同时运行、互不干扰（实际上很少需要）。从旧版本升级的桌面安装会把桌面目录中
-较新的资产一次性回填到共享层（被替换的共享文件保留为 `<名称>.pre-merge.bak`；
-共享层已有的 `state.env` 身份永不覆盖）。显式设置 `QWAUDIO_CONFIG_DIR` 时桌面版
-遵循该覆盖，资产与运行时状态落在同一目录，为 Profile 场景保留完全隔离。
+可以作为两个独立的 Gateway 进程同时运行，各自拥有会话、任务和日志，同时共享用户的
+助手配置。从旧版本升级时，桌面版只补齐共享层缺失的资产（包括旧 `workspace/`）；两边
+都存在时不会自动覆盖或合并。显式设置 `QWAUDIO_CONFIG_DIR` 时桌面版遵循该覆盖，资产与
+运行时状态落在同一目录，为 Profile 场景保留完全隔离。共享记忆与清单的写入使用跨进程
+串行事务，Desktop 与 CLI 同时更新时不会静默丢失内容。
 
 配置优先级固定为：
 

@@ -27,8 +27,8 @@ export function acceptsVoiceState(event, currentTurnId) {
   )
 }
 
-export function visualVoiceState(state, inputActive, enabled) {
-  return enabled && inputActive ? 'listening' : state
+export function visualVoiceState(state) {
+  return state
 }
 
 export function shouldClaimReleasedVoice(event, waitingForVoice) {
@@ -198,7 +198,6 @@ export default function useRealtimeVoice({
   onInputError,
 }) {
   const [state, setState] = useState('idle')
-  const [inputActive, setInputActive] = useState(false)
   const [inputReady, setInputReady] = useState(false)
   const [error, setError] = useState('')
   const [visualError, setVisualError] = useState(false)
@@ -213,7 +212,6 @@ export default function useRealtimeVoice({
   const wakeWordOnlyRef = useRef(wakeWordOnly)
   const socketRef = useRef(null)
   const audioRef = useRef(null)
-  const levelElementRef = useRef(null)
   const currentTurnId = useRef('')
   const clientInstanceId = useRef(crypto.randomUUID())
   const inputSampleRate = useRef(DEFAULT_INPUT_RATE)
@@ -239,10 +237,6 @@ export default function useRealtimeVoice({
   wakeWordOnlyRef.current = wakeWordOnly
   enabledRef.current = enabled
   outputMutedRef.current = outputMuted
-
-  const setAudioLevel = useCallback(value => {
-    levelElementRef.current?.style.setProperty('--level', String(value))
-  }, [])
 
   const activateAudio = useCallback(() => {
     const AudioContext = window.AudioContext || window.webkitAudioContext
@@ -449,9 +443,7 @@ export default function useRealtimeVoice({
   useEffect(() => {
     if (suspended) {
       setState('idle')
-      setInputActive(false)
       setInputReady(false)
-      setAudioLevel(0)
       setError('')
       setVisualError(false)
       setConnectionState('hidden')
@@ -614,7 +606,6 @@ export default function useRealtimeVoice({
     play,
     realtimeProvider,
     sessionId,
-    setAudioLevel,
     stopPlayback,
     suspended,
     takeover,
@@ -633,8 +624,6 @@ export default function useRealtimeVoice({
         inputOnlyMute,
         wakeWordOnly: false,
       }))
-      setAudioLevel(0)
-      setInputActive(false)
       return undefined
     }
 
@@ -642,10 +631,6 @@ export default function useRealtimeVoice({
     let media
     let source
     let processor
-    let analyser
-    let animation
-    let visualInputActive = false
-    let lastVoiceAt = 0
     inputReadyRef.current = false
     const failInput = reason => {
       const message = reason?.message || String(reason || t('无法打开麦克风'))
@@ -656,12 +641,9 @@ export default function useRealtimeVoice({
         inputOnlyMute,
         wakeWordOnly: false,
       }))
-      setAudioLevel(0)
-      setInputActive(false)
       media?.getTracks().forEach(track => track.stop())
       processor?.disconnect()
       source?.disconnect()
-      analyser?.disconnect()
       setError(message)
       setVisualError(true)
       inputErrorRef.current?.(message)
@@ -684,9 +666,6 @@ export default function useRealtimeVoice({
         if (disposed) return media.getTracks().forEach(track => track.stop())
         setVisualError(false)
         source = context.createMediaStreamSource(media)
-        analyser = context.createAnalyser()
-        analyser.fftSize = 512
-        source.connect(analyser)
         processor = context.createScriptProcessor(2048, 1, 1)
         processor.onaudioprocess = event => {
           const socket = socketRef.current
@@ -711,26 +690,6 @@ export default function useRealtimeVoice({
           wakeWordOnly,
           takeover,
         }))
-        const samples = new Float32Array(analyser.fftSize)
-        const tick = () => {
-          analyser.getFloatTimeDomainData(samples)
-          const power = samples.reduce((sum, value) => sum + value * value, 0)
-          const level = Math.min(1, Math.sqrt(power / samples.length) / 0.18)
-          setAudioLevel(level)
-          const now = performance.now()
-          if (level >= 0.075) {
-            lastVoiceAt = now
-            if (!visualInputActive) {
-              visualInputActive = true
-              setInputActive(true)
-            }
-          } else if (visualInputActive && now - lastVoiceAt >= 140) {
-            visualInputActive = false
-            setInputActive(false)
-          }
-          animation = requestAnimationFrame(tick)
-        }
-        tick()
       } catch (reason) {
         if (!disposed) failInput(reason)
       }
@@ -741,12 +700,9 @@ export default function useRealtimeVoice({
       disposed = true
       inputReadyRef.current = false
       setInputReady(false)
-      cancelAnimationFrame(animation)
-      setInputActive(false)
       media?.getTracks().forEach(track => track.stop())
       processor?.disconnect()
       source?.disconnect()
-      analyser?.disconnect()
     }
   }, [
     activateAudio,
@@ -755,7 +711,6 @@ export default function useRealtimeVoice({
     wakeWordOnly,
     sendSocketEvent,
     sessionId,
-    setAudioLevel,
     suspended,
     takeover,
   ])
@@ -795,14 +750,13 @@ export default function useRealtimeVoice({
 
   return {
     state,
-    visualState: visualVoiceState(state, inputActive, enabled && !suspended),
+    visualState: visualVoiceState(state),
     inputReady,
     error,
     visualError,
     connectionState,
     wakeWordActive,
     ownership,
-    levelElementRef,
     activateAudio,
     interrupt,
     wake,

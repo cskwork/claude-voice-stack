@@ -6,6 +6,7 @@ import {
   frameRect,
   resolveAnimations,
   spriteAnimationForOrbState,
+  spritePlaybackSelection,
   spriteGeometry,
 } from '../src/sprite-orb.js'
 
@@ -13,11 +14,12 @@ test('maps every orb visual state to a pet animation track', () => {
   const cases = {
     idle: 'idle',
     listening: 'waiting',
-    connecting: 'waiting',
-    thinking: 'review',
-    occupied: 'running',
-    working: 'working',
-    attention: 'attention',
+    connecting: 'idle',
+    processing: 'review',
+    occupied: 'idle',
+    working: 'running',
+    attention: 'idle',
+    starting: 'waiting',
     speaking: 'waving',
     waking: 'waving',
     error: 'failed',
@@ -29,14 +31,75 @@ test('maps every orb visual state to a pet animation track', () => {
     assert.equal(spriteAnimationForOrbState({ state }), expected)
     assert.ok(animations[expected], `track ${expected} must exist`)
   }
-  // 拖拽修饰优先于语音状态。
-  assert.equal(
-    spriteAnimationForOrbState({ state: 'speaking', dragging: true }),
-    'running-right',
-  )
 })
 
-test('default tracks repeat three times then settle into the idle loop', () => {
+test('keeps idle and background work persistent while actions stay transient', () => {
+  assert.deepEqual(spritePlaybackSelection({ state: 'working' }), {
+    name: 'running',
+    key: 'state:working:running',
+    loop: true,
+    completion: 'none',
+    fallback: 'running',
+  })
+  assert.deepEqual(spritePlaybackSelection({ state: 'idle' }), {
+    name: 'idle',
+    key: 'state:idle:idle',
+    loop: true,
+    completion: 'none',
+    fallback: 'idle',
+  })
+  assert.deepEqual(spritePlaybackSelection({
+    state: 'speaking',
+    dragDirection: 'left',
+  }), {
+    name: 'running-left',
+    key: 'drag:left',
+    loop: true,
+    completion: 'none',
+    fallback: 'idle',
+  })
+  assert.deepEqual(spritePlaybackSelection({ state: 'speaking' }), {
+    name: 'waving',
+    key: 'state:speaking:waving',
+    loop: false,
+    completion: 'none',
+    fallback: 'idle',
+  })
+  assert.deepEqual(spritePlaybackSelection({
+    state: 'attention',
+    baseWorking: true,
+  }), {
+    name: 'running',
+    key: 'state:attention:running',
+    loop: true,
+    completion: 'none',
+    fallback: 'running',
+  })
+  assert.deepEqual(spritePlaybackSelection({
+    state: 'working',
+    baseWorking: true,
+    cue: { id: 7, name: 'failed' },
+  }), {
+    name: 'failed',
+    key: 'cue:7',
+    loop: false,
+    completion: 'cue',
+    fallback: 'running',
+  })
+  assert.deepEqual(spritePlaybackSelection({
+    state: 'processing',
+    baseWorking: true,
+  }), {
+    name: 'review',
+    key: 'state:processing:review',
+    loop: false,
+    completion: 'none',
+    fallback: 'running',
+  })
+  assert.equal(spritePlaybackSelection({ state: 'starting' }).loop, true)
+})
+
+test('only idle loops by default and every action is one-shot', () => {
   const animations = defaultAnimations()
   const idle = animations.idle
   assert.equal(idle.frames.length, 6)
@@ -47,15 +110,12 @@ test('default tracks repeat three times then settle into the idle loop', () => {
   assert.equal(idle.loopStart, 0)
 
   const waving = animations.waving
-  // waving 行 4 帧重复 3 遍 + idle 6 帧沉降段。
-  assert.equal(waving.frames.length, 4 * 3 + 6)
-  assert.equal(waving.loopStart, 12)
+  assert.equal(waving.frames.length, 4)
+  assert.equal(waving.loopStart, null)
   assert.equal(waving.fallback, 'idle')
   // 行内帧索引：第 3 行起始 spriteIndex = 24，末帧时长加长。
   assert.equal(waving.frames[0].spriteIndex, 24)
   assert.equal(waving.frames[3].durationMs, 280)
-  // 沉降段引用 idle 行帧。
-  assert.equal(waving.frames[12].spriteIndex, 0)
 
   for (const name of [
     'idle',
@@ -67,34 +127,15 @@ test('default tracks repeat three times then settle into the idle loop', () => {
     'waiting',
     'running',
     'review',
-    'working',
-    'attention',
   ]) {
     assert.ok(animations[name], `default track ${name} must exist`)
     assert.ok(animations[animations[name].fallback])
+    assert.equal(
+      animations[name].loopStart,
+      name === 'idle' ? 0 : null,
+      `${name} lifecycle`,
+    )
   }
-})
-
-test('the working track loops the running-left row without settling', () => {
-  const working = defaultAnimations().working
-  // 仅含第 2 行的 8 帧，无 idle 沉降段，持续循环。
-  assert.equal(working.frames.length, 8)
-  assert.equal(working.loopStart, 0)
-  assert.equal(working.fallback, 'idle')
-  assert.equal(working.frames[0].spriteIndex, 16)
-  assert.equal(working.frames[7].spriteIndex, 23)
-  assert.equal(working.frames[7].durationMs, 220)
-})
-
-test('the attention track loops the jumping row to demand a decision', () => {
-  const attention = defaultAnimations().attention
-  // 仅含第 4 行（jumping）的 5 帧，持续循环不沉降。
-  assert.equal(attention.frames.length, 5)
-  assert.equal(attention.loopStart, 0)
-  assert.equal(attention.fallback, 'idle')
-  assert.equal(attention.frames[0].spriteIndex, 32)
-  assert.equal(attention.frames[4].spriteIndex, 36)
-  assert.equal(attention.frames[4].durationMs, 280)
 })
 
 test('resolves elapsed time to frames across intro, loop, and one-shot tracks', () => {
@@ -139,7 +180,7 @@ test('resolves elapsed time to frames across intro, loop, and one-shot tracks', 
   assert.equal(frameAtElapsed(oneShot, 100), null)
 })
 
-test('merges pet.json animation overrides and validates them', () => {
+test('merges frame/fps overrides and ignores skin-owned lifecycle fields', () => {
   const merged = resolveAnimations({
     animations: {
       'waving': { frames: [1, 2], fps: 10, loop: false, fallback: 'waiting' },
@@ -150,7 +191,7 @@ test('merges pet.json animation overrides and validates them', () => {
     { spriteIndex: 2, durationMs: 100 },
   ])
   assert.equal(merged.waving.loopStart, null)
-  assert.equal(merged.waving.fallback, 'waiting')
+  assert.equal(merged.waving.fallback, 'idle')
   // 未覆盖的轨道保持默认。
   assert.equal(merged.idle.frames.length, 6)
 
@@ -160,9 +201,6 @@ test('merges pet.json animation overrides and validates them', () => {
   assert.throws(() => resolveAnimations({
     animations: { 'spin': { frames: [0], fps: 0 } },
   }, 72), /fps 非法/)
-  assert.throws(() => resolveAnimations({
-    animations: { 'spin': { frames: [0], fallback: 'nope' } },
-  }, 72), /fallback 不存在/)
   // 默认轨道引用超出小网格帧数时同样失败（与 Codex 行为一致）。
   assert.throws(() => resolveAnimations({}, 8), /越界的帧索引/)
 })
