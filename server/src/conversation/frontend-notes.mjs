@@ -7,7 +7,10 @@ import {
 } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { dirname } from 'node:path'
-import { withFileTransaction } from '../../../shared/file-transaction-lock.mjs'
+import {
+  replaceFileSync,
+  withFileTransaction,
+} from '../../../shared/file-transaction-lock.mjs'
 
 const MAX_LISTS_PER_OWNER = 20
 const MAX_ITEMS_PER_LIST = 100
@@ -297,7 +300,7 @@ export class FrontendNotesStore {
         encoding: 'utf8',
         mode: 0o600,
       })
-      renameSync(temporary, this.filePath)
+      replaceFileSync(temporary, this.filePath)
       this.loadedMtimeMs = this.fileMtimeMs()
       this.loadedContentHash = this.fileContentHash()
       return true

@@ -15,13 +15,15 @@ import {
   chmodSync,
   mkdirSync,
   readFileSync,
-  renameSync,
   unlinkSync,
   writeFileSync,
 } from 'node:fs'
 import { resolve } from 'node:path'
 import { parseEnv } from 'node:util'
-import { withFileTransaction } from '../../shared/file-transaction-lock.mjs'
+import {
+  replaceFileSync,
+  withFileTransaction,
+} from '../../shared/file-transaction-lock.mjs'
 import { gatewaySetupStatus } from '../../shared/gateway-setup.mjs'
 import {
   applySettingsEnvironment,
@@ -63,7 +65,7 @@ function writePrivateFile(path, content) {
   try {
     writeFileSync(temporary, content, { encoding: 'utf8', mode: PRIVATE_FILE_MODE })
     chmodSync(temporary, PRIVATE_FILE_MODE)
-    renameSync(temporary, path)
+    replaceFileSync(temporary, path)
     chmodSync(path, PRIVATE_FILE_MODE)
   } catch (error) {
     try {

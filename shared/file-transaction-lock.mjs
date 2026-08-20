@@ -1,34 +1,26 @@
 import { randomUUID } from 'node:crypto'
 import {
-  closeSync,
   mkdirSync,
-  openSync,
   readFileSync,
   renameSync,
+  rmSync,
   statSync,
-  unlinkSync,
   writeFileSync,
 } from 'node:fs'
 import { dirname } from 'node:path'
 
 const sleepBuffer = new Int32Array(new SharedArrayBuffer(4))
 
-function processIsAlive(pid) {
-  if (!Number.isInteger(pid) || pid <= 0) return false
-  try {
-    process.kill(pid, 0)
-    return true
-  } catch (error) {
-    return error?.code === 'EPERM'
-  }
-}
-
 function readOwner(lockPath) {
-  try {
-    return JSON.parse(readFileSync(lockPath, 'utf8'))
-  } catch {
-    return null
+  for (const path of [`${lockPath}/owner.json`, lockPath]) {
+    try {
+      return JSON.parse(readFileSync(path, 'utf8'))
+    } catch {
+      // The second path keeps stale file locks from an older release
+      // recoverable after the lock representation changed to a directory.
+    }
   }
+  return null
 }
 
 function malformedLockIsStale(lockPath, now, staleMs) {
@@ -46,11 +38,7 @@ function reclaim(lockPath, token) {
   } catch {
     return false
   }
-  try {
-    unlinkSync(stalePath)
-  } catch (error) {
-    if (error?.code !== 'ENOENT') throw error
-  }
+  rmSync(stalePath, { recursive: true, force: true })
   return true
 }
 
@@ -68,29 +56,32 @@ function acquire(filePath, {
   while (true) {
     const owner = { token, pid: process.pid, createdAt: now() }
     try {
-      const fd = openSync(lockPath, 'wx', 0o600)
+      // Directory creation is the lock primitive. It is atomic on the local
+      // filesystems supported by Desktop and CLI, and avoids exposing the
+      // partially written owner record of a file-based lock.
+      mkdirSync(lockPath, { mode: 0o700 })
       try {
-        writeFileSync(fd, `${JSON.stringify(owner)}\n`, 'utf8')
-      } finally {
-        closeSync(fd)
+        writeFileSync(
+          `${lockPath}/owner.json`,
+          `${JSON.stringify(owner)}\n`,
+          { encoding: 'utf8', mode: 0o600 },
+        )
+      } catch (error) {
+        rmSync(lockPath, { recursive: true, force: true })
+        throw error
       }
       return () => {
         const current = readOwner(lockPath)
         if (current?.token !== token) return false
-        try {
-          unlinkSync(lockPath)
-          return true
-        } catch (error) {
-          if (error?.code === 'ENOENT') return false
-          throw error
-        }
+        return reclaim(lockPath, `released.${token}`)
       }
     } catch (error) {
       if (error?.code !== 'EEXIST') throw error
-      const current = readOwner(lockPath)
-      const stale = current
-        ? !processIsAlive(Number(current.pid))
-        : malformedLockIsStale(lockPath, now, staleMs)
+      // Reclaim by age, not PID probing. PID visibility differs across hosts
+      // and containers and can make two live processes both believe they own
+      // the same transaction. Transactions here are synchronous and short;
+      // an abandoned lock is recovered after the bounded stale interval.
+      const stale = malformedLockIsStale(lockPath, now, staleMs)
       if (stale && reclaim(lockPath, token)) continue
       if (now() >= deadline) {
         const timeout = new Error(`timed out waiting for shared file lock: ${filePath}`)
@@ -113,4 +104,67 @@ export function withFileTransaction(filePath, action, options) {
   } finally {
     release()
   }
+}
+
+const WINDOWS_REPLACE_ERRORS = new Set(['EACCES', 'EBUSY', 'EPERM'])
+
+function retryWindowsRename(source, target, retries, retryMs) {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      renameSync(source, target)
+      return
+    } catch (error) {
+      if (
+        !WINDOWS_REPLACE_ERRORS.has(error?.code)
+        || attempt >= retries
+      ) {
+        throw error
+      }
+      Atomics.wait(sleepBuffer, 0, 0, retryMs)
+    }
+  }
+}
+
+// Windows rename cannot consistently replace an existing destination and can
+// also be delayed by a reader or antivirus. Preserve the old destination while
+// replacing it and retry only the documented class of sharing failures.
+export function replaceFileSync(temporaryPath, targetPath, {
+  retries = 20,
+  retryMs = 10,
+} = {}) {
+  if (process.platform !== 'win32') {
+    renameSync(temporaryPath, targetPath)
+    return
+  }
+
+  try {
+    renameSync(temporaryPath, targetPath)
+    return
+  } catch (error) {
+    if (!WINDOWS_REPLACE_ERRORS.has(error?.code)) throw error
+  }
+
+  // Windows rename does not consistently replace an existing destination.
+  // Preserve the previous file as a recoverable backup while moving the new
+  // one into place. Shared-file callers hold the transaction lock while this
+  // small compatibility window is open.
+  const backupPath = `${targetPath}.replace.${randomUUID()}.bak`
+  try {
+    retryWindowsRename(targetPath, backupPath, retries, retryMs)
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw error
+    retryWindowsRename(temporaryPath, targetPath, retries, retryMs)
+    return
+  }
+  try {
+    retryWindowsRename(temporaryPath, targetPath, retries, retryMs)
+  } catch (error) {
+    try {
+      retryWindowsRename(backupPath, targetPath, retries, retryMs)
+    } catch {
+      // Keep the backup on disk when rollback itself is blocked.
+    }
+    throw error
+  }
+  rmSync(backupPath, { force: true })
 }

@@ -1,7 +1,10 @@
-import { closeSync, fsyncSync, mkdirSync, openSync, renameSync, chmodSync, readFileSync, writeSync } from 'node:fs'
+import { closeSync, fsyncSync, mkdirSync, openSync, chmodSync, readFileSync, writeSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { randomUUID } from 'node:crypto'
-import { withFileTransaction } from '../../shared/file-transaction-lock.mjs'
+import {
+  replaceFileSync,
+  withFileTransaction,
+} from '../../shared/file-transaction-lock.mjs'
 import {
   DEFAULT_DASHSCOPE_REALTIME_MODEL,
   listDashScopeRealtimeModelProfiles,
@@ -78,7 +81,7 @@ function updateRealtimeModelConfigUnlocked(configPath, model, {
   } finally {
     closeSync(fd)
   }
-  renameSync(tempPath, configPath)
+  replaceFileSync(tempPath, configPath)
   if (fsyncDirectory) {
     try {
       const directoryFd = openSync(directory, 'r')

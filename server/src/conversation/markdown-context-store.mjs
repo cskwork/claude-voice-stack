@@ -3,11 +3,13 @@ import {
   chmodSync,
   mkdirSync,
   readFileSync,
-  renameSync,
   writeFileSync,
 } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
-import { withFileTransaction } from '../../../shared/file-transaction-lock.mjs'
+import {
+  replaceFileSync,
+  withFileTransaction,
+} from '../../../shared/file-transaction-lock.mjs'
 
 const MAX_EDIT_ITEMS = 20
 
@@ -193,7 +195,7 @@ export class MarkdownContextStore {
     mkdirSync(dirname(path), { recursive: true, mode: 0o700 })
     const temporary = `${path}.${process.pid}.tmp`
     writeFileSync(temporary, content, { encoding: 'utf8', mode: 0o600 })
-    renameSync(temporary, path)
+    replaceFileSync(temporary, path)
     chmodSync(path, 0o600)
     this.warning = null
   }
