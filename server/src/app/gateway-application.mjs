@@ -479,12 +479,12 @@ realtimeGateway = attachRealtimeGateway(server, {
   realtimeProviderRegistry,
   defaultRealtimeProvider: realtimeProvider,
 })
-const start = () => {
+const start = ({ host = config.host, port = config.port } = {}) => {
   if (server.listening) return server
-  server.listen(config.port, config.host, () => {
+  server.listen(port, host, () => {
     const address = server.address()
-    const port = address && typeof address === 'object' ? address.port : config.port
-    const origin = `http://${config.host}:${port}`
+    const boundPort = address && typeof address === 'object' ? address.port : port
+    const origin = `http://${host}:${boundPort}`
     const readyReport = {
       type: 'qwen-audio-agent:gateway-ready',
       origin,
