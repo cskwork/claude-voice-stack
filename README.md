@@ -175,6 +175,22 @@ platform notes, see [quick start](docs/getting-started/quickstart.md),
 [voice frontends](docs/voice-frontends/speech-to-speech.md), and
 [TUI notes](docs/getting-started/tui.md).
 
+## Examples
+
+This repository includes a smart cockpit voice Agent example with vehicle
+control, navigation, music, weather, web search, flash-buy workflows, and a
+car UI:
+
+```bash
+cp examples/car/.env.example examples/car/.env.local
+npm install --prefix examples/car/server
+npm install --prefix examples/car/react-app
+npm run example:car:server   # Terminal 1: car Agent server
+npm run example:car:web      # Terminal 2: car UI
+```
+
+See [examples/car](https://github.com/QwenAudio/qwen-audio-agent/tree/main/examples/car) for details.
+
 ## Desktop App
 
 The desktop app provides a floating voice orb that stays on your desktop,

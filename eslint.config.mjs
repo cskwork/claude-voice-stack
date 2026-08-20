@@ -11,6 +11,7 @@ export default [
       '**/node_modules/**',
       '**/dist/**',
       '**/coverage/**',
+      'examples/**',
       'tui/native/**',
     ],
   },
