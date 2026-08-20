@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { chmodSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
@@ -90,4 +90,22 @@ test('orbPosition matches the placement storage contract', t => {
   store.saveUiState({ theme: 'dark' })
   store.orbPosition.save({ x: 56, y: 78, displayId: 2 })
   assert.equal(store.loadUiState().theme, 'dark')
+})
+
+test('splits ui state into its own directory when uiStateDir is given', t => {
+  const root = temporaryRoot(t)
+  const store = createSettingsStore({
+    configDir: join(root, 'shared'),
+    uiStateDir: join(root, 'runtime'),
+    env: {},
+  })
+  // 设置留在共享资产目录，窗口状态留在桌面运行时目录。
+  assert.equal(store.path, join(root, 'shared', 'config.env'))
+  assert.equal(store.uiStatePath, join(root, 'runtime', 'ui-state.json'))
+  store.save({ dashscopeApiKey: 'sk-test' })
+  store.saveUiState({ theme: 'dark' })
+  assert.ok(existsSync(join(root, 'shared', 'config.env')))
+  assert.ok(existsSync(join(root, 'runtime', 'ui-state.json')))
+  assert.equal(existsSync(join(root, 'shared', 'ui-state.json')), false)
+  assert.equal(existsSync(join(root, 'runtime', 'config.env')), false)
 })

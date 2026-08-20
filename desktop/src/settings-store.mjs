@@ -61,6 +61,10 @@ function writePrivateFile(path, content) {
  *
  * @param {object} options
  * @param {string} options.configDir Required. The instance data directory.
+ * @param {string} [options.uiStateDir=options.configDir] Directory for
+ *   ui-state.json. The desktop app shares config.env with the CLI's asset
+ *   directory while window state stays in its own runtime directory; an
+ *   embedding host keeps the default single directory.
  * @param {object} [options.env=process.env] Environment consulted for values
  *   the stored configuration leaves unset, and updated on save so an
  *   in-process restart observes what was just written.
@@ -75,10 +79,15 @@ function writePrivateFile(path, content) {
  *   orbPosition: { load: () => object|null, save: (state: object) => object },
  * }}
  */
-export function createSettingsStore({ configDir, env = process.env } = {}) {
+export function createSettingsStore({
+  configDir,
+  uiStateDir = configDir,
+  env = process.env,
+} = {}) {
   const directory = requiredConfigDirectory(configDir)
+  const uiStateDirectory = requiredConfigDirectory(uiStateDir)
   const settingsPath = resolve(directory, SETTINGS_FILE)
-  const uiStatePath = resolve(directory, UI_STATE_FILE)
+  const uiStatePath = resolve(uiStateDirectory, UI_STATE_FILE)
 
   // Reading must never create anything: the startup gate runs before a host
   // has decided to start, and answering "not configured yet" is not a reason
@@ -111,7 +120,10 @@ export function createSettingsStore({ configDir, env = process.env } = {}) {
   }
 
   const saveUiState = patch => {
-    ensureDirectory()
+    mkdirSync(uiStateDirectory, {
+      recursive: true,
+      mode: PRIVATE_DIRECTORY_MODE,
+    })
     const next = { ...loadUiState(), ...patch }
     writePrivateFile(uiStatePath, `${JSON.stringify(next, null, 2)}\n`)
     return next

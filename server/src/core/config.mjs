@@ -34,7 +34,7 @@ export function numberSetting(value, fallback, {
 export function resolveBackendWorkspace(
   protocol,
   env = process.env,
-  configDirectory = runtimeEnvironment.configDirectory,
+  configDirectory = runtimeEnvironment.dataDirectory,
 ) {
   const definition = backendDefinition(protocol)
   if (!definition?.workspaceEnvironment) {
@@ -160,6 +160,7 @@ const realtimeFrontend = resolveRealtimeFrontendConfiguration(process.env)
 export const config = {
   root,
   configDirectory: runtimeEnvironment.configDirectory,
+  dataDirectory: runtimeEnvironment.dataDirectory,
   host: process.env.HOST || '127.0.0.1',
   // PORT=0 lets an embedded host (e.g. the desktop app) fall back to a
   // random loopback port and learn it from the child process report.

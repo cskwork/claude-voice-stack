@@ -501,3 +501,54 @@ test('does not require a DashScope credential for speech-to-speech', () => {
     /不支持的 Realtime 前台/,
   )
 })
+
+test('splits assets into QWAUDIO_DATA_DIR while runtime state stays put', () => {
+  const target = fixture()
+  const runtimeDir = resolve(target.base, 'desktop-runtime')
+  const dataDir = resolve(target.homeDirectory, '.config/qwaudio')
+  const env = {
+    QWAUDIO_CONFIG_DIR: runtimeDir,
+    QWAUDIO_DATA_DIR: dataDir,
+  }
+  const result = loadRuntimeEnvironment({
+    root: target.root,
+    homeDirectory: target.homeDirectory,
+    env,
+  })
+  assert.equal(result.configDirectory, runtimeDir)
+  assert.equal(result.dataDirectory, dataDir)
+  // 资产（配置、身份、记忆、清单、workspace）落共享资产目录。
+  assert.equal(result.configPath, resolve(dataDir, 'config.env'))
+  assert.equal(result.userModelPath, resolve(dataDir, 'USER.md'))
+  assert.equal(result.frontendMemoryPath, resolve(dataDir, 'MEMORY.md'))
+  assert.equal(result.frontendNotesPath, resolve(dataDir, 'frontend-notes.json'))
+  assert.equal(result.sharedWorkspace, resolve(dataDir, 'workspace'))
+  assert.equal(result.statePath, resolve(dataDir, 'state.env'))
+  // 运行时状态留在各形态自己的目录，双实例互不干扰。
+  assert.equal(result.taskStatePath, resolve(runtimeDir, 'tasks.json'))
+  assert.equal(
+    result.openClawStateDirectory,
+    resolve(runtimeDir, 'backends/openclaw/state'),
+  )
+  assertPrivateMode(result.configPath)
+  assertPrivateMode(result.statePath)
+})
+
+test('keeps assets beside runtime state without QWAUDIO_DATA_DIR', () => {
+  const target = fixture()
+  const env = {}
+  const result = loadRuntimeEnvironment({
+    root: target.root,
+    homeDirectory: target.homeDirectory,
+    env,
+  })
+  assert.equal(result.dataDirectory, result.configDirectory)
+  assert.equal(
+    result.configPath,
+    resolve(result.configDirectory, 'config.env'),
+  )
+  assert.equal(
+    result.taskStatePath,
+    resolve(result.configDirectory, 'tasks.json'),
+  )
+})

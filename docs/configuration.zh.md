@@ -9,12 +9,19 @@
 设置 `QWAUDIO_CONFIG_DIR` 或 `XDG_CONFIG_HOME` 可以更改配置目录。开发仓库中的
 `.env.local` 和 `.env` 仍然支持，并优先于用户配置文件。
 
-桌面版与 CLI 使用相互独立的数据目录：CLI 使用 `~/.config/qwaudio`，桌面版使用
-系统标准应用数据目录（macOS 为 `~/Library/Application Support/Qwen Audio Agent`，
-Linux 为 `~/.config/Qwen Audio Agent`，Windows 为 `%APPDATA%\Qwen Audio Agent`）。
-两者的 Gateway、锁、日志与设置互不干扰，可以同时运行。桌面版首次启动时会从 CLI
-目录复制 `config.env` 等用户配置（CLI 保留原件）；`gateway.lock` 等运行时状态各自
-重建。显式设置 `QWAUDIO_CONFIG_DIR` 时桌面版也遵循该覆盖。
+桌面版与 CLI 共享同一个资产层、各自保留运行时状态（参照 Qoder IDE 与 qodercli
+的目录分层）。共享的资产——`config.env`、本地身份（`state.env`）、记忆文档
+（`USER.md`、`MEMORY.md`、`ASSISTANT.md`）、前台清单以及 Agent 共享 `workspace/`——
+统一放在 CLI 的用户数据目录（`~/.config/qwaudio`，可用 `QWAUDIO_DATA_DIR` 覆盖），
+两种形态是同一个助手：一份记忆、一份配置。运行时状态——`gateway.lock`、
+`tasks.json`、ACP 会话状态、日志与桌面皮肤——留在各自目录：CLI 为
+`~/.config/qwaudio`，桌面版为系统标准应用数据目录（macOS 为
+`~/Library/Application Support/Qwen Audio Agent`，Linux 为
+`~/.config/Qwen Audio Agent`，Windows 为 `%APPDATA%\Qwen Audio Agent`）。因此两者
+可以同时运行、互不干扰（实际上很少需要）。从旧版本升级的桌面安装会把桌面目录中
+较新的资产一次性回填到共享层（被替换的共享文件保留为 `<名称>.pre-merge.bak`；
+共享层已有的 `state.env` 身份永不覆盖）。显式设置 `QWAUDIO_CONFIG_DIR` 时桌面版
+遵循该覆盖，资产与运行时状态落在同一目录，为 Profile 场景保留完全隔离。
 
 配置优先级固定为：
 

@@ -2,6 +2,7 @@ import {
   mkdirSync,
   readFileSync,
   renameSync,
+  statSync,
   writeFileSync,
 } from 'node:fs'
 import { createHash } from 'node:crypto'
@@ -94,10 +95,47 @@ export class FrontendNotesStore {
     this.ownerAccess = new Map()
     this.warning = null
     this.persistenceDisabled = false
+    this.loadedMtimeMs = 0
+    this.loadedContentHash = ''
     if (filePath) this.load()
   }
 
+  fileMtimeMs() {
+    try {
+      return statSync(this.filePath).mtimeMs
+    } catch (error) {
+      if (error.code === 'ENOENT') return 0
+      throw error
+    }
+  }
+
+  // 桌面版与 CLI 共享同一份清单文件，两个 Gateway 极少同时运行，但一旦
+  // 并发，各自的内存缓存会把对方的写入整份冲掉。读写入口先对比磁盘
+  // mtime，被其它实例更新过就重载，把覆盖窗口缩到单次读改写之内。
+  // mtime 相等不代表内容相等：部分文件系统（NTFS）与快速连续写入可能
+  // 落在同一时间刻度，所以 mtime 命中时再以内容哈希兜底确认。
+  refreshIfChanged() {
+    if (!this.filePath || this.persistenceDisabled) return
+    const mtimeMs = this.fileMtimeMs()
+    if (mtimeMs === this.loadedMtimeMs && this.fileContentHash() === this.loadedContentHash) return
+    this.users = new Map()
+    this.ownerAccess = new Map()
+    this.load()
+  }
+
+  fileContentHash() {
+    try {
+      return createHash('sha1').update(readFileSync(this.filePath)).digest('hex')
+    } catch {
+      // 读不到的文件（不存在、是目录等）视为空内容；真正的读取错误由
+      // load()/persist() 的既有错误路径处理。
+      return ''
+    }
+  }
+
   load() {
+    this.loadedMtimeMs = this.fileMtimeMs()
+    this.loadedContentHash = this.fileContentHash()
     let parsed
     try {
       parsed = JSON.parse(readFileSync(this.filePath, 'utf8'))
@@ -246,6 +284,8 @@ export class FrontendNotesStore {
         mode: 0o600,
       })
       renameSync(temporary, this.filePath)
+      this.loadedMtimeMs = this.fileMtimeMs()
+      this.loadedContentHash = this.fileContentHash()
       return true
     } catch (error) {
       this.disablePersistence(`无法保存前台清单文件：${error.message}`)
@@ -254,6 +294,7 @@ export class FrontendNotesStore {
   }
 
   lists(ownerId) {
+    this.refreshIfChanged()
     this.pruneOwners()
     const safeOwnerId = String(ownerId)
     this.touch(safeOwnerId)
@@ -263,6 +304,7 @@ export class FrontendNotesStore {
   }
 
   show(ownerId, name) {
+    this.refreshIfChanged()
     this.touch(String(ownerId))
     const resolution = resolveList(this.users.get(String(ownerId)) || new Map(), name)
     if (!resolution.found || !name) {
@@ -278,6 +320,7 @@ export class FrontendNotesStore {
   }
 
   add(ownerId, { list, items = [] } = {}) {
+    this.refreshIfChanged()
     this.pruneOwners()
     const safeOwnerId = String(ownerId)
     const safeName = clean(list, MAX_LIST_NAME_CHARS)
@@ -349,6 +392,7 @@ export class FrontendNotesStore {
   }
 
   remove(ownerId, { list, items = [] } = {}) {
+    this.refreshIfChanged()
     this.pruneOwners()
     const safeOwnerId = String(ownerId)
     const safeItems = items
@@ -407,6 +451,7 @@ export class FrontendNotesStore {
   }
 
   clear(ownerId, list) {
+    this.refreshIfChanged()
     this.pruneOwners()
     const safeOwnerId = String(ownerId)
     const lists = this.users.get(safeOwnerId) || new Map()
@@ -433,6 +478,7 @@ export class FrontendNotesStore {
   }
 
   drop(ownerId, list) {
+    this.refreshIfChanged()
     this.pruneOwners()
     const safeOwnerId = String(ownerId)
     const lists = this.users.get(safeOwnerId) || new Map()
