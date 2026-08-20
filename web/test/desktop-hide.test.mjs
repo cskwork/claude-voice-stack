@@ -91,6 +91,7 @@ test('waits for tasks, permission prompts, transcripts, and voice playback', () 
   assert.equal(desktopWorkSettled({ messages: [{ live: true }] }), false)
   assert.equal(desktopWorkSettled({ voiceState: 'speaking' }), false)
   assert.equal(desktopWorkSettled({ voiceState: 'listening' }), false)
+  assert.equal(desktopWorkSettled({ voiceState: 'processing' }), false)
 })
 
 test('only hides a healthy active desktop', () => {

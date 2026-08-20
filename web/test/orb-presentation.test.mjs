@@ -12,7 +12,7 @@ test('keeps speaking animation active while microphone input is muted', () => {
   }), 'desktop-orb-stage speaking input-muted')
 })
 
-test('exposes listening level, error, and dragging states to the desktop orb', () => {
+test('exposes semantic listening, error, and dragging states to the desktop orb', () => {
   assert.equal(desktopOrbClassName({
     state: 'listening',
     enabled: true,
@@ -35,6 +35,7 @@ test('arbitrates visual states by layered priority', () => {
   // 满载输入：每一层压过下一层。
   const everything = {
     lifecycle: 'hidden',
+    runtimeState: 'starting',
     connectionError: true,
     connecting: true,
     ownershipBusy: true,
@@ -49,13 +50,22 @@ test('arbitrates visual states by layered priority', () => {
   )
   assert.equal(
     resolveOrbVisualState({ ...everything, lifecycle: 'active' }),
+    'starting',
+  )
+  assert.equal(
+    resolveOrbVisualState({
+      ...everything,
+      lifecycle: 'active',
+      runtimeState: 'failed',
+    }),
     'error',
   )
   // 对话态优先于所有后台态。
-  for (const voiceState of ['listening', 'thinking', 'speaking']) {
+  for (const voiceState of ['listening', 'processing', 'speaking']) {
     assert.equal(resolveOrbVisualState({
       ...everything,
       lifecycle: 'active',
+      runtimeState: 'ready',
       connectionError: false,
       voiceState,
     }), voiceState)
@@ -63,6 +73,7 @@ test('arbitrates visual states by layered priority', () => {
   // 后台态优先级：attention > working > occupied > connecting > idle。
   const background = {
     lifecycle: 'active',
+    runtimeState: 'ready',
     connectionError: false,
     connecting: true,
     ownershipBusy: true,
@@ -93,7 +104,7 @@ test('arbitrates visual states by layered priority', () => {
     ownershipBusy: false,
     connecting: false,
   }), 'idle')
-  // 无入参与未知语音态透传。
+  // 无入参时待机；未知 Provider 状态不能泄漏给皮肤。
   assert.equal(resolveOrbVisualState(), 'idle')
-  assert.equal(resolveOrbVisualState({ voiceState: 'custom' }), 'custom')
+  assert.equal(resolveOrbVisualState({ voiceState: 'custom' }), 'idle')
 })

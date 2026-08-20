@@ -1032,7 +1032,7 @@ export function attachRealtimeGateway(server, {
           expectResponseFor(stoppedTurn)
           send(ws, {
             type: 'voice.state',
-            state: 'thinking',
+            state: 'processing',
             turnId: stoppedTurn.turnId,
             origin: 'model',
           })
@@ -1044,7 +1044,7 @@ export function attachRealtimeGateway(server, {
         if (!inputTurns.isInvalid(event.item_id)) {
           send(ws, {
             type: 'voice.state',
-            state: 'thinking',
+            state: 'processing',
             turnId: committedInputTurn.turnId,
             origin: 'model',
           })
@@ -1793,7 +1793,7 @@ export function attachRealtimeGateway(server, {
       send(ws, { type: GatewayServerEvent.TURN_STARTED, turnId: inputTurnId })
       send(ws, {
         type: GatewayServerEvent.VOICE_STATE,
-        state: 'thinking',
+        state: 'processing',
         turnId: inputTurnId,
         origin: 'model',
       })
