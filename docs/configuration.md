@@ -10,14 +10,21 @@ Setting `QWAUDIO_CONFIG_DIR` or `XDG_CONFIG_HOME` can change the configuration d
 `.env.local` and `.env` files in the development repository are still supported and take priority
 over the user configuration file.
 
-The desktop edition and CLI use mutually independent data directories: the CLI uses
-`~/.config/qwaudio`, while the desktop edition uses the system standard application data directory
-(`~/Library/Application Support/Qwen Audio Agent` on macOS, `~/.config/Qwen Audio Agent` on Linux,
-and `%APPDATA%\Qwen Audio Agent` on Windows). Their Gateways, locks, logs, and settings do not
-interfere with each other and can run simultaneously. On first launch, the desktop edition copies
-user configuration files such as `config.env` from the CLI directory (the CLI retains the
-originals); runtime states such as `gateway.lock` are rebuilt independently. When
-`QWAUDIO_CONFIG_DIR` is explicitly set, the desktop edition also respects this override.
+The desktop edition and CLI share one asset layer and keep their runtime state apart, mirroring how
+Qoder's IDE and CLI coexist. The shared assets — `config.env`, the local identity (`state.env`),
+memory documents (`USER.md`, `MEMORY.md`, `ASSISTANT.md`), frontend notes, and the shared agent
+`workspace/` — live in the CLI's user data directory (`~/.config/qwaudio`, overridable via
+`QWAUDIO_DATA_DIR`), so both editions act as the same assistant with one memory and one
+configuration. Runtime state — `gateway.lock`, `tasks.json`, ACP session state, logs, and desktop
+skins — stays in each edition's own directory: `~/.config/qwaudio` for the CLI and the system
+application data directory for the desktop edition (`~/Library/Application Support/Qwen Audio
+Agent` on macOS, `~/.config/Qwen Audio Agent` on Linux, `%APPDATA%\Qwen Audio Agent` on Windows).
+Both editions can therefore run simultaneously without interfering, though this is rarely needed
+in practice. Desktop installations upgrading from older versions backfill any assets that are
+newer in the desktop directory into the shared layer once (the replaced shared file is kept as
+`<name>.pre-merge.bak`; an existing shared `state.env` identity is never overwritten). When
+`QWAUDIO_CONFIG_DIR` is explicitly set, the desktop edition respects it and keeps assets and
+runtime state together in that directory, preserving full isolation for profile scenarios.
 
 The configuration priority is fixed as:
 

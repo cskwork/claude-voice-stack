@@ -145,3 +145,21 @@ test('rolls back additions when persistence is unavailable', t => {
   assert.deepEqual(store.lists('owner-a'), [])
   assert.equal(store.health().persistenceEnabled, false)
 })
+
+test('reloads from disk when another instance updated the shared file', t => {
+  const root = mkdtempSync(join(tmpdir(), 'frontend-notes-shared-'))
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  const filePath = join(root, 'frontend-notes.json')
+  // 桌面版与 CLI 双开时是两个进程各持一个 store 实例读写同一文件。
+  const cli = new FrontendNotesStore({ filePath })
+  const desktop = new FrontendNotesStore({ filePath })
+  cli.add('owner-a', { list: '购物清单', items: ['牛奶'] })
+  // 另一实例写入后，本实例的下一次读写要先看到磁盘上的最新内容，
+  // 而不是用自己的旧缓存整份覆盖回去。
+  desktop.add('owner-a', { list: '购物清单', items: ['面包'] })
+  const merged = cli.show('owner-a', '购物清单')
+  assert.deepEqual(merged.items.map(item => item.text), ['牛奶', '面包'])
+  cli.add('owner-a', { list: '购物清单', items: ['鸡蛋'] })
+  const final = desktop.show('owner-a', '购物清单')
+  assert.deepEqual(final.items.map(item => item.text), ['牛奶', '面包', '鸡蛋'])
+})

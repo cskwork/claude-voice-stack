@@ -95,7 +95,7 @@ import {
   expandProcessPath,
 } from './process-path.mjs'
 import {
-  migrateLegacyConfig,
+  backfillSharedAssets,
   resolveDesktopConfigDirectory,
 } from './config-migration.mjs'
 import {
@@ -109,9 +109,10 @@ import { DesktopPresence } from './desktop-presence.mjs'
 // 检测能找到通过 Homebrew、nvm 或官方脚本安装的 Agent 命令。
 expandProcessPath()
 
-// 桌面版与 CLI（~/.config/qwaudio）使用相互独立的数据目录：桌面版默认走
-// Electron 应用数据目录，两者的 Gateway、锁、日志与设置互不干扰；
-// QWAUDIO_CONFIG_DIR 仍优先（高级用户 / Profile 场景）。
+// 桌面版与 CLI 的运行时状态（Gateway、锁、日志、皮肤）互相独立：桌面版
+// 默认走 Electron 应用数据目录；QWAUDIO_CONFIG_DIR 仍优先（高级用户 /
+// Profile 场景）。资产层（配置、身份、记忆、清单、workspace）则共享 CLI
+// 的用户数据目录（QWAUDIO_DATA_DIR），两种形态是同一个助手。
 // 统一应用名，让开发模式与打包版共用同一个 userData 目录（打包版
 // 的 productName 与单实例锁都基于它；开发模式默认会落到包名目录）。
 app.setName('Qwen Audio Agent')
@@ -120,9 +121,15 @@ process.env.QWAUDIO_CONFIG_DIR = resolveDesktopConfigDirectory({
   env: process.env,
   userDataDirectory: app.getPath('userData'),
 })
-const configMigration = migrateLegacyConfig({
-  legacyDir: legacyConfigDirectory,
-  targetDir: process.env.QWAUDIO_CONFIG_DIR,
+if (!process.env.QWAUDIO_DATA_DIR) {
+  // legacyConfigDirectory 在覆写 QWAUDIO_CONFIG_DIR 之前解析，显式配置的
+  // 目录（Profile 场景）会让资产与运行时落在同一处，保持完全隔离。
+  process.env.QWAUDIO_DATA_DIR = legacyConfigDirectory
+}
+// 旧版本桌面版持有各自演化的资产副本，切到共享资产层前先一次性回填。
+const assetBackfill = backfillSharedAssets({
+  desktopDir: process.env.QWAUDIO_CONFIG_DIR,
+  dataDir: process.env.QWAUDIO_DATA_DIR,
 })
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -131,7 +138,7 @@ const runtimeRoot = app.isPackaged
   ? resolve(process.resourcesPath, 'runtime')
   : sourceRoot
 const expectedConfigPath = resolve(
-  userConfigDirectory(process.env),
+  process.env.QWAUDIO_DATA_DIR,
   'config.env',
 )
 const configExistedAtLaunch = existsSync(expectedConfigPath)
@@ -145,10 +152,11 @@ const logger = createLogger({
   fileName: 'desktop.log',
 })
 const skinsRoot = skinsDirectory(runtimeEnvironment.configDirectory)
-// 悬浮球摆位：记住用户拖到的位置，重启后回到原位；显示器变化时夹取
-// 到仍然存在的屏幕。状态经 settings-store 存进配置目录的 ui-state.json。
+// 设置表单读写共享资产层的 config.env（与 CLI 同一份）；悬浮球摆位等
+// 窗口状态是桌面专属，经 ui-state.json 留在桌面版自己的数据目录。
 const desktopSettingsStore = createSettingsStore({
-  configDir: runtimeEnvironment.configDirectory,
+  configDir: runtimeEnvironment.dataDirectory,
+  uiStateDir: runtimeEnvironment.configDirectory,
 })
 const orbPlacement = createOrbPlacement({
   getDisplays: () => screen.getAllDisplays(),
@@ -167,10 +175,11 @@ logger.info('desktop.starting', {
   platform: process.platform,
   arch: process.arch,
 })
-if (configMigration.migrated) {
-  logger.info('desktop.config_migrated', {
-    legacyDir: configMigration.legacyDir,
-    files: configMigration.copied,
+if (assetBackfill.backfilled) {
+  logger.info('desktop.assets_backfilled', {
+    dataDir: process.env.QWAUDIO_DATA_DIR,
+    files: assetBackfill.copied,
+    skipped: assetBackfill.skipped,
   })
 }
 const fallbackPage = resolve(here, 'orb-unavailable.html')
