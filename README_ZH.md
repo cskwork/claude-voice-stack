@@ -165,6 +165,20 @@ qwenaudio tui    # 终端 2：TUI
 [语音前台](docs/voice-frontends/speech-to-speech.zh.md)与
 [TUI 注意](docs/getting-started/tui.zh.md)。
 
+## 示例
+
+仓库内提供智能座舱语音 Agent 示例，包含车控、导航、音乐、天气、联网查询、淘宝闪购和座舱 UI：
+
+```bash
+cp examples/car/.env.example examples/car/.env.local
+npm install --prefix examples/car/server
+npm install --prefix examples/car/react-app
+npm run example:car:server   # 终端 1：座舱 Agent 服务
+npm run example:car:web      # 终端 2：座舱 UI
+```
+
+详细说明见 [examples/car](examples/car/README.md)。
+
 ## 桌面版
 
 桌面版提供常驻桌面的语音悬浮球，内置 Gateway，支持空闲自动休眠、自定义唤醒
