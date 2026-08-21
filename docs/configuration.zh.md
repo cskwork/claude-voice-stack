@@ -86,7 +86,7 @@ qwenaudio install deepseek
 打开官方终端流程，后续也可扩展为网页、表单或纯说明，而不需要修改设置页的产品逻辑。
 渲染层只提交后台 ID，不能自行拼接或执行配置命令。
 
-DeepSeek Harness 当前为实验性接入。安装后运行 `dsh web`，在模型设置中配置官方
+安装 DeepSeek Harness 后运行 `dsh web`，在模型设置中配置官方
 API Key，ACP 接入会直接复用该凭据。它的模型配置独立于其他后台，避免把 Qwen 等
 模型名称误传给 DeepSeek：
 

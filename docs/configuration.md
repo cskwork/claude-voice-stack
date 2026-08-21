@@ -102,7 +102,7 @@ configuration entry and status probe. An adapter may open a terminal today and c
 a browser, form, or instructions action without changing product-specific logic in Settings.
 The renderer submits only a backend ID and can never assemble or execute configuration commands.
 
-DeepSeek Harness is currently an experimental integration. After installation,
+After installing DeepSeek Harness,
 run `dsh web` and configure the official API key in its model settings. The ACP
 integration reuses that credential. Its model setting is intentionally separate
 from other backends so Qwen or other provider model names are not forwarded to DeepSeek:
