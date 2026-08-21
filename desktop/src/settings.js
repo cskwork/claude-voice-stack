@@ -432,6 +432,7 @@ function renderBackendOptions(currentValue) {
       : t(selectedState?.statusLabel || selectedState?.reason || '')
   backendPickerStatus.title = backendPickerStatus.textContent
   backendPickerStatus.className = selectedRuntimeReady
+    || selectedState?.configurationReady
     ? 'ready'
     : selectedState?.configurationRequired ? 'attention' : ''
 
@@ -493,7 +494,7 @@ function renderBackendOptions(currentValue) {
     } else if (state.id !== 'none') {
       const status = document.createElement('span')
       status.className = `backend-status${
-        runtimeReady
+        runtimeReady || state.configurationReady
           ? ' ready'
           : state.configurationRequired ? ' attention' : (
             state.ready ? ' installed' : ''

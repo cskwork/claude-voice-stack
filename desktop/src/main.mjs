@@ -1084,35 +1084,6 @@ ipcMain.handle('qwen-audio-agent:settings-save', async (event, settings) => {
     previous.realtimeProvider !== normalized.realtimeProvider
   )
   const backendChanged = previous.agentProtocol !== normalized.agentProtocol
-  // 无权限审批机制的后台（alwaysFullPermission，如 Pi）在切换过去时必须
-  // 由用户在原生对话框中明确确认；确认发生在可信主进程，渲染层无法绕过。
-  if (backendChanged) {
-    const nextBackend = backendDefinition(normalized.agentProtocol)
-    if (nextBackend?.alwaysFullPermission) {
-      const { response } = await dialog.showMessageBox(settingsWindow, {
-        type: 'warning',
-        message: desktopText('{label} 没有权限审批机制', {
-          label: nextBackend.label,
-        }),
-        detail: desktopText(
-          '{label} 没有内置沙箱，也不会就任何操作请求确认：无论权限模式如何配置，它都始终以最高权限（full）运行，可以直接执行命令、读写文件。请确认只在可信项目与可信提示词环境中使用。',
-          { label: nextBackend.label },
-        ),
-        buttons: [
-          desktopText('我已了解，继续使用'),
-          desktopText('取消'),
-        ],
-        defaultId: 1,
-        cancelId: 1,
-        noLink: true,
-      })
-      if (response !== 0) {
-        throw new Error(desktopText('已取消切换到 {label}', {
-          label: nextBackend.label,
-        }))
-      }
-    }
-  }
   const realtimeModelChanged = previous.realtimeModel !== normalized.realtimeModel
   const realtimeVoiceChanged = (
     previous.audioRealtimeVoice !== normalized.audioRealtimeVoice

@@ -115,6 +115,7 @@ const definitions = new Map([
     onboarding: {
       command: 'qwen',
       hint: '首次使用请启动 Qwen Code，并通过 /auth 完成认证。',
+      probe: { kind: 'qwen-settings' },
     },
     supportsFullPermission: true,
     environment: {
@@ -349,6 +350,7 @@ const definitions = new Map([
     onboarding: {
       command: 'pi',
       hint: '首次使用请启动 Pi 并通过 /login 完成认证，或配置 ANTHROPIC_API_KEY 等官方模型变量。',
+      probe: { kind: 'pi-auth-check' },
     },
     // pi 没有权限审批机制，任何模式下都等效 full 权限。
     supportsFullPermission: true,
