@@ -517,6 +517,27 @@ test('Pi ACP prefers an installed adapter and pins its package fallback', {
   }
 })
 
+test('Pi ACP accepts its adapter-native Pi command without PATH discovery', {
+  skip: process.platform === 'win32',
+}, () => {
+  const target = fixture()
+  try {
+    command(resolve(target.bin, 'pi-acp'), { capturePiBin: true })
+    const result = run('scripts/pi-acp.mjs', target, {
+      PI_ACP_RUNTIME: 'auto',
+      PI_ACP_PI_COMMAND: '/opt/custom/pi',
+    }, ['--help'])
+    assert.deepEqual(result, [
+      'pi-acp',
+      '--help',
+      'PI_BIN=/opt/custom/pi',
+      'PI_ACP_PI_COMMAND=/opt/custom/pi',
+    ])
+  } finally {
+    target.close()
+  }
+})
+
 test('external ACP adapters require the user backend to be installed', {
   skip: process.platform === 'win32',
 }, () => {

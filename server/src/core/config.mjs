@@ -1,6 +1,9 @@
 import { dirname, resolve } from 'path'
 import { fileURLToPath } from 'url'
-import { loadRuntimeEnvironment } from '../../../shared/runtime-environment.mjs'
+import {
+  defaultBackendWorkspace,
+  loadRuntimeEnvironment,
+} from '../../../shared/runtime-environment.mjs'
 import {
   backendDefinition,
   backendNames,
@@ -32,7 +35,7 @@ export function numberSetting(value, fallback, {
 export function resolveBackendWorkspace(
   protocol,
   env = process.env,
-  configDirectory = runtimeEnvironment.configDirectory,
+  configDirectory = runtimeEnvironment.dataDirectory,
 ) {
   const definition = backendDefinition(protocol)
   if (!definition?.workspaceEnvironment) {
@@ -41,7 +44,7 @@ export function resolveBackendWorkspace(
   const configured = env[definition.workspaceEnvironment]
   return configured
     ? resolve(root, configured)
-    : resolve(configDirectory, `workspaces/${definition.id}`)
+    : defaultBackendWorkspace(configDirectory)
 }
 
 export function resolveAcpArgs(value) {
@@ -164,6 +167,8 @@ const realtimeFrontend = resolveRealtimeFrontendConfiguration(process.env)
 
 export const config = {
   root,
+  configDirectory: runtimeEnvironment.configDirectory,
+  dataDirectory: runtimeEnvironment.dataDirectory,
   host: process.env.HOST || '127.0.0.1',
   // PORT=0 lets an embedded host (e.g. the desktop app) fall back to a
   // random loopback port and learn it from the child process report.

@@ -288,7 +288,13 @@ test('backs off repeated health spawns after any local ACP startup failure', asy
   const first = await adapter.health()
   const second = await adapter.health()
   assert.equal(first.ok, false)
-  assert.deepEqual(second, first)
+  // retryAfterMs 随真实时钟递减，两次调用跨毫秒边界时会差 1ms；
+  // 对它断言范围，其余字段保持严格相等。
+  assert.ok(second.retryAfterMs > 0 && second.retryAfterMs <= 30_000)
+  assert.deepEqual(
+    { ...second, retryAfterMs: 0 },
+    { ...first, retryAfterMs: 0 },
+  )
   assert.equal(starts, 1)
 
   adapter.lastHealthFailure.at -= 30_001
@@ -776,7 +782,11 @@ test('uses one ACP profile family while preserving backend differences', () => {
   assert.equal(connection(pi).args[0], resolve(root, 'scripts/pi-acp.mjs'))
   assert.equal(connection(pi).cwd, '/work')
   assert.equal(connection(pi).env.PI_ACP_BIN, '/opt/pi-acp')
-  assert.equal(pi.externalMcp, true)
+  assert.equal(pi.externalMcp, false)
+  assert.equal(pi.sessionMcp, false)
+  assert.equal(pi.delegation, false)
+  assert.equal(pi.permissions, false)
+  assert.match(pi.sessionInstructions, /does not expose Gateway Session tools/)
 })
 
 test('lets the official OpenClaw bridge diagnose external Gateway failures', () => {

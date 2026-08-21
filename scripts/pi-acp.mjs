@@ -9,19 +9,16 @@ const ARGS = process.argv.slice(2)
 
 function fatal(msg) { console.error(msg); process.exit(1) }
 
-// Ensure the Pi CLI itself is available; pi-acp spawns it internally.
-// pi-acp reads PI_ACP_PI_COMMAND (not PI_BIN), so forward the resolved
-// executable there unless the user configured the adapter variable directly.
-if (!process.env.PI_BIN) {
-  if (commandAvailable('pi')) {
-    process.env.PI_BIN = findExecutable('pi')
-  } else {
-    fatal('Pi is not installed. Install Pi or set PI_BIN.')
-  }
+// pi-acp reads PI_ACP_PI_COMMAND. Respect that adapter-native override first,
+// then the qwen-audio-agent PI_BIN alias, and only then discover Pi on PATH.
+const piCommand = process.env.PI_ACP_PI_COMMAND
+  || process.env.PI_BIN
+  || (commandAvailable('pi') ? findExecutable('pi') : '')
+if (!piCommand) {
+  fatal('Pi is not installed. Install Pi or set PI_ACP_PI_COMMAND / PI_BIN.')
 }
-if (!process.env.PI_ACP_PI_COMMAND) {
-  process.env.PI_ACP_PI_COMMAND = process.env.PI_BIN
-}
+if (!process.env.PI_BIN) process.env.PI_BIN = piCommand
+if (!process.env.PI_ACP_PI_COMMAND) process.env.PI_ACP_PI_COMMAND = piCommand
 
 async function runBinary() {
   const bin = process.env.PI_ACP_BIN || 'pi-acp'

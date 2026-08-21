@@ -25,11 +25,11 @@ test('preserves explicit zero numeric settings', () => {
   assert.equal(numberSetting(0, 120, { min: 0, max: 1000 }), 0)
 })
 
-test('uses the user data directory for the default OpenCode workspace', () => {
+test('uses the shared user data workspace for the default OpenCode workspace', () => {
   const directory = resolve('/home/user/.config/qwaudio')
   assert.equal(
     resolveBackendWorkspace('opencode', {}, directory),
-    resolve(directory, 'workspaces/opencode'),
+    resolve(directory, 'workspace'),
   )
 })
 
@@ -57,40 +57,22 @@ test('uses the default ACP Session mode unless a custom OpenCode Agent is explic
   }), 'shared-agent')
 })
 
-test('uses the user data directory for the default Qoder workspace', () => {
+test('uses the shared user data workspace for the default Qoder workspace', () => {
   const directory = resolve('/home/user/.config/qwaudio')
   assert.equal(
     resolveBackendWorkspace('qoder', {}, directory),
-    resolve(directory, 'workspaces/qoder'),
+    resolve(directory, 'workspace'),
   )
 })
 
-test('uses the user data directory for additional ACP backend workspaces', () => {
+test('shares one default workspace across additional ACP backends', () => {
   const directory = resolve('/home/user/.config/qwaudio')
-  assert.equal(
-    resolveBackendWorkspace('hermes', {}, directory),
-    resolve(directory, 'workspaces/hermes'),
-  )
-  assert.equal(
-    resolveBackendWorkspace('kimi', {}, directory),
-    resolve(directory, 'workspaces/kimi'),
-  )
-  assert.equal(
-    resolveBackendWorkspace('codebuddy', {}, directory),
-    resolve(directory, 'workspaces/codebuddy'),
-  )
-  assert.equal(
-    resolveBackendWorkspace('codex', {}, directory),
-    resolve(directory, 'workspaces/codex'),
-  )
-  assert.equal(
-    resolveBackendWorkspace('qwen', {}, directory),
-    resolve(directory, 'workspaces/qwen'),
-  )
-  assert.equal(
-    resolveBackendWorkspace('pi', {}, directory),
-    resolve(directory, 'workspaces/pi'),
-  )
+  for (const backend of ['hermes', 'kimi', 'codebuddy', 'codex', 'qwen', 'pi']) {
+    assert.equal(
+      resolveBackendWorkspace(backend, {}, directory),
+      resolve(directory, 'workspace'),
+    )
+  }
 })
 
 test('maps one backend model name to each managed backend provider', () => {

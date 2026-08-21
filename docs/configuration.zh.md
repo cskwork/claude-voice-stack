@@ -9,12 +9,20 @@
 设置 `QWAUDIO_CONFIG_DIR` 或 `XDG_CONFIG_HOME` 可以更改配置目录。开发仓库中的
 `.env.local` 和 `.env` 仍然支持，并优先于用户配置文件。
 
-桌面版与 CLI 使用相互独立的数据目录：CLI 使用 `~/.config/qwaudio`，桌面版使用
-系统标准应用数据目录（macOS 为 `~/Library/Application Support/Qwen Audio Agent`，
-Linux 为 `~/.config/Qwen Audio Agent`，Windows 为 `%APPDATA%\Qwen Audio Agent`）。
-两者的 Gateway、锁、日志与设置互不干扰，可以同时运行。桌面版首次启动时会从 CLI
-目录复制 `config.env` 等用户配置（CLI 保留原件）；`gateway.lock` 等运行时状态各自
-重建。显式设置 `QWAUDIO_CONFIG_DIR` 时桌面版也遵循该覆盖。
+桌面版与 CLI 共享同一个资产层、各自保留运行时状态（参照 Qoder IDE 与 qodercli
+的目录分层）。共享的资产——`config.env`、本地身份（`state.env`）、记忆文档
+（`USER.md`、`MEMORY.md`、`ASSISTANT.md`）、前台清单以及 Agent 共享 `workspace/`——
+统一放在 CLI 的用户数据目录（`~/.config/qwaudio`，可用 `QWAUDIO_DATA_DIR` 覆盖），
+两种形态是同一个助手：一份记忆、一份配置。运行时状态——`gateway.lock`、
+`tasks.json`、ACP 会话状态、日志与桌面皮肤——留在各自目录：CLI 为
+`~/.config/qwaudio`，桌面版为系统标准应用数据目录（macOS 为
+`~/Library/Application Support/Qwen Audio Agent`，Linux 为
+`~/.config/Qwen Audio Agent`，Windows 为 `%APPDATA%\Qwen Audio Agent`）。因此两者
+可以作为两个独立的 Gateway 进程同时运行，各自拥有会话、任务和日志，同时共享用户的
+助手配置。从旧版本升级时，桌面版只补齐共享层缺失的资产（包括旧 `workspace/`）；两边
+都存在时不会自动覆盖或合并。显式设置 `QWAUDIO_CONFIG_DIR` 时桌面版遵循该覆盖，资产与
+运行时状态落在同一目录，为 Profile 场景保留完全隔离。共享记忆与清单的写入使用跨进程
+串行事务，Desktop 与 CLI 同时更新时不会静默丢失内容。
 
 配置优先级固定为：
 
@@ -478,7 +486,7 @@ PI_ACP_RUNTIME=auto
 ```
 
 - `PI_BIN` / `PI_ACP_BIN` 分别覆盖 pi 本体与 pi-acp 适配器的可执行文件路径。
-- `PI_WORKSPACE` 覆盖工作目录（默认 `~/.config/qwaudio/workspaces/pi`）。
+- `PI_WORKSPACE` 覆盖工作目录（默认 `~/.config/qwaudio/workspace`，与其他托管后台共享）。
 - `PI_ACP_RUNTIME`（`auto` / `binary` / `package`）控制适配器使用本地二进制
   还是通过 `npx` 按需启动。
 
@@ -488,6 +496,10 @@ PI_ACP_RUNTIME=auto
 > `QWEN_AUDIO_AGENT_BACKEND_PERMISSION_MODE` 如何配置，Pi 都**始终等效
 > `full` 权限**，语音会话中不会出现任何权限确认环节。只在可信项目和可信
 > 提示词环境中使用。
+
+当前社区适配器虽然接收 ACP `mcpServers`，但尚未把它们接入 Pi。因此该后台
+暂不提供 Gateway Session 工具和第三层独立任务委派；Pi 会使用自身工具在当前
+Session 内完成工作。
 
 Kimi Code、Hermes、CodeBuddy、Codex、Claude Code 和 Pi 均由 Gateway 直接管理 ACP
 子进程，不接受 `--backend-url`。

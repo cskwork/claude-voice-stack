@@ -13,6 +13,7 @@ const COMMANDS = new Set([
   'config',
   'setup',
   'install',
+  'skill',
 ])
 const GATEWAY_ACTIONS = new Set([
   'run',
@@ -25,6 +26,7 @@ const GATEWAY_ACTIONS = new Set([
 ])
 const BACKEND_PERMISSION_MODES = new Set(['native', 'full'])
 const TUI_AUDIO_MODES = new Set(['half', 'full'])
+const SKILL_ACTIONS = new Set(['install', 'list', 'remove', 'update'])
 
 export function createVoiceSessionId() {
   return `voice-${randomUUID().replaceAll('-', '')}`
@@ -72,6 +74,26 @@ export function parseArguments(argv, env = process.env) {
     && !args[0].startsWith('-')
     ? args.shift()
     : ''
+  const skillAction = command === 'skill' && args[0] && !args[0].startsWith('-')
+    ? args.shift()
+    : ''
+  if (command === 'skill' && !SKILL_ACTIONS.has(skillAction)) {
+    throw new Error(
+      `skill 需要子命令（可选：${[...SKILL_ACTIONS].join('、')}）`,
+    )
+  }
+  const skillTarget = command === 'skill'
+    && ['install', 'remove'].includes(skillAction)
+    && args[0]
+    && !args[0].startsWith('-')
+    ? args.shift()
+    : ''
+  if (command === 'skill' && skillAction === 'install' && !skillTarget) {
+    throw new Error('skill install 需要技能来源（本地目录或 git URL）')
+  }
+  if (command === 'skill' && skillAction === 'remove' && !skillTarget) {
+    throw new Error('skill remove 需要技能名称')
+  }
 
   const options = {
     command,
@@ -93,6 +115,10 @@ export function parseArguments(argv, env = process.env) {
     backendUrl: '',
     backendUrlSpecified: false,
     installTarget: '',
+    skillAction,
+    skillTarget,
+    skillNames: [],
+    skillList: false,
     openBrowser: true,
     takeover: false,
     json: false,
@@ -135,6 +161,9 @@ export function parseArguments(argv, env = process.env) {
       options.audioMode = nextValue(args, index++, '--audio-mode').toLowerCase()
       audioModeSpecified = true
     } else if (argument === '--no-open') options.openBrowser = false
+    else if (argument === '--skill') {
+      options.skillNames.push(nextValue(args, index++, '--skill'))
+    } else if (argument === '--list') options.skillList = true
     else if (argument === '--takeover') options.takeover = true
     else if (argument === '--json') options.json = true
     else if (argument === '--yes' || argument === '-y') options.yes = true
@@ -167,10 +196,20 @@ export function parseArguments(argv, env = process.env) {
     )
   }
   if (options.installTarget === 'acp') {
-    throw new Error('通用 ACP 后台请自行安装，并通过 ACP_COMMAND 配置')
+    throw new Error('通用 ACP 接入的 Agent 请自行安装，并通过 ACP_COMMAND 配置')
   }
   if (command !== 'install' && options.yes) {
     throw new Error('--yes 只适用于 install')
+  }
+  const skillInstall = command === 'skill' && skillAction === 'install'
+  if (options.skillNames.length && !skillInstall) {
+    throw new Error('--skill 只适用于 skill install')
+  }
+  if (options.skillList && !skillInstall) {
+    throw new Error('--list 只适用于 skill install')
+  }
+  if (options.skillList && options.skillNames.length) {
+    throw new Error('--list 与 --skill 不能同时使用')
   }
 
   const definition = options.backend
@@ -259,6 +298,11 @@ export function helpText() {
     '  qwenaudio config set --realtime-model ID  更新 Realtime 模型',
     '  qwenaudio setup [选项]       只读检查后台 Agent 接入准备情况',
     '  qwenaudio install NAME        一键安装后台 Agent（含所需 ACP 适配器）',
+    '  qwenaudio skill install SRC --skill NAME  安装技能到所有后台（经 skills.sh）',
+    '  qwenaudio skill install SRC --list         列出来源中可安装的技能',
+    '  qwenaudio skill list          查看已安装技能',
+    '  qwenaudio skill remove NAME   移除技能',
+    '  qwenaudio skill update        更新已安装技能',
     '',
     'Gateway 选项：',
     '  --url URL              Gateway 地址（默认 http://127.0.0.1:3101）',
@@ -274,6 +318,11 @@ export function helpText() {
     'Install 选项：',
     `  NAME                   可选：${backendNames().filter(name => name !== 'acp').join('、')}；不含通用 acp（需自行安装）`,
     '  --yes, -y              脚本类安装步骤不再逐个确认（谨慎使用）',
+    '',
+    'Skill 选项（底层由 skills.sh 完成，自动覆盖全部后台 Agent）：',
+    '  SRC                    来源：owner/repo、git URL、GitHub tree URL 或技能页 URL',
+    '  --skill NAME           指定要安装的技能（可多次）',
+    '  --list                 只列出来源内可安装的技能，不安装',
     '',
     '界面选项：',
     '  --session ID           复用指定语音会话',

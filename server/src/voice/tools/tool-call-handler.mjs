@@ -698,7 +698,8 @@ export class ToolCallHandler {
         callId,
         failure(
           'permission_not_pending',
-          '这项权限请求已经失效或不属于当前任务。',
+          '这项权限请求已经处理过或不属于当前任务；若用户刚在界面上确认过，'
+          + '无需重复回应，直接继续即可。',
           { retryable: false },
         ),
         turnId,

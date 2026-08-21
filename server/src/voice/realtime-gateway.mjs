@@ -13,8 +13,8 @@ import { InputAssetRegistry } from './input-asset-registry.mjs'
 import { normalizeClientContext } from '../conversation/frontend-agent-context.mjs'
 import {
   createRealtimeFrontend,
+  defaultRealtimeProviderRegistry,
   realtimeEventErrorMessage,
-  resolveRealtimeProvider,
 } from './realtime-provider.mjs'
 import { isAllowedOrigin } from '../core/request-security.mjs'
 import { taskManager } from '../task/task-manager.mjs'
@@ -122,10 +122,24 @@ export function attachRealtimeGateway(server, {
   respondPermission,
   permissionPolicy,
   inputAssets = new InputAssetRegistry(),
+  inputArbitration = null,
+  realtimeProviderRegistry = defaultRealtimeProviderRegistry,
+  defaultRealtimeProvider = config.audioProvider,
 }) {
   const wss = new WebSocketServer({ noServer: true, maxPayload: 20 * 1024 * 1024 })
   const activeVoiceClients = new ActiveVoiceClients()
   const voiceConnections = new Map()
+
+  // A suspension is global, not per owner: the host is taking the machine's
+  // microphone, so every connected client has to let go of it. The subscription
+  // lives as long as this WebSocket server.
+  inputArbitration?.subscribe(status => {
+    for (const clients of voiceConnections.values()) {
+      for (const client of clients) {
+        client.applyInputSuspension?.(status)
+      }
+    }
+  })
 
   const broadcastVoiceOwnership = ownerId => {
     const active = activeVoiceClients.active(ownerId)
@@ -178,11 +192,15 @@ export function attachRealtimeGateway(server, {
     let userSpeaking = false
     let inputEnabled = false
     let outputEnabled = false
+    // Set only by host arbitration. Unlike inputEnabled (which the client
+    // declares about itself) this means the client has been ordered to stop
+    // capturing, so nothing here may re-enable audio on its own.
+    let inputSuspended = inputArbitration?.suspended === true
     let nonVoiceClient = false
     let pendingInputParts = []
     // Realtime front end for this session. Defaults to the configured provider
     // and can be switched by the client through the connect event.
-    let sessionProvider = config.audioProvider
+    let sessionProvider = defaultRealtimeProvider
     let descriptor = clientDescriptor()
     let responseTurnCandidate = null
     let responseStartWatchdog = null
@@ -294,6 +312,30 @@ export function attachRealtimeGateway(server, {
     const voiceClient = {
       ws,
       descriptor,
+      // Commands this client to release or reclaim the microphone. Playback
+      // stops together with capture: a host that is recording must not pick up
+      // this Gateway's own speech.
+      applyInputSuspension: status => {
+        const suspend = status.suspended === true
+        if (suspend === inputSuspended) return
+        inputSuspended = suspend
+        if (suspend) {
+          // Buffered audio predates the suspension and is no longer wanted.
+          pendingAudio = []
+          sleepController?.disable()
+          frontend?.cancel()
+          send(ws, { type: GatewayServerEvent.PLAYBACK_CLEAR, reason: 'input_suspended' })
+          send(ws, {
+            type: GatewayServerEvent.INPUT_SUSPEND,
+            owner: status.owner,
+            reason: status.reason,
+            expiresAt: status.expiresAt,
+          })
+          return
+        }
+        send(ws, { type: GatewayServerEvent.INPUT_RESUME })
+        prepareSleepMode()
+      },
       realtimeStatus: () => realtimeConnectionStatus({
         provider: sessionProvider,
         blockedError: realtimeBlockedError,
@@ -844,6 +886,16 @@ export function attachRealtimeGateway(server, {
       if (event.type === 'task.permission.resolved') {
         const authorizationId = event.permission?.id
         if (authorizationId) {
+          // 已进入对话的权限询问被其它通道（如 WebUI 按钮）处理后，把结果
+          // 静默回注模型上下文：避免模型不知情而重复追问，或把用户随后的
+          // 口头确认误报为“请求已失效”。
+          if (announcedPermissions.has(authorizationId) && frontend?.ready) {
+            frontend.appendUserInputContext([{
+              type: 'text',
+              text: '（系统提示：刚才的后台权限请求已处理完毕，任务继续执行；'
+                + '无需再询问或回应该请求。）',
+            }]).catch(() => {})
+          }
           announcedPermissions.delete(authorizationId)
           frontend?.cancelResponses((context, origin) => (
             origin === 'permission'
@@ -982,7 +1034,7 @@ export function attachRealtimeGateway(server, {
           expectResponseFor(stoppedTurn)
           send(ws, {
             type: 'voice.state',
-            state: 'thinking',
+            state: 'processing',
             turnId: stoppedTurn.turnId,
             origin: 'model',
           })
@@ -994,7 +1046,7 @@ export function attachRealtimeGateway(server, {
         if (!inputTurns.isInvalid(event.item_id)) {
           send(ws, {
             type: 'voice.state',
-            state: 'thinking',
+            state: 'processing',
             turnId: committedInputTurn.turnId,
             origin: 'model',
           })
@@ -1401,6 +1453,7 @@ export function attachRealtimeGateway(server, {
       let createdFrontend
       createdFrontend = createRealtimeFrontend({
         providerName: sessionProvider,
+        providerRegistry: realtimeProviderRegistry,
         agentContext: {
           client: clientContext,
           memories: memoryService?.list(ownerId, { limit: 64 }) || [],
@@ -1587,6 +1640,9 @@ export function attachRealtimeGateway(server, {
       if (
         !config.wakeWordEnabled
         || nonVoiceClient
+        // A suspended client is not capturing, so there is nothing for the wake
+        // word to listen to and nothing that may wake this session.
+        || inputSuspended
         || wakeDetectorPromise
       ) return
       if (wakeDetector) {
@@ -1649,7 +1705,7 @@ export function attachRealtimeGateway(server, {
     const attemptWakeConnect = attempt => {
       ensureFrontend().catch(error => {
         const provider =
-          frontend?.provider ?? resolveRealtimeProvider(sessionProvider)
+          frontend?.provider ?? realtimeProviderRegistry.resolve(sessionProvider)
         const classification =
           provider.classifyError?.(error.message) ?? 'other'
         if (
@@ -1740,7 +1796,7 @@ export function attachRealtimeGateway(server, {
       send(ws, { type: GatewayServerEvent.TURN_STARTED, turnId: inputTurnId })
       send(ws, {
         type: GatewayServerEvent.VOICE_STATE,
-        state: 'thinking',
+        state: 'processing',
         turnId: inputTurnId,
         origin: 'model',
       })
@@ -1774,7 +1830,8 @@ export function attachRealtimeGateway(server, {
 
     const acceptSleepingAudio = audio => {
       try {
-        const sampleRate = resolveRealtimeProvider(sessionProvider).inputSampleRate
+        const sampleRate = realtimeProviderRegistry.resolve(sessionProvider)
+          .inputSampleRate
         if (wakeDetector?.accept(audio, sampleRate)) wakeFromSleep()
       } catch (error) {
         sleeping = false
@@ -1807,6 +1864,17 @@ export function attachRealtimeGateway(server, {
     })
 
     send(ws, { type: GatewayServerEvent.VOICE_STATE, state: 'idle' })
+    // A client connecting mid-suspension has to learn about it before it opens
+    // a microphone.
+    if (inputSuspended) {
+      const status = inputArbitration.status()
+      send(ws, {
+        type: GatewayServerEvent.INPUT_SUSPEND,
+        owner: status.owner,
+        reason: status.reason,
+        expiresAt: status.expiresAt,
+      })
+    }
     ws.on('message', raw => {
       let event
       try {
@@ -1831,7 +1899,7 @@ export function attachRealtimeGateway(server, {
         // not look like a working session on the wrong provider.
         if (event.provider && event.provider !== sessionProvider) {
           try {
-            const requested = resolveRealtimeProvider(event.provider)
+            const requested = realtimeProviderRegistry.resolve(event.provider)
             sessionProvider = requested.key
             realtimeBlockedError = ''
             const staleFrontend = frontend
@@ -1948,7 +2016,13 @@ export function attachRealtimeGateway(server, {
           if (wakeDetector) acceptSleepingAudio(event.audio)
           return
         }
-        if (!inputEnabled || !activeVoiceClients.isActive(ownerId, voiceClient)) {
+        if (
+          !inputEnabled
+          // Defence in depth: a client that has not yet acted on the suspension
+          // must not be able to feed audio through it.
+          || inputSuspended
+          || !activeVoiceClients.isActive(ownerId, voiceClient)
+        ) {
           return
         }
         if (frontend?.ready) frontend.appendAudio(event.audio)
@@ -2040,6 +2114,11 @@ export function attachRealtimeGateway(server, {
         explicitSleepRequested = false
         if (sleeping) wakeFromSleep()
         else sleepController.recordActivity()
+      } else if (event.type === GatewayClientEvent.INPUT_SUSPEND_ACK) {
+        connectionLogger.debug('input.suspend_acknowledged', {
+          clientType: descriptor.type,
+          owner: String(event.owner || '') || null,
+        })
       }
     })
 

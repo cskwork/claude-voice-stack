@@ -2,8 +2,10 @@ import { dirname, resolve } from 'node:path'
 import { once } from 'node:events'
 import { fileURLToPath } from 'node:url'
 import { loadRuntimeEnvironment } from '../../shared/runtime-environment.mjs'
+import { ensureBackendSkills } from '../../shared/skill-library.mjs'
 import { createLogger } from '../../shared/logger.mjs'
 import { acquireGatewayLease } from '../../shared/gateway-instance-lock.mjs'
+import { assertGatewaySetup } from '../../shared/gateway-setup.mjs'
 import { startManagedBackend } from './process/managed-backend.mjs'
 
 const sourceRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
@@ -42,6 +44,10 @@ function stopAndExit(signal) {
 }
 
 try {
+  // Setup gate: refuse an unconfigured start before touching the lease. A
+  // Gateway that listens but cannot connect its voice is harder to diagnose
+  // than a refusal the user can act on.
+  assertGatewaySetup()
   gatewayLease = acquireGatewayLease(runtimeEnvironment.configDirectory, {
     owner: process.env.QWEN_AUDIO_GATEWAY_OWNER
       || (process.env.QWEN_AUDIO_AGENT_DESKTOP === '1' ? 'desktop' : 'cli'),
@@ -53,6 +59,33 @@ try {
     owner: process.env.QWEN_AUDIO_GATEWAY_OWNER
       || (process.env.QWEN_AUDIO_AGENT_DESKTOP === '1' ? 'desktop' : 'cli'),
   })
+  // 旧版本按后台隔离的 workspace 目录不再作为默认工作区；只提示不迁移。
+  for (const notice of runtimeEnvironment.legacyWorkspaceNotices || []) {
+    logger.warn('workspace.legacy_directory', {
+      backend: notice.backend,
+      legacyDirectory: notice.legacyDirectory,
+      sharedWorkspace: notice.sharedWorkspace,
+      hint: '各后台已改为共享同一工作区；如需旧文件请手动移动到共享目录',
+    })
+  }
+  // 切换/新装后台后把已装技能补齐。日常是毫秒级本地 diff；仅确实
+  // 缺失时同步跑一次 skills.sh，保证后台首次扫描前技能已就位。
+  try {
+    const backfill = ensureBackendSkills({ protocol: process.env.AGENT_PROTOCOL })
+    if (backfill.refreshed) {
+      logger.info('skills.backfilled', {
+        backend: process.env.AGENT_PROTOCOL,
+        installer: backfill.installer,
+        installed: backfill.installed,
+      })
+    }
+    for (const failure of backfill.failures || []) {
+      logger.warn('skills.backfill_failed', failure)
+    }
+  } catch (error) {
+    // 离线等失败不阻塞语音网关启动；技能可下次启动再补。
+    logger.warn('skills.backfill_failed', { error })
+  }
   backendRuntime = await startManagedBackend({ root, logger })
   const managedBackend = backendRuntime.child
   const onManagedBackendExit = (code, signal) => {

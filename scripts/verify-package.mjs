@@ -142,11 +142,27 @@ if (isMain) {
   if (missing.length) {
     throw new Error(`npm 成品缺少必要文件：${missing.join(', ')}`)
   }
+  // desktop/src 默认不发布；下列纯 Node 模块随包交付给嵌入宿主
+  // （对应 package.json exports 的 ./settings、./skin-store、./orb/*）。
+  const publishedDesktopModules = new Set([
+    'desktop/src/settings-store.mjs',
+    'desktop/src/settings-config.mjs',
+    'desktop/src/i18n.mjs',
+    'desktop/src/skin-store.mjs',
+    'desktop/src/orb-shell.mjs',
+    'desktop/src/orb-window.mjs',
+    'desktop/src/orb-placement.mjs',
+    'desktop/src/orb-url.mjs',
+    'desktop/src/security.mjs',
+    'desktop/src/preload.cjs',
+    'desktop/src/desktop-presence.mjs',
+    'desktop/src/desktop-surface-layout.mjs',
+  ])
   const forbidden = [...files].filter(file => (
     file.includes('/__pycache__/')
     || file.endsWith('.pyc')
     || file.includes('/node_modules/')
-    || file.startsWith('desktop/src/')
+    || (file.startsWith('desktop/src/') && !publishedDesktopModules.has(file))
   ))
   if (forbidden.length) {
     throw new Error(`npm 成品包含不应发布的文件：${forbidden.join(', ')}`)

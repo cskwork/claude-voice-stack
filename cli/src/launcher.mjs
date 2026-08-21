@@ -4,13 +4,23 @@ import readline from 'node:readline'
 import { loadRuntimeEnvironment } from '../../shared/runtime-environment.mjs'
 import {
   backendDefinition,
+  backendNames,
+  normalizeBackendProtocol,
   resolveBackendOwnership,
 } from '../../shared/backend-catalog.mjs'
 import {
+  findExecutable,
   formatBackendSetup,
   inspectBackendSetups,
 } from '../../shared/backend-setup.mjs'
 import { installBackend } from '../../shared/backend-install.mjs'
+import {
+  addSkills,
+  listSkills,
+  presentInstallerAgents,
+  removeSkill,
+  updateSkills,
+} from '../../shared/skill-library.mjs'
 import { helpText, parseArguments } from './arguments.mjs'
 import {
   ensureRuntime,
@@ -143,6 +153,21 @@ export async function main(argv, {
     env,
     ...installerOptions,
   }),
+  skillTools = {
+    addSkills,
+    listSkills,
+    removeSkill,
+    updateSkills,
+    // 安装目标：本机实际存在的后台（CLI 可执行即算）∪ 当前配置后台；
+    // 不为从未使用的后台预建目录，新后台由网关启动补装自动补齐。
+    presentAgents: () => presentInstallerAgents({
+      readyBackends: backendNames().filter(id => {
+        const command = backendDefinition(id)?.setup?.command
+        return Boolean(command && findExecutable(command, { env }))
+      }),
+      currentProtocol: normalizeBackendProtocol(env.AGENT_PROTOCOL),
+    }),
+  },
   runMinimalTui = runMinimal,
   prepareRuntime = options => ensureRuntime(options, { root, env }),
   inspectGateway = url => readGatewayHealth(url),
@@ -196,6 +221,35 @@ export async function main(argv, {
     const selected = report.backends.find(item => item.selected)
       || (options.backendSpecified ? report.backends[0] : null)
     return selected && !selected.ready ? 1 : 0
+  }
+  if (options.command === 'skill') {
+    // qwenaudio skill 是 skills.sh 的品牌化入口：参数组装后透传，输出原样展示。
+    if (options.skillAction === 'list') {
+      stdout.write(skillTools.listSkills().stdout)
+      return 0
+    }
+    if (options.skillAction === 'update') {
+      stdout.write(skillTools.updateSkills().stdout)
+      return 0
+    }
+    if (options.skillAction === 'install') {
+      const result = skillTools.addSkills(options.skillTarget, {
+        skills: options.skillNames,
+        list: options.skillList,
+        ...(options.skillList ? {} : { agents: skillTools.presentAgents() }),
+      })
+      stdout.write(result.stdout)
+      if (!options.skillList) {
+        // 各后台发现新技能的时机不同：部分热加载，部分仅在进程/会话启动时扫描。
+        stdout.write(
+          '技能已安装；若运行中的后台未发现新技能，'
+          + '执行 qwenaudio gateway restart 后即可生效\n',
+        )
+      }
+      return 0
+    }
+    stdout.write(skillTools.removeSkill(options.skillTarget).stdout)
+    return 0
   }
   if (options.command === 'install') {
     const label = backendDefinition(options.installTarget)?.label
@@ -252,7 +306,14 @@ export async function main(argv, {
       'start',
       'restart',
     ].includes(options.gatewayAction)
-      ? gatewayServiceEnvironment(options.url)
+      ? {
+          ...gatewayServiceEnvironment(options.url),
+          // A background service does not inherit the invoking shell. Preserve
+          // the shared profile directory explicitly, including custom profiles.
+          ...(environment.dataDirectory
+            ? { QWAUDIO_DATA_DIR: environment.dataDirectory }
+            : {}),
+        }
       : {}
     const serviceOptions = {
       configDirectory: environment.configDirectory,

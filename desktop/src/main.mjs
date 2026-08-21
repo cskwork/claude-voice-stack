@@ -17,7 +17,7 @@ import {
   readFileSync,
   writeFileSync,
 } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { parseEnv } from 'node:util'
 import {
@@ -62,6 +62,9 @@ import {
   desktopOrbBounds,
   desktopSurfaceLayout,
 } from './desktop-surface-layout.mjs'
+import { createOrbPlacement } from './orb-placement.mjs'
+import { bindOrbShell, configureOrbWindow } from './orb-shell.mjs'
+import { createSettingsStore } from './settings-store.mjs'
 import {
   withBackendLifecycle,
 } from '../../shared/backend-install.mjs'
@@ -73,8 +76,10 @@ import {
   parseSettings,
   realtimeSettingsConfigured,
   updateSettingsContent,
+  applySettingsEnvironment,
 } from './settings-config.mjs'
 import {
+  effectiveOrbSkin as resolveEffectiveOrbSkin,
   importSkin,
   listSkins,
   removeSkin,
@@ -82,7 +87,6 @@ import {
 } from './skin-store.mjs'
 import {
   BUILTIN_ORB_SKINS,
-  isBuiltinOrbSkin,
 } from '../../shared/orb-skin-catalog.mjs'
 import {
   startDesktopRendererServer,
@@ -91,7 +95,7 @@ import {
   expandProcessPath,
 } from './process-path.mjs'
 import {
-  migrateLegacyConfig,
+  backfillSharedAssets,
   resolveDesktopConfigDirectory,
 } from './config-migration.mjs'
 import {
@@ -105,9 +109,10 @@ import { DesktopPresence } from './desktop-presence.mjs'
 // 检测能找到通过 Homebrew、nvm 或官方脚本安装的 Agent 命令。
 expandProcessPath()
 
-// 桌面版与 CLI（~/.config/qwaudio）使用相互独立的数据目录：桌面版默认走
-// Electron 应用数据目录，两者的 Gateway、锁、日志与设置互不干扰；
-// QWAUDIO_CONFIG_DIR 仍优先（高级用户 / Profile 场景）。
+// 桌面版与 CLI 的运行时状态（Gateway、锁、日志、皮肤）互相独立：桌面版
+// 默认走 Electron 应用数据目录；QWAUDIO_CONFIG_DIR 仍优先（高级用户 /
+// Profile 场景）。资产层（配置、身份、记忆、清单、workspace）则共享 CLI
+// 的用户数据目录（QWAUDIO_DATA_DIR），两种形态是同一个助手。
 // 统一应用名，让开发模式与打包版共用同一个 userData 目录（打包版
 // 的 productName 与单实例锁都基于它；开发模式默认会落到包名目录）。
 app.setName('Qwen Audio Agent')
@@ -116,9 +121,15 @@ process.env.QWAUDIO_CONFIG_DIR = resolveDesktopConfigDirectory({
   env: process.env,
   userDataDirectory: app.getPath('userData'),
 })
-const configMigration = migrateLegacyConfig({
-  legacyDir: legacyConfigDirectory,
-  targetDir: process.env.QWAUDIO_CONFIG_DIR,
+if (!process.env.QWAUDIO_DATA_DIR) {
+  // legacyConfigDirectory 在覆写 QWAUDIO_CONFIG_DIR 之前解析，显式配置的
+  // 目录（Profile 场景）会让资产与运行时落在同一处，保持完全隔离。
+  process.env.QWAUDIO_DATA_DIR = legacyConfigDirectory
+}
+// 旧版本桌面版持有各自演化的资产副本，切到共享资产层前先一次性回填。
+const assetBackfill = backfillSharedAssets({
+  desktopDir: process.env.QWAUDIO_CONFIG_DIR,
+  dataDir: process.env.QWAUDIO_DATA_DIR,
 })
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -127,7 +138,7 @@ const runtimeRoot = app.isPackaged
   ? resolve(process.resourcesPath, 'runtime')
   : sourceRoot
 const expectedConfigPath = resolve(
-  userConfigDirectory(process.env),
+  process.env.QWAUDIO_DATA_DIR,
   'config.env',
 )
 const configExistedAtLaunch = existsSync(expectedConfigPath)
@@ -141,12 +152,22 @@ const logger = createLogger({
   fileName: 'desktop.log',
 })
 const skinsRoot = skinsDirectory(runtimeEnvironment.configDirectory)
+// 设置表单读写共享资产层的 config.env（与 CLI 同一份）；悬浮球摆位等
+// 窗口状态是桌面专属，经 ui-state.json 留在桌面版自己的数据目录。
+const desktopSettingsStore = createSettingsStore({
+  configDir: runtimeEnvironment.dataDirectory,
+  uiStateDir: runtimeEnvironment.configDirectory,
+})
+const orbPlacement = createOrbPlacement({
+  getDisplays: () => screen.getAllDisplays(),
+  orbSize: { width: DESKTOP_ORB_WIDTH, height: DESKTOP_ORB_HEIGHT },
+  loadState: () => desktopSettingsStore.orbPosition.load(),
+  saveState: state => desktopSettingsStore.orbPosition.save(state),
+})
 
-// 生效皮肤：内置 id 直接用；导入皮肤需皮肤包仍在，缺失回退 fluid。
+// 生效皮肤：内置 id 直接用；导入皮肤缺包时回退 fluid（skin-store 单一实现）。
 function effectiveOrbSkin(orbSkin) {
-  if (isBuiltinOrbSkin(orbSkin)) return orbSkin
-  if (existsSync(join(skinsRoot, orbSkin, 'pet.json'))) return orbSkin
-  return 'fluid'
+  return resolveEffectiveOrbSkin(orbSkin, { skinsRoot })
 }
 logger.info('desktop.starting', {
   version: app.getVersion(),
@@ -154,10 +175,11 @@ logger.info('desktop.starting', {
   platform: process.platform,
   arch: process.arch,
 })
-if (configMigration.migrated) {
-  logger.info('desktop.config_migrated', {
-    legacyDir: configMigration.legacyDir,
-    files: configMigration.copied,
+if (assetBackfill.backfilled) {
+  logger.info('desktop.assets_backfilled', {
+    dataDir: process.env.QWAUDIO_DATA_DIR,
+    files: assetBackfill.copied,
+    skipped: assetBackfill.skipped,
   })
 }
 const fallbackPage = resolve(here, 'orb-unavailable.html')
@@ -187,7 +209,6 @@ const preloadPath = resolve(here, 'preload.cjs')
 let mainWindow = null
 let settingsWindow = null
 let rendererServer = null
-let dragState = null
 let desktopTaskCount = 0
 let desktopTaskPlacement = 'below'
 let desktopOrbOffsetX = 0
@@ -522,6 +543,7 @@ function createWindow() {
   const { workArea } = screen.getPrimaryDisplay()
   const width = DESKTOP_ORB_WIDTH
   const height = DESKTOP_ORB_HEIGHT
+  const initialPosition = orbPlacement.initialPosition()
   const window = new BrowserWindow({
     width,
     height,
@@ -529,8 +551,8 @@ function createWindow() {
     minHeight: height,
     maxWidth: workArea.width,
     maxHeight: workArea.height,
-    x: workArea.x + workArea.width - width - 24,
-    y: workArea.y + 24,
+    x: initialPosition.x,
+    y: initialPosition.y,
     frame: false,
     transparent: true,
     resizable: false,
@@ -554,7 +576,8 @@ function createWindow() {
     },
   })
 
-  window.setAlwaysOnTop(true, 'floating')
+  // 悬浮层级与全屏空间可见性统一走 orb-shell 契约（与嵌入宿主同一配方）。
+  configureOrbWindow(window)
   configurePermissions(window)
 
   window.webContents.setWindowOpenHandler(({ url }) => {
@@ -568,7 +591,7 @@ function createWindow() {
   })
   window.once('ready-to-show', () => window.show())
   window.on('blur', () => {
-    dragState = null
+    orbShell.cancelDrag()
   })
   window.on('closed', () => {
     if (mainWindow === window) {
@@ -637,61 +660,20 @@ function showSettings() {
   settingsWindow = createSettingsWindow()
 }
 
-function validPoint(point) {
-  return (
-    Number.isFinite(point?.x)
-    && Number.isFinite(point?.y)
-  )
-}
-
-function validWindowPosition(x, y) {
-  return (
-    Number.isSafeInteger(x)
-    && Number.isSafeInteger(y)
-    && x >= -2_147_483_648
-    && x <= 2_147_483_647
-    && y >= -2_147_483_648
-    && y <= 2_147_483_647
-  )
-}
-
-ipcMain.on('qwen-audio-agent:drag-start', (event, point) => {
-  if (!mainWindow || event.sender !== mainWindow.webContents || !validPoint(point)) return
-  const [windowX, windowY] = mainWindow.getPosition()
-  dragState = {
-    pointerX: point.x,
-    pointerY: point.y,
-    windowX,
-    windowY,
-  }
-})
-
-ipcMain.on('qwen-audio-agent:drag-move', (event, point) => {
-  if (
-    !mainWindow
-    || event.sender !== mainWindow.webContents
-    || !dragState
-    || !validPoint(point)
-  ) return
-  const x = Math.round(dragState.windowX + point.x - dragState.pointerX)
-  const y = Math.round(dragState.windowY + point.y - dragState.pointerY)
-  if (!validWindowPosition(x, y)) {
-    logger.warn('desktop.drag_position_invalid', { x, y })
-    dragState = null
-    return
-  }
-  try {
-    mainWindow.setPosition(x, y)
-  } catch (error) {
-    logger.warn('desktop.drag_position_failed', { x, y, error })
-    dragState = null
-  }
-})
-
-ipcMain.on('qwen-audio-agent:drag-end', event => {
-  if (!mainWindow || event.sender !== mainWindow.webContents) return
-  dragState = null
-  updateDesktopTaskSurface(desktopTaskCount)
+// 悬浮球 IPC（拖拽、生命周期、打开设置、请求退出）统一走 orb-shell 契约
+// 绑定：桌面版与嵌入宿主共用同一份实现，防止两个外壳漂移。
+const orbShell = bindOrbShell({
+  ipc: ipcMain,
+  getWindow: () => mainWindow,
+  presence: desktopPresence,
+  logger,
+  onOpenSettings: () => showSettings(),
+  onQuit: () => app.quit(),
+  onDragEnd: () => {
+    const [x, y] = mainWindow.getPosition()
+    orbPlacement.recordPosition({ x, y })
+    updateDesktopTaskSurface(desktopTaskCount)
+  },
 })
 
 function updateDesktopTaskSurface(value) {
@@ -740,17 +722,6 @@ ipcMain.on('qwen-audio-agent:task-card-count', (event, value) => {
   updateDesktopTaskSurface(value)
 })
 
-ipcMain.on('qwen-audio-agent:open-settings', event => {
-  if (mainWindow && event.sender === mainWindow.webContents) showSettings()
-})
-
-ipcMain.handle('qwen-audio-agent:lifecycle-load', event => {
-  if (!mainWindow || event.sender !== mainWindow.webContents) {
-    throw new Error('无权读取桌面状态')
-  }
-  return { state: desktopPresence.state }
-})
-
 ipcMain.handle('qwen-audio-agent:wake-shortcut-pause', event => {
   if (!settingsWindow || event.sender !== settingsWindow.webContents) {
     throw new Error('无权修改显示快捷键')
@@ -764,29 +735,6 @@ ipcMain.handle('qwen-audio-agent:wake-shortcut-resume', event => {
     throw new Error('无权修改显示快捷键')
   }
   return desktopPresence.resumeShortcut()
-})
-
-ipcMain.handle('qwen-audio-agent:enter-hide', event => {
-  if (!mainWindow || event.sender !== mainWindow.webContents) {
-    throw new Error('无权修改桌面状态')
-  }
-  return { state: desktopPresence.hide('inactivity') }
-})
-
-ipcMain.on('qwen-audio-agent:wake', event => {
-  if (mainWindow && event.sender === mainWindow.webContents) {
-    desktopPresence.wake('orb')
-  }
-})
-
-ipcMain.on('qwen-audio-agent:lifecycle-ready', event => {
-  if (
-    mainWindow
-    && event.sender === mainWindow.webContents
-    && desktopPresence.state === 'waking'
-  ) {
-    desktopPresence.ready()
-  }
 })
 
 ipcMain.on('qwen-audio-agent:open-external', async (event, value) => {
@@ -1289,6 +1237,9 @@ ipcMain.handle('qwen-audio-agent:settings-save', async (event, settings) => {
   }
   setupRequired = false
   lastRuntimeError = ''
+  // 把刚保存的设置同步进本进程环境：config.env 只填充未设置的槽位，
+  // 不写回的话本进程会继续沿用首次加载的旧值（如兼容性检查用的旧 Key）。
+  applySettingsEnvironment(settings)
   process.env.QWEN_AUDIO_AGENT_URL = appOrigin
   process.env.QWEN_AUDIO_ORB_STYLE = normalized.orbStyle
   process.env.QWEN_AUDIO_ORB_SKIN = normalized.orbSkin
@@ -1344,10 +1295,6 @@ ipcMain.handle('qwen-audio-agent:skin-remove', async (event, id) => {
   const removed = removeSkin({ id, skinsRoot })
   if (removed) logger.info('skin.removed', { id: String(id) })
   return { removed }
-})
-
-ipcMain.on('qwen-audio-agent:quit', event => {
-  if (mainWindow && event.sender === mainWindow.webContents) app.quit()
 })
 
 if (!app.requestSingleInstanceLock()) {

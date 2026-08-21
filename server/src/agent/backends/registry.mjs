@@ -7,7 +7,7 @@ import { localAcpBackendDrivers } from './local-acp.mjs'
 import { openClawBackendDriver } from './openclaw.mjs'
 import { openCodeBackendDriver } from './opencode.mjs'
 import { piBackendDriver } from './pi.mjs'
-import { backendDefinition } from '../../../../shared/backend-catalog.mjs'
+import { backendDefinition, validateBackendSkillsSpec } from '../../../../shared/backend-catalog.mjs'
 
 const CAPABILITY_FLAGS = [
   'delegation',
@@ -22,6 +22,8 @@ const CAPABILITY_FLAGS = [
 function validateBackendDriver(driver) {
   const definition = backendDefinition(driver?.id)
   if (!definition) throw new Error(`后台 Driver 未在目录注册：${driver?.id}`)
+  // skills 声明是接入协议的一部分，注册时强制校验。
+  validateBackendSkillsSpec(definition)
   if (driver.label !== definition.label) {
     throw new Error(`后台 Driver 标签不一致：${driver.id}`)
   }

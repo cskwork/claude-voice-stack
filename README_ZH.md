@@ -20,34 +20,20 @@
 
 ## News
 
-- **2026-08-15 · [v1.10.1](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.10.1)**
-  🐛 修复若干已知问题；🖥️ 提升桌面版易用性。
+- **2026-08-20 · [v1.11.0](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.11.0)**
+  🧩 开放可嵌入 Gateway 与 Realtime Provider 扩展；🛠️ 支持安装与管理 Agent Skill；📎 TUI 支持多模态输入；🎨 皮肤动画联动运行状态。
 - **2026-08-13 · [v1.10.0](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.10.0)**
   🐋 新增实验性 DeepSeek Harness 后台接入，支持一键安装。
-- **2026-08-13 · [v1.9.1](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.9.1)**
-  🖥️ 优化桌面端任务卡片展示，并修复若干已知问题。
 - **2026-08-13 · [v1.9.0](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.9.0)**
   🧩 桌面任务卡实时展示 Agent 进度；🔎 后台 Agent 选择更清晰、支持搜索；🎙️ 支持 Qwen3.5-Omni Realtime 前台模型接入。
-- **2026-08-12 · [v1.8.3](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.8.3)**
-  ✨ 优化 Prompt；📉 减少 Token 消耗；🔧 修复已知问题。
-- **2026-08-11 · [v1.8.2](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.8.2)**
-  🖥️ 桌面设置页焕新，布局与视觉风格更加统一；🎙️ 语音唤醒更可靠；⏱️ 长任务会主动汇报进度。
-- **2026-08-11 · [v1.8.1](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.8.1)**
-  🧠 人设与记忆边界更清晰；🔧 任务与提醒更可靠。
 - **2026-08-09 · [v1.8.0](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.8.0)**
   🆕 新增 Qwen Code 后台；🔧 修复已知问题。
 - **2026-08-07 · [v1.7.0](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.7.0)**
   🎨 悬浮球开放自定义外观，兼容 [Awesome Codex Pet](https://codexpet.top/) 社区画廊的宠物包；🪟 优化 Windows 后台 Agent 启动。
-- **2026-08-07 · [v1.6.1](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.6.1)**
-  ⚡ 委派任务与权限确认即说即回；🖥️ 内置 computer-use，后台 Agent 开箱可操作电脑；🎙️ 唤醒更可靠；📚 文档全面双语化。
 - **2026-08-06 · [v1.6.0](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.6.0)**
   🪟 桌面版正式支持 Windows；🧠 新增无感记忆，会话结束后自动提取。
 - **2026-08-05 · [v1.5.0](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.5.0)**
   ⏰ 新增定时提醒与进度查询；🗣️ 新增语音唤醒词“你好千问”；🐧 桌面版支持 Linux 打包；桌面版数据目录与 CLI 隔离。
-- **2026-08-05 · [v1.4.2](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.4.2)**
-  🔧 优化桌面端后台 Agent 的安装、登录与状态检测，完善长期记忆行为。
-- **2026-08-04 · [v1.4.1](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.4.1)**
-  🧰 新增后台 Agent 一键安装；桌面悬浮球支持自动隐藏与快捷键唤回。
 - **2026-08-04 · [v1.4.0](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.4.0)**
   🧠 新增个性化规则与清单管理；桌面版支持自动休眠与快捷键唤醒。
 - **2026-08-03 · [v1.3.0](https://github.com/QwenAudio/qwen-audio-agent/releases/tag/v1.3.0)**
@@ -165,6 +151,20 @@ qwenaudio tui    # 终端 2：TUI
 [快速开始](docs/getting-started/quickstart.zh.md)、
 [语音前台](docs/voice-frontends/speech-to-speech.zh.md)与
 [TUI 注意](docs/getting-started/tui.zh.md)。
+
+## 示例
+
+仓库内提供智能座舱语音 Agent 示例，包含车控、导航、音乐、天气、联网查询、淘宝闪购和座舱 UI：
+
+```bash
+cp examples/car/.env.example examples/car/.env.local
+npm install --prefix examples/car/server
+npm install --prefix examples/car/react-app
+npm run example:car:server   # 终端 1：座舱 Agent 服务
+npm run example:car:web      # 终端 2：座舱 UI
+```
+
+详细说明见 [examples/car](https://github.com/QwenAudio/qwen-audio-agent/tree/main/examples/car)。
 
 ## 桌面版
 

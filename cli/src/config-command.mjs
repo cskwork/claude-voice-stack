@@ -1,6 +1,10 @@
-import { closeSync, fsyncSync, mkdirSync, openSync, renameSync, chmodSync, readFileSync, writeSync } from 'node:fs'
+import { closeSync, fsyncSync, mkdirSync, openSync, chmodSync, readFileSync, writeSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { randomUUID } from 'node:crypto'
+import {
+  replaceFileSync,
+  withFileTransaction,
+} from '../../shared/file-transaction-lock.mjs'
 import {
   DEFAULT_DASHSCOPE_REALTIME_MODEL,
   listDashScopeRealtimeModelProfiles,
@@ -33,6 +37,16 @@ export function updateRealtimeModelConfig(configPath, model, {
   fsyncDirectory = true,
 } = {}) {
   assertKnownRealtimeModel(model)
+  return withFileTransaction(configPath, () => updateRealtimeModelConfigUnlocked(
+    configPath,
+    model,
+    { fsyncDirectory },
+  ))
+}
+
+function updateRealtimeModelConfigUnlocked(configPath, model, {
+  fsyncDirectory,
+}) {
   const existing = configText(configPath)
   const assignments = new Map([
     ['QWEN_AUDIO_REALTIME_MODEL', model],
@@ -67,7 +81,7 @@ export function updateRealtimeModelConfig(configPath, model, {
   } finally {
     closeSync(fd)
   }
-  renameSync(tempPath, configPath)
+  replaceFileSync(tempPath, configPath)
   if (fsyncDirectory) {
     try {
       const directoryFd = openSync(directory, 'r')

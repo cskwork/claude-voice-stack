@@ -6,6 +6,7 @@ import {
   linkSync,
   lstatSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   unlinkSync,
   writeFileSync,
@@ -97,6 +98,18 @@ export function userConfigDirectory(
     ? resolve(env.XDG_CONFIG_HOME)
     : resolve(homeDirectory, '.config')
   return resolve(base, 'qwaudio')
+}
+
+// 资产目录：配置、身份、记忆、清单与共享 workspace 等"用户资产"的归属地。
+// 默认与运行时目录（configDirectory）相同；桌面版把它指向 CLI 的用户目录，
+// 让两种形态共享同一份资产，而 tasks/logs/锁等运行时状态仍按形态隔离
+// （参照 Qoder IDE 与 qodercli 的目录分层）。
+export function userDataDirectory(
+  env = process.env,
+  homeDirectory = homedir(),
+) {
+  if (env.QWAUDIO_DATA_DIR) return resolve(env.QWAUDIO_DATA_DIR)
+  return userConfigDirectory(env, homeDirectory)
 }
 
 function ensureGeneratedSecret(env, configDirectory) {
@@ -267,6 +280,13 @@ function migrateLegacyMemory({
   return Boolean(user.length || memory.length)
 }
 
+// 所有后台 Agent 共享同一个默认 workspace。历史上按后台隔离（workspaces/<id>）
+// 是为了各自的 AGENTS.md 指令模板，该机制已被 session 级指令注入取代；共享目录
+// 让用户切换后台时能无缝继续同一份工作，也让 SKILL 等资产只需同步到一处。
+export function defaultBackendWorkspace(configDirectory) {
+  return resolve(configDirectory, 'workspace')
+}
+
 function resolveBackendWorkspaces(env, root, configDirectory) {
   return Object.fromEntries(backendDefinitions()
     .filter(definition => definition.workspaceEnvironment)
@@ -275,11 +295,39 @@ function resolveBackendWorkspaces(env, root, configDirectory) {
       return [definition.id, {
         directory: configured
           ? resolve(root, configured)
-          : resolve(configDirectory, `workspaces/${definition.id}`),
+          : defaultBackendWorkspace(configDirectory),
         environment: definition.workspaceEnvironment,
         managed: !configured,
       }]
     }))
+}
+
+// 旧版本按后台隔离的 workspaces/<id>/ 目录里可能有用户文件。只提示位置，
+// 不自动迁移、不删除，由用户决定是否手动移动到共享 workspace。
+function collectLegacyWorkspaceNotices(configDirectory, sharedWorkspace) {
+  const notices = []
+  for (const definition of backendDefinitions()) {
+    if (!definition.workspaceEnvironment) continue
+    const legacyDirectory = resolve(
+      configDirectory,
+      `workspaces/${definition.id}`,
+    )
+    let entries
+    try {
+      entries = readdirSync(legacyDirectory)
+    } catch (error) {
+      if (error.code !== 'ENOENT' && error.code !== 'ENOTDIR') throw error
+      continue
+    }
+    if (entries.length) {
+      notices.push({
+        backend: definition.id,
+        legacyDirectory,
+        sharedWorkspace,
+      })
+    }
+  }
+  return notices
 }
 
 function codeBuddyModelName(env) {
@@ -417,38 +465,45 @@ export function loadRuntimeEnvironment({
 } = {}) {
   if (!root) throw new Error('loadRuntimeEnvironment requires root')
   const configDirectory = userConfigDirectory(env, homeDirectory)
+  // 资产（配置/身份/记忆/清单/workspace）从资产目录读写；tasks、logs、
+  // 实例锁等运行时状态留在 configDirectory。两者默认相同，桌面版分离。
+  const dataDirectory = userDataDirectory(env, homeDirectory)
   const candidates = [
     resolve(root, '.env.local'),
     resolve(root, '.env'),
-    resolve(configDirectory, 'config.env'),
+    resolve(dataDirectory, 'config.env'),
   ]
   const loadedFiles = candidates.filter(path => loadFile(path, env))
   if (!readOnly) {
     mkdirSync(configDirectory, { recursive: true, mode: 0o700 })
+    if (dataDirectory !== configDirectory) {
+      mkdirSync(dataDirectory, { recursive: true, mode: 0o700 })
+    }
   }
   const configPath = readOnly
-    ? resolve(configDirectory, 'config.env')
-    : ensureUserConfig(configDirectory)
+    ? resolve(dataDirectory, 'config.env')
+    : ensureUserConfig(dataDirectory)
   const userModelPath = readOnly
-    ? resolve(configDirectory, 'USER.md')
-    : ensureUserModel(configDirectory)
+    ? resolve(dataDirectory, 'USER.md')
+    : ensureUserModel(dataDirectory)
   const assistantProfilePath = readOnly
-    ? resolve(configDirectory, 'ASSISTANT.md')
+    ? resolve(dataDirectory, 'ASSISTANT.md')
     : ensureAssistantProfile(
-        configDirectory,
+        dataDirectory,
         resolve(root, 'config/frontend-agent/ASSISTANT.md'),
       )
   const frontendMemoryPath = readOnly
-    ? resolve(configDirectory, 'MEMORY.md')
-    : ensureLongTermMemory(configDirectory)
-  const legacyFrontendMemoryPath = resolve(configDirectory, 'frontend-memory.json')
-  const frontendNotesPath = resolve(configDirectory, 'frontend-notes.json')
+    ? resolve(dataDirectory, 'MEMORY.md')
+    : ensureLongTermMemory(dataDirectory)
+  const legacyFrontendMemoryPath = resolve(dataDirectory, 'frontend-memory.json')
+  const frontendNotesPath = resolve(dataDirectory, 'frontend-notes.json')
   const taskStatePath = resolve(configDirectory, 'tasks.json')
   const backendWorkspaces = resolveBackendWorkspaces(
     env,
     root,
-    configDirectory,
+    dataDirectory,
   )
+  const sharedWorkspace = defaultBackendWorkspace(dataDirectory)
   const workspace = id => backendWorkspaces[id]?.directory || ''
   const openCodeWorkspace = workspace('opencode')
   const openClawWorkspace = workspace('openclaw')
@@ -465,6 +520,7 @@ export function loadRuntimeEnvironment({
     ? resolve(root, env.QWEN_AUDIO_AGENT_OPENCLAW_STATE_DIR)
     : resolve(configDirectory, 'backends/openclaw/state')
   let migratedFiles = []
+  let legacyWorkspaceNotices = []
   if (prepareBackendRuntime && !readOnly) {
     migratePrivateFile(
       resolve(root, 'runtime/frontend-memory.json'),
@@ -475,7 +531,7 @@ export function loadRuntimeEnvironment({
       memoryPath: frontendMemoryPath,
       userModelPath,
       ownerId: env.QWEN_AUDIO_AGENT_PERSONAL_OWNER_ID || 'user_personal',
-      configDirectory,
+      configDirectory: dataDirectory,
     })) {
       migratedFiles.push(frontendMemoryPath, userModelPath)
     }
@@ -485,6 +541,12 @@ export function loadRuntimeEnvironment({
       }
       env[entry.environment] = entry.directory
     }
+    // 旧的按后台隔离目录可能分别留在运行时目录与资产目录（桌面版分离后）。
+    legacyWorkspaceNotices = [...new Set([configDirectory, dataDirectory])]
+      .flatMap(directory => collectLegacyWorkspaceNotices(
+        directory,
+        sharedWorkspace,
+      ))
     if (backendWorkspaces.codebuddy?.managed) {
       ensureCodeBuddyTemplate(
         resolve(root, 'config/codebuddy/workspace/.codebuddy/models.json'),
@@ -501,16 +563,18 @@ export function loadRuntimeEnvironment({
     )).map(([, targetPath]) => targetPath))
   }
   const secret = generateSecret && !readOnly
-    ? ensureGeneratedSecret(env, configDirectory)
+    ? ensureGeneratedSecret(env, dataDirectory)
     : { generated: false, statePath: null }
   return {
     configDirectory,
+    dataDirectory,
     configPath,
     assistantProfilePath,
     userModelPath,
     frontendMemoryPath,
     frontendNotesPath,
     taskStatePath,
+    sharedWorkspace,
     openCodeWorkspace,
     openClawWorkspace,
     qoderWorkspace,
@@ -524,6 +588,7 @@ export function loadRuntimeEnvironment({
     acpWorkspace,
     openClawStateDirectory,
     migratedFiles,
+    legacyWorkspaceNotices,
     loadedFiles,
     generatedSecret: secret.generated,
     statePath: secret.statePath,

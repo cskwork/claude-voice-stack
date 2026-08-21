@@ -54,6 +54,12 @@ import {
 import {
   desktopTaskCards,
 } from './desktop-task-cards.js'
+import {
+  advanceDesktopRuntimePresentation,
+  desktopBackendRuntime,
+  desktopRealtimeRuntime,
+  resolveDesktopRuntime,
+} from './desktop-runtime.js'
 
 const desktopOrbMode = (
   new URLSearchParams(window.location.search).get('desktop') === 'orb'
@@ -86,10 +92,11 @@ function labelFor(state) {
   return {
     idle: t('待命'),
     listening: t('正在听'),
-    thinking: t('思考中'),
+    processing: t('正在处理'),
     speaking: t('正在说'),
     working: t('正在处理任务'),
     attention: t('等待你的确认'),
+    starting: t('正在启动'),
     connecting: t('正在连接语音前台'),
     occupied: t('其他入口正在使用'),
     hidden: t('已隐藏'),
@@ -153,7 +160,14 @@ export default function App() {
   const [modelStatus, setModelStatus] = useState(() => realtimeModelStatus())
   const [providerNotice, setProviderNotice] = useState('')
   const [healthValidated, setHealthValidated] = useState(false)
-  const [backend, setBackend] = useState({ label: 'Agent', ready: false })
+  const [gatewayRuntime, setGatewayRuntime] = useState('connecting')
+  const [backend, setBackend] = useState({
+    label: 'Agent',
+    enabled: null,
+    ready: false,
+    status: 'starting',
+    code: null,
+  })
   const [agentTasks, setAgentTasks] = useState([])
   const [desktopTasksCollapsed, setDesktopTasksCollapsed] = useState(false)
   const [desktopTaskLayout, setDesktopTaskLayout] = useState({
@@ -161,6 +175,8 @@ export default function App() {
     orbOffsetX: 0,
   })
   const [orbDragging, setOrbDragging] = useState(false)
+  const [orbDragDirection, setOrbDragDirection] = useState('')
+  const [spriteAnimationCue, setSpriteAnimationCue] = useState(null)
   const [spriteOrbFailed, setSpriteOrbFailed] = useState(false)
   const [desktopLifecycle, setDesktopLifecycle] = useState('active')
   const [lastInteractionAt, setLastInteractionAt] = useState(Date.now)
@@ -174,12 +190,25 @@ export default function App() {
   const stickToBottom = useRef(true)
   const orbDrag = useRef(null)
   const suppressOrbClick = useRef(false)
+  const spriteAnimationCueId = useRef(0)
+  const runtimeReadyAnnounced = useRef(false)
+  const previousDesktopRuntime = useRef('starting')
   const previousWorkSettled = useRef(true)
   const workSettledAtRef = useRef(workSettledAt)
   const lastWakeAtRef = useRef(0)
 
   const noteInteraction = useCallback(() => {
     setLastInteractionAt(Date.now())
+  }, [])
+
+  const triggerSpriteAnimation = useCallback(name => {
+    if (!desktopOrbMode || isBuiltinOrbSkin(orbSkinId)) return
+    spriteAnimationCueId.current += 1
+    setSpriteAnimationCue({ id: spriteAnimationCueId.current, name })
+  }, [])
+
+  const completeSpriteAnimationCue = useCallback(id => {
+    setSpriteAnimationCue(current => current?.id === id ? null : current)
   }, [])
 
   const respondToPermission = useCallback(async (taskId, permission, decision) => {
@@ -249,52 +278,69 @@ export default function App() {
 
   useEffect(() => {
     let cancelled = false
-    let retryTimer = null
-    const loadHealth = () => {
-      fetch('api/health', { cache: 'no-store' })
-        .then(async response => ({ response, payload: await response.json() }))
-        .then(({ response, payload }) => {
-          if (cancelled) return
-          const label = payload.backend?.label || payload.backend?.kind || 'Agent'
-          setFrontend({
-            label: payload.realtimeLabel || payload.realtimeProvider || 'Realtime Agent',
-          })
-          setRealtimeProviders(payload.realtimeProviders || [])
-          setModelStatus(realtimeModelStatus(payload))
-          // A front end persisted by an earlier visit may no longer exist on this
-          // server (removed provider, different deployment). Sending it would be
-          // refused on every connect, so the stale selection is dropped in favour
-          // of the server default instead of leaving the client stuck.
-          setRealtimeProvider(current => {
-            const selection = realtimeProviderSelection(current, payload)
-            setProviderNotice(selection.notice)
-            if (selection.provider !== current) {
-              localStorage.removeItem('qwen-audio-agent.realtimeProvider')
-            }
-            return selection.provider
-          })
-          setHealthValidated(true)
-          const backendReady = Boolean(response.ok && payload.backend?.ok)
-          setBackend({
-            label,
-            ready: backendReady,
-            url: payload.backend?.uiPath || payload.backend?.baseUrl || '',
-          })
-          setActivity(response.ok ? t('Gateway 已连接') : t('能力服务尚未连接'))
-          // 后台 Agent 就绪需要数秒（Pi 经 pi-acp 适配器甚至更慢）；首次拉取
-          // 时尚未就绪会让状态灯一直灰色。已配置但未就绪时持续重试。
-          if (response.ok && payload.backend?.kind && !backendReady) {
-            retryTimer = setTimeout(loadHealth, 5000)
+    let refreshTimer
+    const refresh = () => fetch('api/health', { cache: 'no-store' })
+      .then(async response => ({ response, payload: await response.json() }))
+      .then(({ response, payload }) => {
+        if (cancelled) return
+        const gatewayReady = response.ok && payload.ok !== false
+        const backendPayload = payload.backend || {}
+        const backendEnabled = backendPayload.enabled !== false && Boolean(
+          backendPayload.kind || backendPayload.protocol,
+        )
+        const label = payload.backend?.label || payload.backend?.kind || 'Agent'
+        setFrontend({
+          label: payload.realtimeLabel || payload.realtimeProvider || 'Realtime Agent',
+        })
+        setRealtimeProviders(payload.realtimeProviders || [])
+        setModelStatus(realtimeModelStatus(payload))
+        // A front end persisted by an earlier visit may no longer exist on this
+        // server (removed provider, different deployment). Sending it would be
+        // refused on every connect, so the stale selection is dropped in favour
+        // of the server default instead of leaving the client stuck.
+        setRealtimeProvider(current => {
+          const selection = realtimeProviderSelection(current, payload)
+          setProviderNotice(selection.notice)
+          if (selection.provider !== current) {
+            localStorage.removeItem('qwen-audio-agent.realtimeProvider')
           }
+          return selection.provider
         })
-        .catch(() => {
-          if (!cancelled) setActivity(t('qwen-audio-agent Gateway 尚未连接'))
+        setGatewayRuntime(gatewayReady ? 'ready' : 'failed')
+        setHealthValidated(gatewayReady)
+        setBackend({
+          label,
+          enabled: backendEnabled,
+          ready: gatewayReady && (
+            backendEnabled ? backendPayload.ok === true : true
+          ),
+          status: backendPayload.status || (
+            backendEnabled ? 'starting' : 'not_configured'
+          ),
+          code: backendPayload.code || null,
+          error: backendPayload.error || '',
+          url: payload.backend?.uiPath || payload.backend?.baseUrl || '',
         })
-    }
-    loadHealth()
+        setActivity(response.ok ? t('Gateway 已连接') : t('能力服务尚未连接'))
+        if (desktopOrbMode) {
+          const backendSettled = !backendEnabled || [
+            'ready',
+            'failed',
+          ].includes(backendPayload.status)
+          refreshTimer = setTimeout(refresh, backendSettled ? 3000 : 500)
+        }
+      })
+      .catch(() => {
+        if (cancelled) return
+        setGatewayRuntime('failed')
+        setHealthValidated(false)
+        setActivity(t('qwen-audio-agent Gateway 尚未连接'))
+        if (desktopOrbMode) refreshTimer = setTimeout(refresh, 1000)
+      })
+    refresh()
     return () => {
       cancelled = true
-      clearTimeout(retryTimer)
+      clearTimeout(refreshTimer)
     }
   }, [])
 
@@ -471,8 +517,8 @@ export default function App() {
         && event.origin === 'model'
       ) return
       if (event.state === 'listening') setActivity(t('正在听你说'))
-      if (event.state === 'thinking' && !agentTurnIds.current.has(currentTurnId.current)) {
-        setActivity(t('正在理解'))
+      if (event.state === 'processing' && !agentTurnIds.current.has(currentTurnId.current)) {
+        setActivity(t('正在处理'))
       }
       if (event.state === 'idle' && !agentTurnIds.current.has(currentTurnId.current)) {
         setActivity(t('待命'))
@@ -633,6 +679,7 @@ export default function App() {
     }
     if (event.type === 'task.failed') {
       const failed = event.task
+      triggerSpriteAnimation('failed')
       if (failed.turnId) agentTurnIds.current.delete(failed.turnId)
       if (!failed.turnId || failed.turnId === currentTurnId.current) {
         setActivity(t('后台失败：{error}', { error: failed.error }))
@@ -685,6 +732,7 @@ export default function App() {
     noteInteraction,
     voiceEnabled,
     waitingForVoice,
+    triggerSpriteAnimation,
   ])
 
   // Keep the microphone alive while the desktop orb is hidden and the wake
@@ -726,21 +774,45 @@ export default function App() {
   const voiceConnectionError = (
     !lifecycleTransition && voice.connectionState === 'unavailable'
   )
+  const desktopRuntime = resolveDesktopRuntime({
+    gateway: gatewayRuntime,
+    realtime: desktopRealtimeRuntime(voice.connectionState),
+    backend: desktopBackendRuntime(backend),
+  })
+  const desktopHasActiveTasks = desktopOrbMode && desktopTasksActive(agentTasks)
   // 统一视觉状态仲裁：生命周期 → 异常 → 对话态 → 后台态。
   // 后台任务态（attention/working）仅在桌面悬浮球展示，
   // WebUI 由任务卡片承载同类信息。
   const orbVisualState = resolveOrbVisualState({
     lifecycle: desktopLifecycle,
-    connectionError: voiceConnectionError,
-    connecting: voiceEnabled && voice.connectionState === 'connecting',
+    runtimeState: desktopOrbMode ? desktopRuntime.overall : null,
+    connectionError: !desktopOrbMode && voiceConnectionError,
+    connecting: !desktopOrbMode
+      && voiceEnabled
+      && voice.connectionState === 'connecting',
     ownershipBusy: voice.ownership.state === 'busy',
     voiceState: voice.visualState || voice.state,
-    tasksActive: desktopOrbMode && desktopTasksActive(agentTasks),
+    tasksActive: desktopHasActiveTasks,
     attentionPending: desktopOrbMode && desktopTasksAttention(agentTasks),
   })
   const attentionTask = agentTasks.find(
     task => task.authorization?.status === 'pending',
   )
+
+  useEffect(() => {
+    if (!desktopOrbMode) return
+    const current = desktopRuntime.overall
+    const previous = previousDesktopRuntime.current
+    const presentation = advanceDesktopRuntimePresentation({
+      current,
+      previous,
+      readyAnnounced: runtimeReadyAnnounced.current,
+    })
+    runtimeReadyAnnounced.current = presentation.readyAnnounced
+    if (presentation.cue) triggerSpriteAnimation(presentation.cue)
+    previousDesktopRuntime.current = current
+  }, [desktopRuntime.overall, triggerSpriteAnimation])
+
   const desktopCards = useMemo(
     () => desktopOrbMode ? desktopTaskCards(agentTasks) : [],
     [agentTasks],
@@ -951,10 +1023,12 @@ export default function App() {
       pointerId: event.pointerId,
       startX: event.screenX,
       startY: event.screenY,
+      lastX: event.screenX,
       moved: false,
     }
     suppressOrbClick.current = false
     setOrbDragging(true)
+    setOrbDragDirection('')
     bridge.dragStart(event.screenX, event.screenY)
   }
 
@@ -966,6 +1040,11 @@ export default function App() {
     ) {
       drag.moved = true
     }
+    const deltaX = event.screenX - drag.lastX
+    if (Math.abs(deltaX) >= 2) {
+      setOrbDragDirection(deltaX > 0 ? 'right' : 'left')
+      drag.lastX = event.screenX
+    }
     window.qwenAudioAgentDesktop?.dragMove(event.screenX, event.screenY)
   }
 
@@ -975,6 +1054,7 @@ export default function App() {
     suppressOrbClick.current = drag.moved
     orbDrag.current = null
     setOrbDragging(false)
+    setOrbDragDirection('')
     window.qwenAudioAgentDesktop?.dragEnd()
   }
 
@@ -1001,7 +1081,6 @@ export default function App() {
     style={{ '--desktop-orb-offset-x': `${desktopTaskLayout.orbOffsetX}px` }}>
       <div className="desktop-orb-anchor">
         <section
-        ref={voice.levelElementRef}
         className={desktopOrbClassName({
           state: orbVisualState,
           enabled: voiceEnabled,
@@ -1021,6 +1100,7 @@ export default function App() {
               : labelFor(orbVisualState))
         }
         onClick={handleOrbClick}
+        onPointerEnter={() => triggerSpriteAnimation('jumping')}
         onPointerDown={beginOrbDrag}
         onPointerMove={moveOrb}
         onPointerUp={endOrbDrag}
@@ -1036,7 +1116,10 @@ export default function App() {
               <DesktopSpriteOrb
                 skin={orbSkinId}
                 state={orbVisualState}
-                dragging={orbDragging}
+                baseWorking={desktopHasActiveTasks}
+                dragDirection={orbDragDirection}
+                cue={spriteAnimationCue}
+                onCueComplete={completeSpriteAnimationCue}
                 onError={() => setSpriteOrbFailed(true)}
               />
             )}
@@ -1262,7 +1345,6 @@ export default function App() {
     <section className="workspace">
       <div className="hero">
         <button
-          ref={voice.levelElementRef}
           className={`orb ${orbVisualState}`}
           onClick={handleOrbClick}
           aria-label={t('语音交互')}

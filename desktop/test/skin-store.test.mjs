@@ -11,6 +11,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 import {
+  effectiveOrbSkin,
   importSkin,
   listSkins,
   removeSkin,
@@ -134,14 +135,14 @@ test('validates Codex pet packages against the grid contract', t => {
   assert.throws(() => validateSkinPackage(traversal), /包目录之外/)
 })
 
-test('validates optional custom animation tracks', t => {
+test('validates optional frame/fps animation overrides', t => {
   const root = temporaryRoot(t)
 
   const good = join(root, 'good')
   writeSkin(good, {
     manifest: {
       animations: {
-        'spin': { frames: [0, 1, 2], fps: 12, fallback: 'idle' },
+        'spin': { frames: [0, 1, 2], fps: 12 },
       },
     },
   })
@@ -159,11 +160,24 @@ test('validates optional custom animation tracks', t => {
   })
   assert.throws(() => validateSkinPackage(badIndex), /越界的帧索引/)
 
-  const badFallback = join(root, 'bad-fallback')
-  writeSkin(badFallback, {
-    manifest: { animations: { 'spin': { frames: [0], fallback: 'nope' } } },
+  // 旧生成器留下的生命周期字段可继续导入，但不属于当前协议，渲染端忽略。
+  const legacyLifecycle = join(root, 'legacy-lifecycle')
+  writeSkin(legacyLifecycle, {
+    manifest: {
+      animations: {
+        'waving': {
+          frames: [24, 25],
+          fps: 8,
+          loop: false,
+          fallback: 'nope',
+        },
+      },
+    },
   })
-  assert.throws(() => validateSkinPackage(badFallback), /fallback nope 不存在/)
+  assert.deepEqual(
+    validateSkinPackage(legacyLifecycle).animations.waving.frames,
+    [24, 25],
+  )
 })
 
 test('imports skins from directories, pet.json paths, and zip archives', async t => {
@@ -270,4 +284,17 @@ test('listSkins skips broken packages and mismatched directory names', t => {
     'firefly--lingxiaotian',
   ])
   assert.deepEqual(listSkins(join(root, 'missing')), [])
+})
+
+test('effectiveOrbSkin falls back to fluid when the package is missing', t => {
+  const root = temporaryRoot(t)
+  const skinsRoot = join(root, 'skins')
+  writeSkin(join(skinsRoot, 'firefly--lingxiaotian'))
+  assert.equal(
+    effectiveOrbSkin('firefly--lingxiaotian', { skinsRoot }),
+    'firefly--lingxiaotian',
+  )
+  assert.equal(effectiveOrbSkin('goo', { skinsRoot }), 'goo')
+  assert.equal(effectiveOrbSkin('missing--skin', { skinsRoot }), 'fluid')
+  assert.equal(effectiveOrbSkin('', { skinsRoot }), 'fluid')
 })

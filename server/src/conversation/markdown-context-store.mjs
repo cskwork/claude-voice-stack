@@ -3,10 +3,13 @@ import {
   chmodSync,
   mkdirSync,
   readFileSync,
-  renameSync,
   writeFileSync,
 } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
+import {
+  replaceFileSync,
+  withFileTransaction,
+} from '../../../shared/file-transaction-lock.mjs'
 
 const MAX_EDIT_ITEMS = 20
 
@@ -117,12 +120,15 @@ export class MarkdownContextStore {
     append = '',
     expectedRevision = '',
   } = {}) {
-    const prepared = this.prepareEdit(ownerId, { edits, append, expectedRevision })
-    if (!prepared.changed) {
-      return { changed: 0, document: prepared.document }
-    }
-    this.persist(ownerId, `${prepared.content}\n`)
-    return { changed: prepared.changed, document: prepared.document }
+    const path = this.pathFor(ownerId)
+    return withFileTransaction(path, () => {
+      const prepared = this.prepareEdit(ownerId, { edits, append, expectedRevision })
+      if (!prepared.changed) {
+        return { changed: 0, document: prepared.document }
+      }
+      this.persist(ownerId, `${prepared.content}\n`)
+      return { changed: prepared.changed, document: prepared.document }
+    })
   }
 
   prepareEdit(ownerId, {
@@ -189,7 +195,7 @@ export class MarkdownContextStore {
     mkdirSync(dirname(path), { recursive: true, mode: 0o700 })
     const temporary = `${path}.${process.pid}.tmp`
     writeFileSync(temporary, content, { encoding: 'utf8', mode: 0o600 })
-    renameSync(temporary, path)
+    replaceFileSync(temporary, path)
     chmodSync(path, 0o600)
     this.warning = null
   }
