@@ -17,7 +17,7 @@ The Backend Agent handles tasks that require tools, file operations, or sustaine
 | Codex | External ACP adapter | Supports one-click install of both the core and adapter, requires user configuration | `~/.codex/skills/` | ★★★★☆ |
 | Claude Code | External ACP adapter | Supports one-click install of both the core and adapter, requires user configuration | `~/.claude/skills/` | ★★★★☆ |
 | DeepSeek | Native ACP | Supports one-click install, requires a DeepSeek API key | `~/.agents/skills/` | ★★★★☆ |
-| Pi | External ACP adapter (community `pi-acp`) | Supports one-click install of both the core and adapter, requires user configuration | `~/.pi/agent/skills/` | ★★★★☆ |
+| Pi | External ACP adapter | Supports one-click install of both the core and adapter, requires user configuration | `~/.pi/agent/skills/` | ★★★★☆ |
 
 Skills install once through `qwenaudio skill install` (a branded entry point
 for the standard skills.sh installer) and land in every backend's user-level

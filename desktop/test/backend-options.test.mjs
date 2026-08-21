@@ -33,7 +33,6 @@ test('always offers the none option first, even without a report', () => {
     requiresConfirmation: false,
     configurationRequired: false,
     configurable: false,
-    alwaysFullPermission: false,
     reason: '',
     title: '',
   }])
@@ -60,20 +59,10 @@ test('ready backends are selectable and never installable', () => {
     configurationLabel: '配置',
     configurationHint: '',
     onboardingState: 'installed',
-    alwaysFullPermission: false,
     statusLabel: '已安装',
     reason: '',
     title: '',
   })
-})
-
-test('marks always-full-permission backends for the renderer', () => {
-  const states = backendOptionStates(report([
-    backend({ id: 'pi', label: 'Pi', ready: true, alwaysFullPermission: true }),
-    backend({ id: 'codex', label: 'Codex', ready: true }),
-  ]))
-  assert.equal(states[1].alwaysFullPermission, true)
-  assert.equal(states[2].alwaysFullPermission, false)
 })
 
 test('passes external service capabilities to the renderer state', () => {

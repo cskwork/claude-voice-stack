@@ -178,11 +178,6 @@ export function withBackendLifecycle(report, {
           installation: install,
           configuration,
         }),
-        // 无权限审批机制的后台（如 Pi）始终以最高权限运行，
-        // 渲染层据此展示徽标并在选择时给出明确确认。
-        ...(definition?.alwaysFullPermission
-          ? { alwaysFullPermission: true }
-          : {}),
         ...(definition?.supportsExternalService
           ? {
               externalService: {
