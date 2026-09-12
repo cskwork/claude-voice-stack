@@ -73,7 +73,8 @@
     "./web-dist/*": "./web/dist/*"
   },
   "bin": {
-    "qwenaudio": "cli/bin/qwenaudio.mjs"
+    "qwenaudio": "cli/bin/qwenaudio.mjs",
+    "voice-agent": "scripts/voice-stack/voice-agent.mjs"
   },
   "files": [
     "cli/bin/",
@@ -276,7 +277,7 @@
     "docs:preview": "vitepress preview docs",
     "eval:frontend": "node server/eval/run-frontend-evaluations.mjs",
     "test:ai-passport": "node --test examples/ai-passport/*.test.mjs",
-    "test": "node --test test/*.test.mjs && npm run test --workspace server && npm run test --workspace web && npm run test --workspace tui && npm run test --workspace desktop && npm run test --workspace @qwen-audio-agent/cli && npm run test --workspace @qwen-audio-agent/mobile && npm run test:smart-cockpit && npm run test:ai-passport",
+    "test": "node --test test/*.test.mjs && npm run test --workspace server && npm run test --workspace web && npm run test --workspace tui && npm run test --workspace desktop && npm run test --workspace @qwen-audio-agent/cli && npm run test --workspace @qwen-audio-agent/mobile && npm run test:smart-cockpit && npm run test:ai-passport && npm run test:voice-stack",
     "pretest:smart-cockpit": "npm ci --prefix examples/smart-cockpit/service --ignore-scripts && npm ci --prefix examples/smart-cockpit/agent --ignore-scripts",
     "test:smart-cockpit": "npm test --prefix examples/smart-cockpit/service && npm test --prefix examples/smart-cockpit/agent && node --test examples/smart-cockpit/bench/test/*.test.mjs examples/smart-cockpit/bootstrap/test/*.test.mjs examples/smart-cockpit/client/test/*.test.mjs examples/smart-cockpit/gateway/test/*.test.mjs examples/smart-cockpit/test/*.test.mjs",
     "audit:release": "node scripts/audit-dependencies.mjs",
@@ -284,7 +285,10 @@
     "version:patch": "node scripts/set-version.mjs patch",
     "version:minor": "node scripts/set-version.mjs minor",
     "version:major": "node scripts/set-version.mjs major",
-    "release:check": "./scripts/release-check"
+    "release:check": "./scripts/release-check",
+    "voice-agent": "node scripts/voice-stack/voice-agent.mjs",
+    "test:voice-stack": "node --test scripts/voice-stack/test/*.test.mjs",
+    "test:voice-stack:integration": "VOICE_STACK_INTEGRATION=1 node --test scripts/voice-stack/test/integration/*.test.mjs"
   },
   "dependencies": {
     "@a2a-js/sdk": "1.1.0",
