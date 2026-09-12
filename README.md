@@ -24,6 +24,8 @@ npm run voice-agent -- doctor    # includes the GLM compatibility gate
 npm run voice-agent -- start --tui
 ```
 
+Landing page: [`landing/index.html`](landing/index.html) (English/Korean; deploys to GitHub Pages via `.github/workflows/landing-pages.yml`).
+
 Docs: [PRD](PRD.md) · [macOS setup](docs/voice-stack/macos-setup.md) ·
 [architecture](docs/voice-stack/architecture-local-glm.md) ·
 [upstream map](docs/voice-stack/upstream-map.md) ·
