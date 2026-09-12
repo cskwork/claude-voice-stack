@@ -4,7 +4,7 @@ A fork of [qwen-audio-agent](https://github.com/QwenAudio/qwen-audio-agent) that
 puts a local, low-RAM voice stack in front of **Claude Code**:
 
 ```text
-Mic → Silero VAD → Whisper large-v3-turbo (MLX, local) → GLM-5.3-Flash (remote router)
+Mic → Silero VAD → Whisper small (MLX, local) → GLM-5.3-Flash (remote router)
     → qwen-audio-agent Gateway → claude-code-acp → Claude Code
     → GLM spoken summary → Supertonic (local TTS) → Speaker
 ```
@@ -18,7 +18,7 @@ a process manager, and tests.
 
 ```bash
 npm install
-npm run voice-agent -- setup     # venv + speech-to-speech + Supertonic + Whisper MLX + config.env
+npm run voice-agent -- setup     # venv + speech-to-speech + Supertonic + Whisper small + config.env
 # fill VOICE_LLM_BASE_URL / VOICE_LLM_API_KEY in ~/.claude-voice-stack/config.env
 npm run voice-agent -- doctor    # includes the GLM compatibility gate
 npm run voice-agent -- start --tui

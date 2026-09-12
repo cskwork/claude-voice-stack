@@ -5,8 +5,8 @@ set -euo pipefail
 
 STACK_HOME="${CLAUDE_VOICE_STACK_HOME:-$HOME/.claude-voice-stack}"
 VENV="$STACK_HOME/venv-s2s"
-S2S_SPEC="${S2S_SPEC:-speech-to-speech[supertonic]==1.0.0}"
-STT_MODEL="${STT_MODEL:-mlx-community/whisper-large-v3-turbo}"
+S2S_SPEC="${S2S_SPEC:-speech-to-speech[supertonic,whisper-mlx]==1.0.0}"
+WHISPER_SIZE="${WHISPER_SIZE:-small}"
 PARAKEET_MODEL="${PARAKEET_MODEL:-mlx-community/parakeet-tdt-0.6b-v3}"
 WITH_PARAKEET=0
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -68,18 +68,24 @@ fi
 "$VENV/bin/pip" install --quiet "$S2S_SPEC"
 ok "speech-to-speech $("$VENV/bin/pip" show speech-to-speech 2>/dev/null | awk '/^Version/{print $2}')"
 ok "supertonic $("$VENV/bin/pip" show supertonic 2>/dev/null | awk '/^Version/{print $2}')"
-"$VENV/bin/python" -c 'import speech_to_speech, supertonic, mlx_audio, sounddevice' || die "voice imports failed"
+"$VENV/bin/python" -c 'import speech_to_speech, supertonic, mlx_audio, lightning_whisper_mlx, sounddevice' || die "voice imports failed"
 
 if [[ "$SKIP_MODELS" -eq 0 ]]; then
-  MODELS=("$STT_MODEL")
-  [[ "$WITH_PARAKEET" -eq 1 ]] && MODELS+=("$PARAKEET_MODEL")
-  "$VENV/bin/python" - "${MODELS[@]}" <<'PY'
+  # lightning-whisper-mlx keeps weights under ./mlx_models of the working directory.
+  (cd "$STACK_HOME" && "$VENV/bin/python" - "$WHISPER_SIZE" <<'PY'
+import sys
+from lightning_whisper_mlx import LightningWhisperMLX
+LightningWhisperMLX(model=sys.argv[1], batch_size=6, quant=None)
+print(f"✓ STT assets: whisper {sys.argv[1]} -> mlx_models/{sys.argv[1]}")
+PY
+  )
+  if [[ "$WITH_PARAKEET" -eq 1 ]]; then
+    "$VENV/bin/python" - "$PARAKEET_MODEL" <<'PY'
 import sys
 from huggingface_hub import snapshot_download
-for model in sys.argv[1:]:
-    path = snapshot_download(model)
-    print(f"✓ STT assets: {model} -> {path}")
+print(f"✓ STT assets: {sys.argv[1]} -> {snapshot_download(sys.argv[1])}")
 PY
+  fi
   "$VENV/bin/supertonic" download >/dev/null 2>&1 && ok "Supertonic assets" || warn "Supertonic assets download skipped (downloads on first start)"
 fi
 

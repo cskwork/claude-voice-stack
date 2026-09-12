@@ -1,7 +1,7 @@
 # Architecture: local ears and voice, remote GLM router, Claude Code backend
 
 ```text
-Microphone ─► Silero VAD ─► Whisper v3-turbo (MLX) ► GLM-5.3-Flash (HTTPS) ─┐
+Microphone ─► Silero VAD ─► Whisper small (MLX) ──► GLM-5.3-Flash (HTTPS) ─┐
                     speech-to-speech process (one pipeline)              │
 Speaker ◄─ Supertonic (in-process ONNX) ◄─ GLM spoken rendering ◄────────┘
                     ▲                                   │ OpenAI Realtime WS (127.0.0.1:8765)
@@ -100,8 +100,8 @@ a failing turn shows as `Response failed: chars=N` in normal logs.
 
 ## RAM strategy
 
-One speech-to-speech process holds the STT model (Whisper large-v3-turbo by
-default, about 0.8 B parameters; Parakeet TDT 0.6 B for English-only sessions),
+One speech-to-speech process holds the STT model (Whisper small by default,
+0.24 B parameters; Parakeet TDT 0.6 B for English-only sessions),
 Silero VAD, Smart Turn and Supertonic; nothing else loads a model. GLM runs remotely. Measure with
 `voice-agent status` (managed-process RSS) and the procedure in
 `ram-benchmark.md` before optimising anything.

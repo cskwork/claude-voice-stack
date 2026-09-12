@@ -14,7 +14,7 @@ the product does not promise them.
 | Node | 22.22.3 |
 | speech-to-speech | 1.0.0 |
 | Supertonic | 1.3.1 |
-| STT | mlx-community/whisper-large-v3-turbo (default); parakeet-tdt-0.6b-v3 optional |
+| STT | whisper-mlx small (default); parakeet-tdt-0.6b-v3 optional |
 | GLM endpoint | (host, model id) |
 | Claude Code | 2.1.269 |
 
@@ -29,7 +29,7 @@ the state has been stable for one minute.
 | 1 | baseline macOS, normal apps open | – | – | – | | | |
 | 2 | Gateway only (`node scripts/start.mjs`) | – | | – | | | |
 | 3 | + speech-to-speech with STT loaded | | | – | | | |
-| 4 | + Supertonic loaded (first synthesis done) | 2.5 GB (measured 2026-09-13, integration test: Whisper turbo + Supertonic + VAD, after 2 turns) | | – | | | |
+| 4 | + Supertonic loaded (first synthesis done) | 1.5 GB (measured 2026-09-13, integration test: Whisper small + Supertonic + VAD, after 2 turns) | | – | | | |
 | 5 | + full voice session (TUI connected, 5 turns) | | | – | | | |
 | 6 | + Claude task running | | | | | | |
 | 7 | after 10 minutes of use | | | | | | |
@@ -58,7 +58,7 @@ Use `--debug-transcripts` for one run only and read timestamps from
 ## STT quality (Korean / English)
 
 Record the same 10 sentences per language with the stack's microphone path and
-compare `mlx-audio-whisper` against `parakeet-tdt` (word error rate or a simple
+compare `whisper-mlx` sizes against `parakeet-tdt` (word error rate or a simple
 "constraint preserved" count). The integration test
 `scripts/voice-stack/test/integration/realtime-loop.test.mjs` checks one English
 and one Korean sentence synthesised by Supertonic and prints the server RSS.
@@ -68,4 +68,6 @@ Measured 2026-09-13 (MacBook Pro, Apple Silicon, macOS 26.6.2):
 | STT | English sentence | Korean sentence |
 |---|---|---|
 | parakeet-tdt (0.6b-v3) | exact | "Loguin sobisiritu sa ejo." (detected lt/de) — unusable |
-| mlx-audio-whisper (large-v3-turbo) | exact | exact ("로그인 서비스를 조사해줘. 하지만 아무것도 수정하지 마.") |
+| whisper-mlx small, language auto | exact | exact ("로그인 서비스를 조사해줘. 하지만 아무것도 수정하지 마.") |
+| whisper-mlx small, language pinned ko | "클로드에 대한 정보가 필요한 건" — English lost | exact |
+| mlx-audio-whisper whisper-small-mlx | exact | translated to English ("! Log-in service However, do not fix anything") — speech-to-speech loads the large-v3 tokenizer for unknown repo ids |
