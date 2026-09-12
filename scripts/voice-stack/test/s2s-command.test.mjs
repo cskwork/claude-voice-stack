@@ -52,6 +52,14 @@ test('debug transcripts, reasoning effort, STT language and stream=false are hon
   assert.ok(args.includes('--no_responses_api_stream'))
 })
 
+test('whisper backends receive --language (auto unless pinned)', () => {
+  const auto = buildSpeechToSpeechCommand(resolveVoiceConfig({ ...base, VOICE_STT: 'mlx-audio-whisper' }).config).args
+  assert.equal(auto[auto.indexOf('--language') + 1], 'auto')
+  assert.ok(!auto.includes('--parakeet_tdt_language'))
+  const ko = buildSpeechToSpeechCommand(resolveVoiceConfig({ ...base, VOICE_STT: 'mlx-audio-whisper', VOICE_STT_LANGUAGE: 'ko' }).config).args
+  assert.equal(ko[ko.indexOf('--language') + 1], 'ko')
+})
+
 test('mlx-lm fallback sends no remote flags and no key', () => {
   const { config } = resolveVoiceConfig({ VOICE_LLM_BACKEND: 'mlx-lm', VOICE_LLM_MODEL: 'mlx-community/Qwen3-1.7B-4bit' })
   const { args, env } = buildSpeechToSpeechCommand(config)

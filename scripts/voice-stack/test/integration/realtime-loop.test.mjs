@@ -46,6 +46,7 @@ function openRealtime(url) {
     ws.addEventListener('message', message => {
       const event = JSON.parse(message.data)
       events.push(event)
+      if (event.type === 'error') process.stderr.write(`# realtime error: ${JSON.stringify(event.error || event)}\n`)
       for (const waiter of [...waiters]) {
         if (waiter.match(event)) { waiters.splice(waiters.indexOf(waiter), 1); waiter.resolve(event) }
       }
@@ -88,12 +89,15 @@ test('standalone voice loop: STT → mock router → tool call / TTS → cancel'
     VOICE_LLM_BASE_URL: provider.baseUrl,
     VOICE_LLM_API_KEY: MOCK_KEY,
     VOICE_S2S_PORT: String(PORT),
+    VOICE_STT: process.env.VOICE_STACK_TEST_STT || 'mlx-audio-whisper',
   })
   assert.deepEqual(errors, [])
-  const spec = buildSpeechToSpeechCommand(config, { bin: paths.speechToSpeechBin })
+  t.diagnostic(`STT backend: ${config.stt.backend}`)
+  // Test-only: transcripts in the scratch log make failures diagnosable.
+  const spec = buildSpeechToSpeechCommand(config, { bin: paths.speechToSpeechBin, debugTranscripts: true })
   const pidPath = join(dir, 's2s.pid')
   const logPath = join(dir, 's2s.log')
-  const started = startDetached({ ...spec, cwd: repoRoot, logPath, pidPath })
+  const started = startDetached({ ...spec, cwd: repoRoot, logPath, pidPath, captureStdout: true })
   t.after(() => stopProcess(pidPath))
   const ready = await waitFor(async () => {
     if (!isRunning(started.pid)) throw new Error(`speech-to-speech exited:\n${readFileSync(logPath, 'utf8').slice(-2000)}`)
@@ -135,6 +139,13 @@ test('standalone voice loop: STT → mock router → tool call / TTS → cancel'
   const args = JSON.parse(call.arguments)
   assert.match(args.objective, /do not edit/i)
   await client.next(e => e.type === 'response.done', 60_000)
+  // The Gateway answers every tool call with a function_call_output item (the
+  // task receipt). Do the same so the conversation stays valid for the next turn.
+  client.send({
+    type: 'conversation.item.create',
+    item: { type: 'function_call_output', call_id: call.call_id, output: JSON.stringify({ status: 'accepted', task_id: 'task_1' }) },
+  })
+  await new Promise(resolve => setTimeout(resolve, 500))
 
   // Turn 2 (Korean): transcript recognisable; a text reply is synthesised by
   // Supertonic and streamed as 24 kHz PCM audio deltas.

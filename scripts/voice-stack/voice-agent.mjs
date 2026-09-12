@@ -66,8 +66,8 @@ async function collectStatus(config) {
   ])
   const inProcess = s2s.state === 'ready' || s2s.state === 'degraded'
   const components = {
-    gateway: { label: 'Gateway', ...gateway },
-    s2s: { label: 'Speech-to-Speech', ...s2s },
+    gateway: { label: 'Gateway', core: true, ...gateway },
+    s2s: { label: 'Speech-to-Speech', core: true, ...s2s },
     stt: {
       label: 'STT',
       state: inProcess ? 'ready' : 'stopped',
@@ -202,6 +202,7 @@ async function start() {
   const s2sSpec = buildSpeechToSpeechCommand(config, { bin: paths.speechToSpeechBin, debugTranscripts })
   const s2s = startDetached({
     ...s2sSpec, cwd: repoRoot, logPath: paths.log('speech-to-speech'), pidPath: paths.pid('speech-to-speech'),
+    captureStdout: debugTranscripts,
   })
   log(`${s2s.reused ? '=' : '+'} speech-to-speech pid ${s2s.pid} (log: ${paths.log('speech-to-speech')})`)
   const s2sReady = await waitFor(async () => {

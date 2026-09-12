@@ -17,6 +17,9 @@ export function aggregateHealth(components) {
   if (list.some(c => c.state === 'failed' && c.required !== false)) return 'failed'
   if (list.some(c => c.state === 'starting')) return 'starting'
   if (list.some(c => c.state === 'failed' || c.state === 'degraded')) return 'degraded'
+  // A stopped core service (Gateway, speech pipeline) means the stack is not
+  // running, even if independent components such as Claude Code look fine.
+  if (list.some(c => c.state === 'stopped' && c.core)) return 'stopped'
   if (list.every(c => c.state === 'stopped')) return 'stopped'
   return 'ready'
 }
@@ -50,7 +53,9 @@ export async function probeHttp(url, { timeoutMs = 3000, fetchImpl = fetch, head
     else await response.text().catch(() => '')
     return { ok: response.ok, status: response.status, body }
   } catch (error) {
-    return { ok: false, status: 0, error: error.name === 'AbortError' ? 'timeout' : error.message }
+    const error_ = error.name === 'AbortError' ? 'timeout'
+      : /fetch failed|ECONNREFUSED/.test(error.message) ? 'not reachable' : error.message
+    return { ok: false, status: 0, error: error_ }
   } finally {
     clearTimeout(timer)
   }

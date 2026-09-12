@@ -22,11 +22,16 @@ export function isRunning(pid) {
 }
 
 /**
- * Spawn a long-running service as its own process group, redirect stdio to a
- * log file, and record the pid. Callers own log rotation; the file is opened
- * in append mode so restarts keep history.
+ * Spawn a long-running service as its own process group, redirect its output
+ * to a log file, and record the pid. Callers own log rotation; the file is
+ * opened in append mode so restarts keep history.
+ *
+ * `captureStdout` defaults to false: speech-to-speech writes user/assistant
+ * transcripts to stdout (rich console) regardless of `--log_transcripts`, while
+ * its diagnostics go to stderr through `logging`. Keeping stdout out of the log
+ * is what makes "no transcript logging by default" true on disk.
  */
-export function startDetached({ command, args = [], env = {}, cwd, logPath, pidPath }) {
+export function startDetached({ command, args = [], env = {}, cwd, logPath, pidPath, captureStdout = false }) {
   const existing = readPid(pidPath)
   if (existing && isRunning(existing)) return { pid: existing, reused: true }
   mkdirSync(dirname(logPath), { recursive: true })
@@ -36,7 +41,7 @@ export function startDetached({ command, args = [], env = {}, cwd, logPath, pidP
     cwd,
     env: { ...process.env, ...env },
     detached: true,
-    stdio: ['ignore', out, out],
+    stdio: ['ignore', captureStdout ? out : 'ignore', out],
   })
   child.unref()
   writeFileSync(pidPath, `${child.pid}\n`, { mode: 0o600 })

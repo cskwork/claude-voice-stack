@@ -10,6 +10,7 @@ test('aggregateHealth ranks failed > starting > degraded > stopped > ready', () 
   assert.equal(aggregateHealth({ a: { state: 'starting' }, b: { state: 'degraded' } }), 'starting')
   assert.equal(aggregateHealth({ a: { state: 'stopped' }, b: { state: 'stopped' } }), 'stopped')
   assert.equal(aggregateHealth({ a: { state: 'stopped' }, b: { state: 'ready' } }), 'ready')
+  assert.equal(aggregateHealth({ a: { state: 'stopped', core: true }, b: { state: 'ready' } }), 'stopped')
 })
 
 test('formatHealth renders an aligned table', () => {
