@@ -1,3 +1,42 @@
+# claude-voice-stack
+
+A fork of [qwen-audio-agent](https://github.com/QwenAudio/qwen-audio-agent) that
+puts a local, low-RAM voice stack in front of **Claude Code**:
+
+```text
+Mic → Silero VAD → Parakeet TDT (MLX, local) → GLM-5.3-Flash (remote router)
+    → qwen-audio-agent Gateway → claude-code-acp → Claude Code
+    → GLM spoken summary → Supertonic (local TTS) → Speaker
+```
+
+No DashScope, no local general-purpose LLM, Claude Code unchanged as the only
+backend, native permission prompts kept. Upstream code under `server/`, `shared/`,
+`cli/`, `web/`, `tui/`, `desktop/` is untouched; the fork adds a profile, a prompt,
+a process manager, and tests.
+
+**One-command path (Apple Silicon):**
+
+```bash
+npm install
+npm run voice-agent -- setup     # venv + speech-to-speech + Supertonic + Parakeet + config.env
+# fill VOICE_LLM_BASE_URL / VOICE_LLM_API_KEY in ~/.claude-voice-stack/config.env
+npm run voice-agent -- doctor    # includes the GLM compatibility gate
+npm run voice-agent -- start --tui
+```
+
+Docs: [PRD](PRD.md) · [macOS setup](docs/voice-stack/macos-setup.md) ·
+[architecture](docs/voice-stack/architecture-local-glm.md) ·
+[upstream map](docs/voice-stack/upstream-map.md) ·
+[troubleshooting](docs/voice-stack/troubleshooting.md) ·
+[RAM benchmark](docs/voice-stack/ram-benchmark.md).
+Tests: `npm run test:voice-stack` (unit, offline) and
+`npm run test:voice-stack:integration` (real speech-to-speech + Supertonic loop).
+
+---
+
+<details>
+<summary>Upstream qwen-audio-agent README</summary>
+
 # Qwen Audio Agent
 
 [中文](README_ZH.md) | [English](README.md) | [User Guide](https://qwenaudio.github.io/qwen-audio-agent/) | [Quickstart](https://qwenaudio.github.io/qwen-audio-agent/getting-started/quickstart)
@@ -243,3 +282,6 @@ to be invited.
 ## License
 
 [Apache License 2.0](LICENSE)
+
+
+</details>
