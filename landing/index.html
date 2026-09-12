@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>claude-voice-stack — a local-first voice frontend for Claude Code</title>
+<meta name="description" content="Talk to Claude Code. Whisper small and Supertonic run on your Mac; GLM-5.3-Flash routes the conversation; Claude Code does the work.">
+<style>
+  :root {
+    --bg: #0b0d10; --panel: #13161b; --line: #232830; --text: #e8eaed; --muted: #9aa3ad;
+    --accent: #f2b544; --accent-2: #5ec8a2; --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --bg: #f7f7f5; --panel: #ffffff; --line: #e3e3de; --text: #16181c; --muted: #5d6570; --accent: #b8760a; --accent-2: #1f8f6c; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif; background: var(--bg); color: var(--text); }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 0 24px; }
+  header { display: flex; justify-content: space-between; align-items: center; padding: 20px 0; }
+  header .brand { font-weight: 700; letter-spacing: .02em; }
+  header nav a { margin-left: 18px; color: var(--muted); font-size: 14px; }
+  .lang { border: 1px solid var(--line); background: var(--panel); color: var(--text); border-radius: 999px; padding: 4px 10px; font-size: 13px; cursor: pointer; }
+  .hero { padding: 56px 0 32px; }
+  .hero h1 { font-size: clamp(30px, 5vw, 48px); line-height: 1.15; margin: 0 0 16px; letter-spacing: -.01em; }
+  .hero h1 em { font-style: normal; color: var(--accent); }
+  .hero p { font-size: 18px; color: var(--muted); max-width: 640px; margin: 0 0 24px; }
+  .cta { display: flex; gap: 12px; flex-wrap: wrap; }
+  .btn { display: inline-block; padding: 10px 18px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--text); font-weight: 600; }
+  .btn.primary { background: var(--accent); color: #111; border-color: var(--accent); }
+  .btn:hover { text-decoration: none; filter: brightness(1.08); }
+  pre { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; overflow-x: auto; font: 13.5px/1.55 var(--mono); }
+  pre .c { color: var(--muted); }
+  pre .k { color: var(--accent-2); }
+  section { padding: 28px 0; border-top: 1px solid var(--line); }
+  h2 { font-size: 22px; margin: 0 0 14px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; }
+  .card h3 { margin: 0 0 6px; font-size: 15px; }
+  .card p { margin: 0; color: var(--muted); font-size: 14px; }
+  .stat { font-size: 28px; font-weight: 700; color: var(--accent-2); }
+  .tag { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); margin-right: 6px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  td:first-child { white-space: nowrap; }
+  th { color: var(--muted); font-weight: 600; }
+  footer { padding: 28px 0 48px; color: var(--muted); font-size: 13px; border-top: 1px solid var(--line); }
+  [data-lang="ko"] .en, [data-lang="en"] .ko { display: none; }
+</style>
+</head>
+<body data-lang="en">
+<div class="wrap">
+  <header>
+    <div class="brand">claude-voice-stack</div>
+    <nav>
+      <a href="#how">How it works</a>
+      <a href="#numbers">Numbers</a>
+      <a href="#start">Start</a>
+      <a href="https://github.com/cskwork/claude-voice-stack">GitHub</a>
+      <button class="lang" id="lang" aria-label="Switch language">한국어</button>
+    </nav>
+  </header>
+
+  <div class="hero">
+    <h1 class="en">Talk to <em>Claude Code</em>.<br>Your Mac does the listening and speaking.</h1>
+    <h1 class="ko"><em>Claude Code</em>와 말로 일하세요.<br>듣고 말하는 일은 내 Mac이 맡습니다.</h1>
+    <p class="en">A fork of qwen-audio-agent that replaces the cloud voice model with a small local stack: Silero VAD, Whisper small (MLX) and Supertonic run on Apple Silicon, GLM-5.3-Flash routes the conversation, and Claude Code stays the only agent that touches your code.</p>
+    <p class="ko">qwen-audio-agent를 포크해 클라우드 음성 모델 대신 가벼운 로컬 스택을 앞에 둡니다. Silero VAD, Whisper small(MLX), Supertonic은 Apple Silicon에서 돌고, GLM-5.3-Flash가 대화를 라우팅하며, 코드를 만지는 에이전트는 Claude Code 하나뿐입니다.</p>
+    <div class="cta">
+      <a class="btn primary" href="#start"><span class="en">Set up in one command</span><span class="ko">한 줄로 설치하기</span></a>
+      <a class="btn" href="https://github.com/cskwork/claude-voice-stack/blob/main/docs/voice-stack/macos-setup.md"><span class="en">Read the manual</span><span class="ko">매뉴얼 읽기</span></a>
+      <a class="btn" href="https://github.com/cskwork/claude-voice-stack/blob/main/PRD.md">PRD</a>
+    </div>
+  </div>
+
+  <section id="how">
+    <h2 class="en">How it works</h2><h2 class="ko">동작 방식</h2>
+<pre>Microphone
+   ↓ Silero VAD                      <span class="c">local</span>
+   ↓ Whisper small · MLX             <span class="c">local STT, Korean + English</span>
+   ↓ GLM-5.3-Flash                   <span class="c">remote router: talk, delegate, control</span>
+   ↓ qwen-audio-agent Gateway        <span class="c">tasks, permissions, TUI / Web / Desktop</span>
+   ↓ claude-code-acp → <span class="k">Claude Code</span>   <span class="c">repository, shell, tests, MCP, skills</span>
+   ↓ GLM-5.3-Flash                   <span class="c">one to three spoken sentences</span>
+   ↓ Supertonic                      <span class="c">local TTS</span>
+Speaker</pre>
+    <div class="grid">
+      <div class="card"><h3 class="en">Spend RAM on speech, not on duplicate reasoning</h3><h3 class="ko">RAM은 음성에, 추론 중복에는 쓰지 않습니다</h3><p class="en">No local general-purpose LLM. One speech pipeline holds Whisper small, VAD and Supertonic; the router runs remotely.</p><p class="ko">로컬 범용 LLM이 없습니다. 음성 파이프라인 하나가 Whisper small, VAD, Supertonic을 들고 있고 라우터는 원격에서 돕니다.</p></div>
+      <div class="card"><h3 class="en">Claude Code unchanged</h3><h3 class="ko">Claude Code는 그대로</h3><p class="en">Same login, model, MCP servers, skills and native permission prompts. GLM never gets a shell or a file.</p><p class="ko">로그인, 모델, MCP 서버, 스킬, 권한 프롬프트가 그대로입니다. GLM은 셸이나 파일에 접근하지 않습니다.</p></div>
+      <div class="card"><h3 class="en">Interrupt freely</h3><h3 class="ko">언제든 끼어들기</h3><p class="en">Speaking over the assistant stops playback within the pipeline. The Claude task keeps running unless you cancel it.</p><p class="ko">말하는 도중 끼어들면 재생만 멈춥니다. 취소를 말하지 않는 한 Claude 작업은 계속됩니다.</p></div>
+      <div class="card"><h3 class="en">Constraints survive the trip</h3><h3 class="ko">제약 조건이 끝까지 전달됩니다</h3><p class="en">"Inspect only, don't edit" is written into the delegation objective and checked by the GLM compatibility gate.</p><p class="ko">"조사만 하고 수정하지 마"가 위임 목표에 그대로 적히고, GLM 호환성 게이트가 이를 검사합니다.</p></div>
+    </div>
+  </section>
+
+  <section id="numbers">
+    <h2 class="en">Measured, not promised</h2><h2 class="ko">약속이 아니라 측정값</h2>
+    <div class="grid">
+      <div class="card"><div class="stat">1.4–1.7 GB</div><p class="en">speech-to-speech process RSS with Whisper small, VAD and Supertonic loaded, after two turns</p><p class="ko">Whisper small, VAD, Supertonic을 올린 speech-to-speech 프로세스 RSS (두 턴 후)</p></div>
+      <div class="card"><div class="stat">2 / 2</div><p class="en">test sentences transcribed exactly (English and Korean) with automatic language detection</p><p class="ko">언어 자동 감지로 영어·한국어 테스트 문장 모두 정확히 전사</p></div>
+      <div class="card"><div class="stat">0</div><p class="en">upstream Gateway files modified. Profile, prompt, process manager and tests only.</p><p class="ko">수정한 upstream Gateway 파일 수. 프로파일, 프롬프트, 프로세스 관리자, 테스트만 추가했습니다.</p></div>
+      <div class="card"><div class="stat">0</div><p class="en">audio chunks after a cancel in the integration test; transcripts are never logged by default</p><p class="ko">통합 테스트에서 취소 후 도착한 오디오 청크 수. 전사는 기본적으로 로그에 남지 않습니다.</p></div>
+    </div>
+    <p class="en" style="color:var(--muted);font-size:13px;margin-top:12px">Reference Mac: Apple Silicon MacBook Pro, macOS 26.6, speech-to-speech 1.0.0, Supertonic 1.3.1, measured 2026-09-13. Parakeet TDT v3 was tested first and produced garbage for Korean, which is why Whisper small is the default.</p>
+    <p class="ko" style="color:var(--muted);font-size:13px;margin-top:12px">기준 환경: Apple Silicon MacBook Pro, macOS 26.6, speech-to-speech 1.0.0, Supertonic 1.3.1, 2026-09-13 측정. Parakeet TDT v3를 먼저 시험했으나 한국어가 전혀 인식되지 않아 Whisper small을 기본값으로 정했습니다.</p>
+  </section>
+
+  <section id="start">
+    <h2 class="en">Start</h2><h2 class="ko">시작하기</h2>
+    <p class="en">Requirements: Apple Silicon Mac, Node 22+, Python 3.10–3.12, Claude Code logged in, a GLM-5.3-Flash Chat Completions endpoint and key.</p>
+    <p class="ko">필요한 것: Apple Silicon Mac, Node 22 이상, Python 3.10–3.12, 로그인된 Claude Code, GLM-5.3-Flash Chat Completions 엔드포인트와 키.</p>
+<pre>git clone https://github.com/cskwork/claude-voice-stack.git
+cd claude-voice-stack
+npm install
+npm run voice-agent -- setup        <span class="c"># venv + speech-to-speech + Whisper small + Supertonic + config.env</span>
+<span class="c"># fill VOICE_LLM_BASE_URL and VOICE_LLM_API_KEY in ~/.claude-voice-stack/config.env</span>
+npm run voice-agent -- doctor       <span class="c"># includes the GLM compatibility gate</span>
+npm run voice-agent -- start --tui</pre>
+    <table>
+      <tr><th><span class="en">Command</span><span class="ko">명령</span></th><th><span class="en">What it does</span><span class="ko">역할</span></th></tr>
+      <tr><td><code>voice-agent doctor</code></td><td><span class="en">OS, Node, venv, config, Claude login, audio devices, six GLM checks, running services. Non-zero exit on a missing requirement.</span><span class="ko">OS, Node, venv, 설정, Claude 로그인, 오디오 장치, GLM 검사 6개, 실행 중인 서비스. 필수 항목이 빠지면 0이 아닌 코드로 종료.</span></td></tr>
+      <tr><td><code>voice-agent start / stop / status</code></td><td><span class="en">Process manager for speech-to-speech and the Gateway, with component health and memory.</span><span class="ko">speech-to-speech와 Gateway 프로세스 관리, 구성 요소 상태와 메모리 표시.</span></td></tr>
+      <tr><td><code>npm run test:voice-stack</code></td><td><span class="en">Offline unit tests. <code>test:voice-stack:integration</code> runs the real local voice loop.</span><span class="ko">오프라인 단위 테스트. <code>test:voice-stack:integration</code>은 실제 로컬 음성 루프를 실행.</span></td></tr>
+    </table>
+  </section>
+
+  <footer>
+    <span class="tag">Apache-2.0</span><span class="tag">Apple Silicon</span><span class="tag">Fork of qwen-audio-agent</span>
+    <p class="en">Built on <a href="https://github.com/QwenAudio/qwen-audio-agent">qwen-audio-agent</a>, <a href="https://github.com/huggingface/speech-to-speech">speech-to-speech</a> and <a href="https://github.com/w-websoft/supertonic-tts">Supertonic</a>. Voice stays local; only transcribed text reaches the GLM endpoint.</p>
+    <p class="ko"><a href="https://github.com/QwenAudio/qwen-audio-agent">qwen-audio-agent</a>, <a href="https://github.com/huggingface/speech-to-speech">speech-to-speech</a>, <a href="https://github.com/w-websoft/supertonic-tts">Supertonic</a> 위에 만들었습니다. 음성은 로컬에 남고, 전사된 텍스트만 GLM 엔드포인트로 갑니다.</p>
+  </footer>
+</div>
+<script>
+  const body = document.body, button = document.getElementById('lang');
+  // localStorage can throw on file:// and in private windows; the toggle must still work.
+  const store = { get: () => { try { return localStorage.getItem('cvs-lang'); } catch { return null; } },
+                  set: v => { try { localStorage.setItem('cvs-lang', v); } catch { /* ignore */ } } };
+  const apply = lang => { body.dataset.lang = lang; document.documentElement.lang = lang; button.textContent = lang === 'en' ? '한국어' : 'English'; store.set(lang); };
+  apply(store.get() || (navigator.language.startsWith('ko') ? 'ko' : 'en'));
+  button.addEventListener('click', () => apply(body.dataset.lang === 'en' ? 'ko' : 'en'));
+</script>
+</body>
+</html>
