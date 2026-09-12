@@ -6,12 +6,15 @@ set -euo pipefail
 STACK_HOME="${CLAUDE_VOICE_STACK_HOME:-$HOME/.claude-voice-stack}"
 VENV="$STACK_HOME/venv-s2s"
 S2S_SPEC="${S2S_SPEC:-speech-to-speech[supertonic]==1.0.0}"
+STT_MODEL="${STT_MODEL:-mlx-community/whisper-large-v3-turbo}"
 PARAKEET_MODEL="${PARAKEET_MODEL:-mlx-community/parakeet-tdt-0.6b-v3}"
+WITH_PARAKEET=0
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SKIP_MODELS=0
 for arg in "$@"; do
   case "$arg" in
     --skip-models) SKIP_MODELS=1 ;;
+    --with-parakeet) WITH_PARAKEET=1 ;;
   esac
 done
 
@@ -68,11 +71,14 @@ ok "supertonic $("$VENV/bin/pip" show supertonic 2>/dev/null | awk '/^Version/{p
 "$VENV/bin/python" -c 'import speech_to_speech, supertonic, mlx_audio, sounddevice' || die "voice imports failed"
 
 if [[ "$SKIP_MODELS" -eq 0 ]]; then
-  "$VENV/bin/python" - "$PARAKEET_MODEL" <<'PY'
+  MODELS=("$STT_MODEL")
+  [[ "$WITH_PARAKEET" -eq 1 ]] && MODELS+=("$PARAKEET_MODEL")
+  "$VENV/bin/python" - "${MODELS[@]}" <<'PY'
 import sys
 from huggingface_hub import snapshot_download
-path = snapshot_download(sys.argv[1])
-print(f"✓ Parakeet assets: {path}")
+for model in sys.argv[1:]:
+    path = snapshot_download(model)
+    print(f"✓ STT assets: {model} -> {path}")
 PY
   "$VENV/bin/supertonic" download >/dev/null 2>&1 && ok "Supertonic assets" || warn "Supertonic assets download skipped (downloads on first start)"
 fi

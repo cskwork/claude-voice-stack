@@ -71,7 +71,7 @@ async function collectStatus(config) {
     stt: {
       label: 'STT',
       state: inProcess ? 'ready' : 'stopped',
-      detail: `${config.stt.backend}${config.stt.backend === 'parakeet-tdt' ? ' / MLX' : ''} (inside speech-to-speech)`,
+      detail: `${config.stt.backend === 'mlx-audio-whisper' ? 'Whisper large-v3-turbo' : config.stt.backend} / MLX (inside speech-to-speech)`,
     },
     llm: {
       label: 'Voice LLM',
@@ -116,10 +116,13 @@ async function doctor() {
   add('node', nodeMajor >= 22, `node ${process.versions.node}`)
   add('venv', existsSync(paths.python), paths.venv)
   add('speech-to-speech', existsSync(paths.speechToSpeechBin), paths.speechToSpeechBin)
-  const hfCache = resolve(process.env.HF_HOME || resolve(homedir(), '.cache/huggingface'), 'hub')
-  add('parakeet-assets', existsSync(resolve(hfCache, 'models--mlx-community--parakeet-tdt-0.6b-v3')),
-    'mlx-community/parakeet-tdt-0.6b-v3 cached (downloads on first start otherwise)', { required: false })
   const { config, errors, values } = loadConfig({ strict: false })
+  const hfCache = resolve(process.env.HF_HOME || resolve(homedir(), '.cache/huggingface'), 'hub')
+  const sttModel = config.stt.backend === 'parakeet-tdt'
+    ? 'mlx-community/parakeet-tdt-0.6b-v3'
+    : 'mlx-community/whisper-large-v3-turbo'
+  add('stt-assets', existsSync(resolve(hfCache, `models--${sttModel.replace('/', '--')}`)),
+    `${sttModel} cached (downloads on first start otherwise)`, { required: false })
   add('config', errors.length === 0, errors.length ? errors.join('; ') : paths.configPath)
   add('prompt', existsSync(resolve(repoRoot, values.QWEN_AUDIO_AGENT_FRONTEND_PROMPT_DIR || 'config/prompts/foreground-glm', 'PROMPT.md')),
     values.QWEN_AUDIO_AGENT_FRONTEND_PROMPT_DIR || 'config/prompts/foreground-glm')

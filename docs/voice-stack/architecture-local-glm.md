@@ -1,7 +1,7 @@
 # Architecture: local ears and voice, remote GLM router, Claude Code backend
 
 ```text
-Microphone ─► Silero VAD ─► Parakeet TDT (MLX) ─► GLM-5.3-Flash (HTTPS) ─┐
+Microphone ─► Silero VAD ─► Whisper v3-turbo (MLX) ► GLM-5.3-Flash (HTTPS) ─┐
                     speech-to-speech process (one pipeline)              │
 Speaker ◄─ Supertonic (in-process ONNX) ◄─ GLM spoken rendering ◄────────┘
                     ▲                                   │ OpenAI Realtime WS (127.0.0.1:8765)
@@ -87,9 +87,21 @@ running unless the user asks to cancel it, which GLM routes as CONTROL.
 | Claude unavailable | Gateway health `backend.ok=false`; `voice-agent status` shows Backend degraded; voice-only chat continues |
 | Claude task fails | Gateway injects the failure; prompt forbids turning "failed" into "completed" |
 
+## Logging and privacy
+
+speech-to-speech prints user and assistant transcripts to **stdout** through its
+rich console regardless of `--log_transcripts`; that flag only unlocks
+transcript text inside its `logging` output (stderr). `voice-agent start`
+therefore records only stderr in `~/.claude-voice-stack/logs/speech-to-speech.log`
+and discards stdout. `--debug-transcripts` passes `--log_transcripts` and
+captures stdout for that run. Error messages from the LLM provider are also
+hidden by speech-to-speech unless transcripts are enabled (`log_exception`), so
+a failing turn shows as `Response failed: chars=N` in normal logs.
+
 ## RAM strategy
 
-One speech-to-speech process holds Parakeet (about 0.6 B parameters), Silero VAD
-and Supertonic; nothing else loads a model. GLM runs remotely. Measure with
+One speech-to-speech process holds the STT model (Whisper large-v3-turbo by
+default, about 0.8 B parameters; Parakeet TDT 0.6 B for English-only sessions),
+Silero VAD, Smart Turn and Supertonic; nothing else loads a model. GLM runs remotely. Measure with
 `voice-agent status` (managed-process RSS) and the procedure in
 `ram-benchmark.md` before optimising anything.

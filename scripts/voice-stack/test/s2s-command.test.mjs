@@ -5,13 +5,14 @@ import { buildSpeechToSpeechCommand, buildSupertonicServeCommand } from '../lib/
 
 const base = { VOICE_LLM_BASE_URL: 'https://glm.example/v4', VOICE_LLM_API_KEY: 'secret-key-12345678' }
 
-test('default profile: Parakeet + chat-completions + in-process Supertonic, key only in env', () => {
+test('default profile: Whisper MLX + chat-completions + in-process Supertonic, key only in env', () => {
   const { config } = resolveVoiceConfig(base)
   const { command, args, env } = buildSpeechToSpeechCommand(config, { bin: '/venv/bin/speech-to-speech' })
   assert.equal(command, '/venv/bin/speech-to-speech')
   assert.equal(args[0], 'serve')
   const flag = name => args[args.indexOf(name) + 1]
-  assert.equal(flag('--stt'), 'parakeet-tdt')
+  assert.equal(flag('--stt'), 'mlx-audio-whisper')
+  assert.equal(flag('--language'), 'auto')
   assert.equal(flag('--llm_backend'), 'chat-completions')
   assert.equal(flag('--model_name'), 'glm-5.3-flash')
   assert.equal(flag('--responses_api_base_url'), 'https://glm.example/v4')
@@ -48,14 +49,14 @@ test('debug transcripts, reasoning effort, STT language and stream=false are hon
   const flag = name => args[args.indexOf(name) + 1]
   assert.ok(args.includes('--log_transcripts'))
   assert.equal(flag('--responses_api_reasoning_effort'), 'none')
-  assert.equal(flag('--parakeet_tdt_language'), 'ko')
+  assert.equal(flag('--language'), 'ko')
   assert.ok(args.includes('--no_responses_api_stream'))
 })
 
 test('whisper backends receive --language (auto unless pinned)', () => {
-  const auto = buildSpeechToSpeechCommand(resolveVoiceConfig({ ...base, VOICE_STT: 'mlx-audio-whisper' }).config).args
-  assert.equal(auto[auto.indexOf('--language') + 1], 'auto')
-  assert.ok(!auto.includes('--parakeet_tdt_language'))
+  const parakeet = buildSpeechToSpeechCommand(resolveVoiceConfig({ ...base, VOICE_STT: 'parakeet-tdt', VOICE_STT_LANGUAGE: 'en' }).config).args
+  assert.equal(parakeet[parakeet.indexOf('--parakeet_tdt_language') + 1], 'en')
+  assert.ok(!parakeet.includes('--language'))
   const ko = buildSpeechToSpeechCommand(resolveVoiceConfig({ ...base, VOICE_STT: 'mlx-audio-whisper', VOICE_STT_LANGUAGE: 'ko' }).config).args
   assert.equal(ko[ko.indexOf('--language') + 1], 'ko')
 })
