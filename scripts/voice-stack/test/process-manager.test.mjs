@@ -12,7 +12,7 @@ test('startDetached writes a pid, reuses a live process, and stopProcess termina
   const logPath = join(dir, 'svc.log')
   const first = startDetached({
     command: process.execPath,
-    args: ['-e', 'console.log("hello"); setInterval(() => {}, 1000)'],
+    args: ['-e', 'console.log("transcript"); console.error("hello"); setInterval(() => {}, 1000)'],
     logPath, pidPath,
   })
   t.after(() => stopProcess(pidPath))
@@ -23,11 +23,26 @@ test('startDetached writes a pid, reuses a live process, and stopProcess termina
   assert.deepEqual(second, { pid: first.pid, reused: true })
   const logged = await waitFor(async () => ({ ok: readFileSync(logPath, 'utf8').includes('hello') }), { timeoutMs: 5000, intervalMs: 50 })
   assert.ok(logged.ok)
+  assert.ok(!readFileSync(logPath, 'utf8').includes('transcript'), 'stdout must stay out of the log by default')
   const stopped = await stopProcess(pidPath, { timeoutMs: 3000 })
   assert.deepEqual(stopped, { pid: first.pid, stopped: true, wasRunning: true })
   assert.ok(!isRunning(first.pid))
   assert.equal(readPid(pidPath), null)
   assert.deepEqual(await stopProcess(pidPath), { pid: null, stopped: false, wasRunning: false })
+})
+
+test('startDetached captures stdout only when asked', async t => {
+  const dir = mkdtempSync(join(tmpdir(), 'voice-stack-pm-'))
+  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  const pidPath = join(dir, 'svc.pid')
+  const logPath = join(dir, 'svc.log')
+  startDetached({
+    command: process.execPath, args: ['-e', 'console.log("transcript"); setInterval(() => {}, 1000)'],
+    logPath, pidPath, captureStdout: true,
+  })
+  t.after(() => stopProcess(pidPath))
+  const logged = await waitFor(async () => ({ ok: readFileSync(logPath, 'utf8').includes('transcript') }), { timeoutMs: 5000, intervalMs: 50 })
+  assert.ok(logged.ok)
 })
 
 test('waitFor gives up after the timeout', async () => {

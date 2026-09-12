@@ -19,8 +19,11 @@ export function buildSpeechToSpeechCommand(config, {
     '--num_pipelines', String(s2s.pipelines),
     '--chat_size', String(llm.chatSize),
   ]
-  if (stt.backend === 'parakeet-tdt' && stt.language) {
-    args.push('--parakeet_tdt_language', stt.language)
+  if (stt.backend === 'parakeet-tdt') {
+    if (stt.language) args.push('--parakeet_tdt_language', stt.language)
+  } else {
+    // mlx-audio-whisper / whisper-mlx: per-utterance detection unless pinned.
+    args.push('--language', stt.language || 'auto')
   }
   const env = {}
   if (llm.remote) {
