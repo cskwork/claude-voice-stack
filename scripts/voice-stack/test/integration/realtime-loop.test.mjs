@@ -13,7 +13,7 @@ import test from 'node:test'
 import { promisify } from 'node:util'
 import { resolveVoiceConfig } from '../../lib/env.mjs'
 import { foregroundPrompt, routerTools } from '../../lib/glm-smoke.mjs'
-import { probeSpeechToSpeech } from '../../lib/health.mjs'
+import { formatBytes, probeSpeechToSpeech, processMemoryBytes } from '../../lib/health.mjs'
 import { repoRoot, stackPaths } from '../../lib/paths.mjs'
 import { isRunning, startDetached, stopProcess, waitFor } from '../../lib/process-manager.mjs'
 import { buildSpeechToSpeechCommand } from '../../lib/s2s-command.mjs'
@@ -47,8 +47,9 @@ function openRealtime(url) {
       const event = JSON.parse(message.data)
       events.push(event)
       if (event.type === 'error') process.stderr.write(`# realtime error: ${JSON.stringify(event.error || event)}\n`)
+      const index = events.length - 1
       for (const waiter of [...waiters]) {
-        if (waiter.match(event)) { waiters.splice(waiters.indexOf(waiter), 1); waiter.resolve(event) }
+        if (waiter.match(event, index)) { waiters.splice(waiters.indexOf(waiter), 1); waiter.resolve(event) }
       }
     })
     ws.addEventListener('error', reject)
@@ -59,7 +60,7 @@ function openRealtime(url) {
       next: (match, timeoutMs = 60_000) => new Promise((res, rej) => {
         const found = events.find(match)
         if (found) return res(found)
-        const timer = setTimeout(() => rej(new Error(`timed out waiting for event; last types: ${events.slice(-5).map(e => e.type).join(', ')}`)), timeoutMs)
+        const timer = setTimeout(() => rej(new Error(`timed out waiting for event; last events: ${events.slice(-12).map(e => e.type + (e.transcript ? `(${e.transcript})` : e.name ? `(${e.name})` : '')).join(', ')}`)), timeoutMs)
         waiters.push({ match, resolve: event => { clearTimeout(timer); res(event) } })
       }),
     }))
@@ -81,9 +82,12 @@ async function sendSpeech(client, pcm) {
 
 test('standalone voice loop: STT → mock router → tool call / TTS → cancel', { skip: !enabled && 'set VOICE_STACK_INTEGRATION=1 (needs the voice venv)' }, async t => {
   const dir = mkdtempSync(join(tmpdir(), 'voice-stack-it-'))
-  t.after(() => rmSync(dir, { recursive: true, force: true }))
   const provider = await startMockProvider()
   t.after(provider.close)
+  // A leftover server on the test port would silently serve the previous
+  // configuration; refuse instead of measuring the wrong thing.
+  const stale = await probeSpeechToSpeech(`http://127.0.0.1:${PORT}`)
+  assert.equal(stale.state, 'stopped', `port ${PORT} already serves speech-to-speech; stop it first`)
 
   const { config, errors } = resolveVoiceConfig({
     VOICE_LLM_BASE_URL: provider.baseUrl,
@@ -96,9 +100,16 @@ test('standalone voice loop: STT → mock router → tool call / TTS → cancel'
   // Test-only: transcripts in the scratch log make failures diagnosable.
   const spec = buildSpeechToSpeechCommand(config, { bin: paths.speechToSpeechBin, debugTranscripts: true })
   const pidPath = join(dir, 's2s.pid')
-  const logPath = join(dir, 's2s.log')
+  // Persistent log so a failed run can be inspected after cleanup.
+  const logPath = join(paths.logs, 'integration-speech-to-speech.log')
+  t.diagnostic(`speech-to-speech log: ${logPath}`)
   const started = startDetached({ ...spec, cwd: repoRoot, logPath, pidPath, captureStdout: true })
-  t.after(() => stopProcess(pidPath))
+  // One hook: stop the server first, then remove the scratch directory. Two
+  // hooks would let the pid file disappear before the stop runs.
+  t.after(async () => {
+    await stopProcess(pidPath)
+    rmSync(dir, { recursive: true, force: true })
+  })
   const ready = await waitFor(async () => {
     if (!isRunning(started.pid)) throw new Error(`speech-to-speech exited:\n${readFileSync(logPath, 'utf8').slice(-2000)}`)
     return { ok: (await probeSpeechToSpeech(config.s2s.httpBaseUrl)).state === 'ready' }
@@ -164,5 +175,6 @@ test('standalone voice loop: STT → mock router → tool call / TTS → cancel'
   await new Promise(resolve => setTimeout(resolve, 1500))
   const lateAudio = client.events.slice(doneIndex + 1).filter(e => e.type === 'response.output_audio.delta').length
   t.diagnostic(`audio deltas after cancel: ${lateAudio}`)
+  t.diagnostic(`speech-to-speech RSS after the loop: ${formatBytes(await processMemoryBytes([started.pid]))}`)
   assert.ok(lateAudio <= 2, `audio kept flowing after cancel (${lateAudio} deltas)`)
 })

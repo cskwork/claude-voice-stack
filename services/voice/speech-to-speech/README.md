@@ -13,7 +13,7 @@ pip install "speech-to-speech[supertonic]==1.0.0"
 ```bash
 speech-to-speech serve \
   --host 127.0.0.1 --port 8765 \
-  --stt parakeet-tdt \
+  --stt mlx-audio-whisper --language auto \
   --llm_backend chat-completions --model_name glm-5.3-flash \
   --responses_api_base_url "$VOICE_LLM_BASE_URL" --responses_api_stream \
   --tts supertonic --supertonic_tts_voice M1 --supertonic_tts_lang na --supertonic_tts_speed 1.0 \

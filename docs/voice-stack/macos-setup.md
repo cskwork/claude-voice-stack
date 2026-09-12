@@ -18,7 +18,7 @@ npm run voice-agent -- setup
 ```
 
 `setup` creates `~/.claude-voice-stack/venv-s2s`, installs
-`speech-to-speech[supertonic]==1.0.0`, pre-downloads the Parakeet TDT model, builds
+`speech-to-speech[supertonic]==1.0.0`, pre-downloads the Whisper large-v3-turbo MLX model, builds
 the WebUI, and writes `~/.claude-voice-stack/config.env` from
 `config/profiles/glm-supertonic-claude.env.example` (mode 600). It never prints secrets.
 
@@ -64,8 +64,11 @@ script form works without it.
   and several GB of extra memory.
 - `VOICE_TTS_MODE=openai-http`: run Supertonic as a separate HTTP server
   (`services/voice/supertonic/README.md`).
-- `VOICE_STT=whisper-mlx`: try Whisper if Parakeet's Korean accuracy is not
-  good enough in your recordings (`ram-benchmark.md` records the comparison).
+- `VOICE_STT=parakeet-tdt`: smaller, faster STT for English-only sessions
+  (`voice-agent setup --with-parakeet` pre-downloads it). Measured on
+  2026-09-13: Parakeet TDT v3 transcribes Korean as garbage (it detects
+  Lithuanian/German), Whisper large-v3-turbo transcribed the Korean test
+  sentence exactly. That measurement is why Whisper is the default.
 
 ## Pinned versions (verified 2026-09-13)
 
@@ -75,7 +78,8 @@ script form works without it.
 | speech-to-speech | 1.0.0 |
 | supertonic | 1.3.1 |
 | mlx-audio | 0.4.7 |
-| Parakeet | mlx-community/parakeet-tdt-0.6b-v3 |
+| STT (default) | mlx-community/whisper-large-v3-turbo |
+| STT (English-only option) | mlx-community/parakeet-tdt-0.6b-v3 |
 | claude-code-acp | @zed-industries/claude-code-acp@0.16.2 (upstream launcher default) |
 | Node | 22.22.3 |
 | Python | 3.12.11 |

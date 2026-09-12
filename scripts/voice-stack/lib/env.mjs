@@ -68,7 +68,7 @@ export function resolveVoiceConfig(env = {}) {
   if (!TTS_MODES.includes(ttsMode)) {
     errors.push(`VOICE_TTS_MODE must be one of ${TTS_MODES.join(', ')}`)
   }
-  const stt = text(env.VOICE_STT, 'parakeet-tdt')
+  const stt = text(env.VOICE_STT, 'mlx-audio-whisper')
   if (!STT_BACKENDS.includes(stt)) {
     errors.push(`VOICE_STT must be one of ${STT_BACKENDS.join(', ')}`)
   }

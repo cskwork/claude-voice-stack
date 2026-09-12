@@ -16,8 +16,10 @@ Run `npm run voice-agent -- doctor` first. Logs live in `~/.claude-voice-stack/l
 | Claude never asks for permission / edits immediately | `QWEN_AUDIO_AGENT_BACKEND_PERMISSION_MODE` must be `native`; also check Claude Code's own settings for the workspace. |
 | Speech cut off while talking | Increase `--live_transcription_min_silence_ms` in `lib/s2s-command.mjs` (default 500 ms) or use headphones. |
 | Assistant hears itself | Use headphones or enable macOS voice isolation on the input device. |
-| Korean transcripts poor | Set `VOICE_STT_LANGUAGE=ko` for Korean-only sessions; compare `VOICE_STT=whisper-mlx`. |
+| Korean transcripts poor or gibberish | Make sure `VOICE_STT=mlx-audio-whisper` (Parakeet has no Korean). Pin `VOICE_STT_LANGUAGE=ko` for Korean-only sessions. |
 | Interrupting speech cancelled my Claude task | It should not: barge-in only cancels the Realtime response. If a task was cancelled, GLM routed "stop" as CONTROL; say "stop talking" instead of "stop that". |
+| `Response failed: chars=NN` in the log, no detail | speech-to-speech hides provider error text unless transcripts are enabled. Re-run once with `voice-agent start --debug-transcripts` to read the message (often a 401/404 from the GLM endpoint). |
+| Integration test says `port 18765 already serves speech-to-speech` | A previous test run left its server behind. Find it with `lsof -nP -iTCP:18765 -sTCP:LISTEN`, stop it, or run with `VOICE_STACK_TEST_PORT=18766`. |
 | `voice-agent stop` leaves a process | Pids are in `~/.claude-voice-stack/run/`; the stop sends SIGTERM to the process group, then SIGKILL after 10 s. |
 
 Transcripts are not logged. For a single debugging run: `voice-agent start --debug-transcripts`.
