@@ -43,3 +43,6 @@ sidecars/tsnet/dist/
 docs/.vitepress/dist/
 docs/.vitepress/cache/
 docs/.vitepress/.site/
+
+# lightning-whisper-mlx downloads weights into the working directory; the stack runs from ~/.claude-voice-stack
+mlx_models/

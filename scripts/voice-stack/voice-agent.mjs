@@ -71,7 +71,7 @@ async function collectStatus(config) {
     stt: {
       label: 'STT',
       state: inProcess ? 'ready' : 'stopped',
-      detail: `${config.stt.backend === 'mlx-audio-whisper' ? 'Whisper large-v3-turbo' : config.stt.backend} / MLX (inside speech-to-speech)`,
+      detail: `${config.stt.backend === 'whisper-mlx' ? `Whisper ${config.stt.model}` : config.stt.model.replace(/^mlx-community\//, '')} / MLX (inside speech-to-speech)`,
     },
     llm: {
       label: 'Voice LLM',
@@ -118,11 +118,10 @@ async function doctor() {
   add('speech-to-speech', existsSync(paths.speechToSpeechBin), paths.speechToSpeechBin)
   const { config, errors, values } = loadConfig({ strict: false })
   const hfCache = resolve(process.env.HF_HOME || resolve(homedir(), '.cache/huggingface'), 'hub')
-  const sttModel = config.stt.backend === 'parakeet-tdt'
-    ? 'mlx-community/parakeet-tdt-0.6b-v3'
-    : 'mlx-community/whisper-large-v3-turbo'
-  add('stt-assets', existsSync(resolve(hfCache, `models--${sttModel.replace('/', '--')}`)),
-    `${sttModel} cached (downloads on first start otherwise)`, { required: false })
+  const sttAsset = config.stt.backend === 'whisper-mlx'
+    ? resolve(paths.home, 'mlx_models', config.stt.model, 'weights.npz')
+    : resolve(hfCache, `models--${config.stt.model.replace('/', '--')}`)
+  add('stt-assets', existsSync(sttAsset), `${sttAsset} (downloads on first start otherwise)`, { required: false })
   add('config', errors.length === 0, errors.length ? errors.join('; ') : paths.configPath)
   add('prompt', existsSync(resolve(repoRoot, values.QWEN_AUDIO_AGENT_FRONTEND_PROMPT_DIR || 'config/prompts/foreground-glm', 'PROMPT.md')),
     values.QWEN_AUDIO_AGENT_FRONTEND_PROMPT_DIR || 'config/prompts/foreground-glm')
@@ -203,8 +202,9 @@ async function start() {
   }
 
   const s2sSpec = buildSpeechToSpeechCommand(config, { bin: paths.speechToSpeechBin, debugTranscripts })
+  // cwd = stack home: lightning-whisper-mlx stores weights under ./mlx_models.
   const s2s = startDetached({
-    ...s2sSpec, cwd: repoRoot, logPath: paths.log('speech-to-speech'), pidPath: paths.pid('speech-to-speech'),
+    ...s2sSpec, cwd: paths.home, logPath: paths.log('speech-to-speech'), pidPath: paths.pid('speech-to-speech'),
     captureStdout: debugTranscripts,
   })
   log(`${s2s.reused ? '=' : '+'} speech-to-speech pid ${s2s.pid} (log: ${paths.log('speech-to-speech')})`)

@@ -68,7 +68,7 @@ export function resolveVoiceConfig(env = {}) {
   if (!TTS_MODES.includes(ttsMode)) {
     errors.push(`VOICE_TTS_MODE must be one of ${TTS_MODES.join(', ')}`)
   }
-  const stt = text(env.VOICE_STT, 'mlx-audio-whisper')
+  const stt = text(env.VOICE_STT, 'whisper-mlx')
   if (!STT_BACKENDS.includes(stt)) {
     errors.push(`VOICE_STT must be one of ${STT_BACKENDS.join(', ')}`)
   }
@@ -89,6 +89,10 @@ export function resolveVoiceConfig(env = {}) {
     },
     stt: {
       backend: stt,
+      // Whisper small (lightning-whisper-mlx) covers Korean and English at ~1.5 GB RSS for the whole pipeline.
+      model: text(env.VOICE_STT_MODEL, stt === 'parakeet-tdt'
+        ? 'mlx-community/parakeet-tdt-0.6b-v3'
+        : stt === 'whisper-mlx' ? 'small' : 'mlx-community/whisper-small-mlx'),
       language: text(env.VOICE_STT_LANGUAGE),
     },
     tts: {

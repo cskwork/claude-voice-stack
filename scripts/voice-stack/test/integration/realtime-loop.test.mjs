@@ -14,7 +14,7 @@ import { promisify } from 'node:util'
 import { resolveVoiceConfig } from '../../lib/env.mjs'
 import { foregroundPrompt, routerTools } from '../../lib/glm-smoke.mjs'
 import { formatBytes, probeSpeechToSpeech, processMemoryBytes } from '../../lib/health.mjs'
-import { repoRoot, stackPaths } from '../../lib/paths.mjs'
+import { stackPaths } from '../../lib/paths.mjs'
 import { isRunning, startDetached, stopProcess, waitFor } from '../../lib/process-manager.mjs'
 import { buildSpeechToSpeechCommand } from '../../lib/s2s-command.mjs'
 import { MOCK_KEY, startMockProvider } from '../helpers/mock-provider.mjs'
@@ -93,17 +93,19 @@ test('standalone voice loop: STT → mock router → tool call / TTS → cancel'
     VOICE_LLM_BASE_URL: provider.baseUrl,
     VOICE_LLM_API_KEY: MOCK_KEY,
     VOICE_S2S_PORT: String(PORT),
-    VOICE_STT: process.env.VOICE_STACK_TEST_STT || 'mlx-audio-whisper',
+    VOICE_STT: process.env.VOICE_STACK_TEST_STT || 'whisper-mlx',
+    VOICE_STT_MODEL: process.env.VOICE_STACK_TEST_STT_MODEL || '',
+    VOICE_STT_LANGUAGE: process.env.VOICE_STACK_TEST_STT_LANGUAGE || '',
   })
   assert.deepEqual(errors, [])
-  t.diagnostic(`STT backend: ${config.stt.backend}`)
+  t.diagnostic(`STT backend: ${config.stt.backend} ${config.stt.model} language=${config.stt.language || 'auto'}`)
   // Test-only: transcripts in the scratch log make failures diagnosable.
   const spec = buildSpeechToSpeechCommand(config, { bin: paths.speechToSpeechBin, debugTranscripts: true })
   const pidPath = join(dir, 's2s.pid')
   // Persistent log so a failed run can be inspected after cleanup.
   const logPath = join(paths.logs, 'integration-speech-to-speech.log')
   t.diagnostic(`speech-to-speech log: ${logPath}`)
-  const started = startDetached({ ...spec, cwd: repoRoot, logPath, pidPath, captureStdout: true })
+  const started = startDetached({ ...spec, cwd: paths.home, logPath, pidPath, captureStdout: true })
   // One hook: stop the server first, then remove the scratch directory. Two
   // hooks would let the pid file disappear before the stop runs.
   t.after(async () => {

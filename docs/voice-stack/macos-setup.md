@@ -18,7 +18,7 @@ npm run voice-agent -- setup
 ```
 
 `setup` creates `~/.claude-voice-stack/venv-s2s`, installs
-`speech-to-speech[supertonic]==1.0.0`, pre-downloads the Whisper large-v3-turbo MLX model, builds
+`speech-to-speech[supertonic,whisper-mlx]==1.0.0`, pre-downloads Whisper small into `~/.claude-voice-stack/mlx_models/small`, builds
 the WebUI, and writes `~/.claude-voice-stack/config.env` from
 `config/profiles/glm-supertonic-claude.env.example` (mode 600). It never prints secrets.
 
@@ -67,8 +67,9 @@ script form works without it.
 - `VOICE_STT=parakeet-tdt`: smaller, faster STT for English-only sessions
   (`voice-agent setup --with-parakeet` pre-downloads it). Measured on
   2026-09-13: Parakeet TDT v3 transcribes Korean as garbage (it detects
-  Lithuanian/German), Whisper large-v3-turbo transcribed the Korean test
-  sentence exactly. That measurement is why Whisper is the default.
+  Lithuanian/German); Whisper small transcribed both test sentences exactly
+  with auto language detection. That measurement is why Whisper small is the
+  default. Keep `VOICE_STT_LANGUAGE` empty for mixed Korean/English.
 
 ## Pinned versions (verified 2026-09-13)
 
@@ -78,7 +79,7 @@ script form works without it.
 | speech-to-speech | 1.0.0 |
 | supertonic | 1.3.1 |
 | mlx-audio | 0.4.7 |
-| STT (default) | mlx-community/whisper-large-v3-turbo |
+| STT (default) | whisper-mlx `small` (mlx-community/whisper-small-mlx via lightning-whisper-mlx 0.0.10) |
 | STT (English-only option) | mlx-community/parakeet-tdt-0.6b-v3 |
 | claude-code-acp | @zed-industries/claude-code-acp@0.16.2 (upstream launcher default) |
 | Node | 22.22.3 |

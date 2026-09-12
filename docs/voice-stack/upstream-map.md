@@ -46,7 +46,7 @@ Installed via pipx (`~/.local/bin/supertonic`) and inside the voice venv. `super
 
 ## Decisions taken from the map
 
-0. STT default is `mlx-audio-whisper` (whisper-large-v3-turbo through mlx-audio, built into speech-to-speech on macOS). Parakeet TDT v3 was measured to have no Korean support (see `ram-benchmark.md`), so it stays an English-only option.
+0. STT default is `whisper-mlx` (lightning-whisper-mlx, extra `whisper-mlx`) with size `small`. `mlx-audio-whisper` is unusable for small models in speech-to-speech 1.0.0: `STT/mlx_audio_whisper_handler.py` maps unknown repo ids to the `openai/whisper-large-v3` processor, whose tokenizer does not match. Parakeet TDT v3 was measured to have no Korean support (see `ram-benchmark.md`), so it stays an English-only option.
 1. No Gateway code change is needed for the MVP (PRD open question 7). Everything is configuration, prompt, and process management.
 2. Delegation constraints ride inside `spawn_thinking.objective` in a fixed textual shape ("Goal … Mode … Constraints …") because the upstream tool schema has no structured field and changing it would fork `server/`. The GLM gate asserts the restriction survives.
 3. Result normalisation stays upstream: the Gateway already injects a result item plus speech-only instructions; the profile prompt limits what GLM says.

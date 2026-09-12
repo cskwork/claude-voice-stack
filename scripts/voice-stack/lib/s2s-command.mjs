@@ -24,6 +24,9 @@ export function buildSpeechToSpeechCommand(config, {
   } else {
     // mlx-audio-whisper / whisper-mlx: per-utterance detection unless pinned.
     args.push('--language', stt.language || 'auto')
+    if (stt.backend === 'mlx-audio-whisper') args.push('--mlx_audio_whisper_model_name', stt.model)
+    // lightning-whisper-mlx resolves size names (small, base, …) to mlx-community repos itself.
+    if (stt.backend === 'whisper-mlx') args.push('--stt_model_name', stt.model)
   }
   const env = {}
   if (llm.remote) {
