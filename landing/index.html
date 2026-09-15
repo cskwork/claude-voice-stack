@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>claude-voice-stack — a local-first voice frontend for Claude Code</title>
-<meta name="description" content="Talk to Claude Code. Whisper small and Supertonic run on your Mac; GLM-5.3-Flash routes the conversation; Claude Code does the work.">
+<title>claude-voice-stack — a local-first voice frontend for Claude Code, Codex and Pi</title>
+<meta name="description" content="Talk to Claude Code, Codex or Pi. Whisper small and Supertonic run on your Mac; GLM-5.3-Flash routes the conversation; your selected agent does the work.">
 <style>
   :root {
     --bg: #0b0d10; --panel: #13161b; --line: #232830; --text: #e8eaed; --muted: #9aa3ad;
@@ -63,10 +63,10 @@
   </header>
 
   <div class="hero">
-    <h1 class="en">Talk to <em>Claude Code</em>.<br>Your Mac does the listening and speaking.</h1>
-    <h1 class="ko"><em>Claude Code</em>와 말로 일하세요.<br>듣고 말하는 일은 내 Mac이 맡습니다.</h1>
-    <p class="en">A fork of qwen-audio-agent that replaces the cloud voice model with a small local stack: Silero VAD, Whisper small (MLX) and Supertonic run on Apple Silicon, GLM-5.3-Flash routes the conversation, and Claude Code stays the only agent that touches your code.</p>
-    <p class="ko">qwen-audio-agent를 포크해 클라우드 음성 모델 대신 가벼운 로컬 스택을 앞에 둡니다. Silero VAD, Whisper small(MLX), Supertonic은 Apple Silicon에서 돌고, GLM-5.3-Flash가 대화를 라우팅하며, 코드를 만지는 에이전트는 Claude Code 하나뿐입니다.</p>
+    <h1 class="en">Talk to your <em>coding agent</em>.<br>Your Mac does the listening and speaking.</h1>
+    <h1 class="ko"><em>코딩 에이전트</em>와 말로 일하세요.<br>듣고 말하는 일은 내 Mac이 맡습니다.</h1>
+    <p class="en">A fork of qwen-audio-agent that replaces the cloud voice model with a small local stack: Silero VAD, Whisper small (MLX) and Supertonic run on Apple Silicon, GLM-5.3-Flash routes the conversation, and your choice of Claude Code, Codex or Pi handles the code.</p>
+    <p class="ko">qwen-audio-agent를 포크해 클라우드 음성 모델 대신 가벼운 로컬 스택을 앞에 둡니다. Silero VAD, Whisper small(MLX), Supertonic은 Apple Silicon에서 돌고, GLM-5.3-Flash가 대화를 라우팅하며, Claude Code, Codex, Pi 중 선택한 에이전트가 코드를 다룹니다.</p>
     <div class="cta">
       <a class="btn primary" href="#start"><span class="en">Set up in one command</span><span class="ko">한 줄로 설치하기</span></a>
       <a class="btn" href="https://github.com/cskwork/claude-voice-stack/blob/main/docs/voice-stack/macos-setup.md"><span class="en">Read the manual</span><span class="ko">매뉴얼 읽기</span></a>
@@ -81,14 +81,14 @@
    ↓ Whisper small · MLX             <span class="c">local STT, Korean + English</span>
    ↓ GLM-5.3-Flash                   <span class="c">remote router: talk, delegate, control</span>
    ↓ qwen-audio-agent Gateway        <span class="c">tasks, permissions, TUI / Web / Desktop</span>
-   ↓ claude-code-acp → <span class="k">Claude Code</span>   <span class="c">repository, shell, tests, MCP, skills</span>
+   ↓ ACP adapter → <span class="k">Claude Code / Codex / Pi</span>
    ↓ GLM-5.3-Flash                   <span class="c">one to three spoken sentences</span>
    ↓ Supertonic                      <span class="c">local TTS</span>
 Speaker</pre>
     <div class="grid">
       <div class="card"><h3 class="en">Spend RAM on speech, not on duplicate reasoning</h3><h3 class="ko">RAM은 음성에, 추론 중복에는 쓰지 않습니다</h3><p class="en">No local general-purpose LLM. One speech pipeline holds Whisper small, VAD and Supertonic; the router runs remotely.</p><p class="ko">로컬 범용 LLM이 없습니다. 음성 파이프라인 하나가 Whisper small, VAD, Supertonic을 들고 있고 라우터는 원격에서 돕니다.</p></div>
-      <div class="card"><h3 class="en">Claude Code unchanged</h3><h3 class="ko">Claude Code는 그대로</h3><p class="en">Same login, model, MCP servers, skills and native permission prompts. GLM never gets a shell or a file.</p><p class="ko">로그인, 모델, MCP 서버, 스킬, 권한 프롬프트가 그대로입니다. GLM은 셸이나 파일에 접근하지 않습니다.</p></div>
-      <div class="card"><h3 class="en">Interrupt freely</h3><h3 class="ko">언제든 끼어들기</h3><p class="en">Speaking over the assistant stops playback within the pipeline. The Claude task keeps running unless you cancel it.</p><p class="ko">말하는 도중 끼어들면 재생만 멈춥니다. 취소를 말하지 않는 한 Claude 작업은 계속됩니다.</p></div>
+      <div class="card"><h3 class="en">Choose your agent</h3><h3 class="ko">에이전트를 선택하세요</h3><p class="en">Set AGENT_PROTOCOL to claude, codex or pi. Claude and Codex keep native approvals. Pi has no approval prompts or Gateway MCP tools.</p><p class="ko">AGENT_PROTOCOL을 claude, codex, pi 중 하나로 설정하세요. Claude와 Codex는 기본 승인 방식을 유지합니다. Pi는 승인 창과 Gateway MCP 도구를 지원하지 않습니다.</p></div>
+      <div class="card"><h3 class="en">Interrupt freely</h3><h3 class="ko">언제든 끼어들기</h3><p class="en">Speaking over the assistant stops playback within the pipeline. The agent task keeps running unless you cancel it.</p><p class="ko">말하는 도중 끼어들면 재생만 멈춥니다. 취소를 말하지 않는 한 에이전트 작업은 계속됩니다.</p></div>
       <div class="card"><h3 class="en">Constraints survive the trip</h3><h3 class="ko">제약 조건이 끝까지 전달됩니다</h3><p class="en">"Inspect only, don't edit" is written into the delegation objective and checked by the GLM compatibility gate.</p><p class="ko">"조사만 하고 수정하지 마"가 위임 목표에 그대로 적히고, GLM 호환성 게이트가 이를 검사합니다.</p></div>
     </div>
   </section>
@@ -107,18 +107,19 @@ Speaker</pre>
 
   <section id="start">
     <h2 class="en">Start</h2><h2 class="ko">시작하기</h2>
-    <p class="en">Requirements: Apple Silicon Mac, Node 22+, Python 3.10–3.12, Claude Code logged in, a GLM-5.3-Flash Chat Completions endpoint and key.</p>
-    <p class="ko">필요한 것: Apple Silicon Mac, Node 22 이상, Python 3.10–3.12, 로그인된 Claude Code, GLM-5.3-Flash Chat Completions 엔드포인트와 키.</p>
+    <p class="en">Requirements: Apple Silicon Mac, Node 22+, Python 3.10–3.12, Claude Code, Codex or Pi authenticated, a GLM-5.3-Flash Chat Completions endpoint and key.</p>
+    <p class="ko">필요한 것: Apple Silicon Mac, Node 22 이상, Python 3.10–3.12, 인증을 마친 Claude Code, Codex 또는 Pi, GLM-5.3-Flash Chat Completions 엔드포인트와 키.</p>
 <pre>git clone https://github.com/cskwork/claude-voice-stack.git
 cd claude-voice-stack
 npm install
 npm run voice-agent -- setup        <span class="c"># venv + speech-to-speech + Whisper small + Supertonic + config.env</span>
 <span class="c"># fill VOICE_LLM_BASE_URL and VOICE_LLM_API_KEY in ~/.claude-voice-stack/config.env</span>
+<span class="c"># set AGENT_PROTOCOL=claude, codex, or pi in config.env</span>
 npm run voice-agent -- doctor       <span class="c"># includes the GLM compatibility gate</span>
 npm run voice-agent -- start --tui</pre>
     <table>
       <tr><th><span class="en">Command</span><span class="ko">명령</span></th><th><span class="en">What it does</span><span class="ko">역할</span></th></tr>
-      <tr><td><code>voice-agent doctor</code></td><td><span class="en">OS, Node, venv, config, Claude login, audio devices, six GLM checks, running services. Non-zero exit on a missing requirement.</span><span class="ko">OS, Node, venv, 설정, Claude 로그인, 오디오 장치, GLM 검사 6개, 실행 중인 서비스. 필수 항목이 빠지면 0이 아닌 코드로 종료.</span></td></tr>
+      <tr><td><code>voice-agent doctor</code></td><td><span class="en">OS, Node, venv, config, selected agent login, audio devices, six GLM checks, running services. Non-zero exit on a missing requirement.</span><span class="ko">OS, Node, venv, 설정, 선택한 에이전트의 인증, 오디오 장치, GLM 검사 6개, 실행 중인 서비스. 필수 항목이 빠지면 0이 아닌 코드로 종료.</span></td></tr>
       <tr><td><code>voice-agent start / stop / status</code></td><td><span class="en">Process manager for speech-to-speech and the Gateway, with component health and memory.</span><span class="ko">speech-to-speech와 Gateway 프로세스 관리, 구성 요소 상태와 메모리 표시.</span></td></tr>
       <tr><td><code>npm run test:voice-stack</code></td><td><span class="en">Offline unit tests. <code>test:voice-stack:integration</code> runs the real local voice loop.</span><span class="ko">오프라인 단위 테스트. <code>test:voice-stack:integration</code>은 실제 로컬 음성 루프를 실행.</span></td></tr>
     </table>

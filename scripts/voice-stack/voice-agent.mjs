@@ -6,13 +6,14 @@ import { existsSync, mkdirSync, copyFileSync, chmodSync } from 'node:fs'
 import { arch, platform, homedir } from 'node:os'
 import { resolve } from 'node:path'
 import { readEnvFile, resolveVoiceConfig } from './lib/env.mjs'
+import { backendHealth, gatewayEnvironment, voiceBackend } from './lib/backend.mjs'
 import { formatSmokeResults, runGlmSmoke } from './lib/glm-smoke.mjs'
 import {
   aggregateHealth,
   formatBytes,
   formatHealth,
   probeAudioDevices,
-  probeClaude,
+  probeBackend,
   probeGateway,
   probeHttp,
   probeSpeechToSpeech,
@@ -45,20 +46,14 @@ function loadConfig({ strict = true } = {}) {
   return { config, errors, values: file.values, env: merged }
 }
 
-// Env forwarded to the Gateway: the profile file plus the resolved prompt
-// directory. Existing shell variables keep precedence (upstream semantics).
-function gatewayEnvironment(values) {
-  return { ...values, ...process.env }
-}
-
-async function collectStatus(config) {
+async function collectStatus(config, env) {
   const s2sPid = readPid(paths.pid('speech-to-speech'))
   const gatewayPid = readPid(paths.pid('gateway'))
   const supertonicPid = readPid(paths.pid('supertonic'))
-  const [gateway, s2s, claude, audio] = await Promise.all([
+  const [gateway, s2s, backend, audio] = await Promise.all([
     probeGateway(config.gateway.baseUrl),
     probeSpeechToSpeech(config.s2s.httpBaseUrl),
-    probeClaude(),
+    probeBackend(config.agentProtocol, { env }),
     existsSync(paths.python) ? probeAudioDevices(paths.python) : Promise.resolve({
       microphone: { state: 'failed', detail: 'venv missing' },
       speaker: { state: 'failed', detail: 'venv missing' },
@@ -87,22 +82,18 @@ async function collectStatus(config) {
         ? `Supertonic ${config.tts.voice} (inside speech-to-speech)`
         : `Supertonic HTTP ${config.tts.baseUrl}`,
     },
-    backend: { label: 'Backend', ...claude, detail: `Claude Code; ${claude.detail}` },
+    backend: backendHealth(config.agentProtocol, backend, gateway),
     microphone: { label: 'Microphone', ...audio.microphone, required: false },
     speaker: { label: 'Speaker', ...audio.speaker, required: false },
-  }
-  if (gateway.state === 'ready' && gateway.backend) {
-    const ok = gateway.backend.ok !== false
-    components.backend.state = ok ? 'ready' : 'degraded'
-    components.backend.detail = `Claude Code via Gateway (${ok ? 'connected' : 'not connected'}); ${claude.detail}`
   }
   const memory = await processMemoryBytes([s2sPid, gatewayPid, supertonicPid])
   return { components, memory, pids: { s2sPid, gatewayPid, supertonicPid } }
 }
 
 async function status() {
-  const { config } = loadConfig({ strict: false })
-  const { components, memory } = await collectStatus(config)
+  const { config, errors, env } = loadConfig({ strict: false })
+  const { components, memory } = await collectStatus(config, env)
+  if (errors.length) components.config = { label: 'Config', state: 'failed', detail: errors.join('; ') }
   log(formatHealth(components))
   log(`${'Memory'.padEnd(18)}${formatBytes(memory)} managed processes (diagnostic only)`)
   log(`${'Overall'.padEnd(18)}${aggregateHealth(components)}`)
@@ -116,7 +107,7 @@ async function doctor() {
   add('node', nodeMajor >= 22, `node ${process.versions.node}`)
   add('venv', existsSync(paths.python), paths.venv)
   add('speech-to-speech', existsSync(paths.speechToSpeechBin), paths.speechToSpeechBin)
-  const { config, errors, values } = loadConfig({ strict: false })
+  const { config, errors, values, env } = loadConfig({ strict: false })
   const hfCache = resolve(process.env.HF_HOME || resolve(homedir(), '.cache/huggingface'), 'hub')
   const sttAsset = config.stt.backend === 'whisper-mlx'
     ? resolve(paths.home, 'mlx_models', config.stt.model, 'weights.npz')
@@ -125,9 +116,11 @@ async function doctor() {
   add('config', errors.length === 0, errors.length ? errors.join('; ') : paths.configPath)
   add('prompt', existsSync(resolve(repoRoot, values.QWEN_AUDIO_AGENT_FRONTEND_PROMPT_DIR || 'config/prompts/foreground-glm', 'PROMPT.md')),
     values.QWEN_AUDIO_AGENT_FRONTEND_PROMPT_DIR || 'config/prompts/foreground-glm')
-  const claude = await probeClaude()
-  add('claude-code', claude.state === 'ready', claude.detail)
-  add('claude-code-acp', true, 'resolved by upstream launcher (scripts/runtime/claude-code-acp.mjs) at first task')
+  const backend = voiceBackend(config.agentProtocol, env)
+  const backendProbe = await probeBackend(config.agentProtocol, { env })
+  add(config.agentProtocol, backendProbe.state === 'ready', backendProbe.detail)
+  if (backend) add(`${backend.id}-acp-launcher`, existsSync(resolve(repoRoot, backend.launcher)),
+    `${backend.launcher}; adapter starts on demand, connection not checked here`)
   if (existsSync(paths.python)) {
     const audio = await probeAudioDevices(paths.python)
     add('microphone', audio.microphone.state === 'ready', audio.microphone.detail, { required: false })
@@ -174,7 +167,16 @@ async function smokeGlm() {
 }
 
 async function start() {
-  const { config, values } = loadConfig()
+  const { config, values, env } = loadConfig()
+  // A live Gateway retains its backend. Never silently reuse a different agent.
+  const existingGateway = await probeGateway(config.gateway.baseUrl)
+  if (existingGateway.state === 'ready' && existingGateway.backend?.protocol !== config.agentProtocol) {
+    fail(`Gateway uses ${existingGateway.backend?.protocol || 'an unknown backend'}, configured ${config.agentProtocol}. Run voice-agent stop, then start.`)
+  }
+  const backend = voiceBackend(config.agentProtocol, env)
+  const backendProbe = await probeBackend(config.agentProtocol, { env })
+  if (backendProbe.state === 'failed') fail(`${backend.label}: ${backendProbe.detail}`)
+  log(`Backend: ${backend.label}; ${backendProbe.detail}`)
   mkdirSync(paths.logs, { recursive: true })
   mkdirSync(paths.run, { recursive: true })
   const debugTranscripts = flags.has('--debug-transcripts')
@@ -225,7 +227,7 @@ async function start() {
   const gateway = startDetached({
     command: process.execPath,
     args: [resolve(repoRoot, 'scripts/start.mjs')],
-    env: gatewayEnvironment(values),
+    env: gatewayEnvironment(config, env),
     cwd: repoRoot,
     logPath: paths.log('gateway'),
     pidPath: paths.pid('gateway'),
@@ -245,7 +247,7 @@ async function start() {
   await status()
   if (flags.has('--tui')) {
     log('\nLaunching TUI (Ctrl+C leaves the services running; use voice-agent stop).')
-    const tui = spawn('npm', ['run', 'tui'], { cwd: repoRoot, stdio: 'inherit', env: gatewayEnvironment(values) })
+    const tui = spawn('npm', ['run', 'tui'], { cwd: repoRoot, stdio: 'inherit', env: gatewayEnvironment(config, env) })
     await new Promise(resolvePromise => tui.on('exit', resolvePromise))
   } else {
     log(`\nGateway: ${config.gateway.baseUrl}   TUI: npm run tui   Stop: voice-agent stop`)
@@ -271,7 +273,7 @@ function setup() {
       chmodSync(paths.configPath, 0o600)
     }
     log(`\nConfiguration: ${paths.configPath}`)
-    log('Fill in VOICE_LLM_BASE_URL and VOICE_LLM_API_KEY, then run: voice-agent doctor && voice-agent start')
+    log('Fill in VOICE_LLM_BASE_URL and VOICE_LLM_API_KEY. Select AGENT_PROTOCOL=claude, codex, or pi; then run: voice-agent doctor && voice-agent start')
   })
 }
 
@@ -279,13 +281,15 @@ function help() {
   log(`voice-agent <command>
 
   setup        install the Python voice stack under ${paths.home} and write config.env
-  doctor       check OS, Node, venv, config, Claude Code, audio devices, GLM gate, services
+  doctor       check OS, Node, venv, config, selected backend, audio devices, GLM gate, services
   start        start speech-to-speech and the Gateway (flags: --tui, --debug-transcripts, --skip-glm-check)
   stop         stop managed processes
   status       component health and managed-process memory
   smoke-glm    run the GLM compatibility gate only
 
-Config: ${paths.configPath}`)
+Config: ${paths.configPath}
+Backend: AGENT_PROTOCOL=claude (default), codex, or pi. Stop before switching.
+Pi runs without permission prompts and does not expose Gateway MCP tools.`)
 }
 
 const commands = { setup, doctor, start, stop, status, 'smoke-glm': smokeGlm, help }

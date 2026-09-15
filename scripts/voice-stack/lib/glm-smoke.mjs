@@ -198,7 +198,7 @@ export async function runGlmSmoke({
 
   await run('constraint', async () => {
     const turn = await streamedTurn([
-      { role: 'user', content: 'Ask Claude to inspect the bug, but do not edit anything.' },
+      { role: 'user', content: 'Inspect the bug with the configured backend, but do not edit anything.' },
     ])
     const call = turn.toolCalls.find(candidate => candidate.name === 'spawn_thinking')
     if (!call) return { ok: false, detail: 'no spawn_thinking call' }
