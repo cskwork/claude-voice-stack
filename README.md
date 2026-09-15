@@ -1,16 +1,17 @@
 # claude-voice-stack
 
 A fork of [qwen-audio-agent](https://github.com/QwenAudio/qwen-audio-agent) that
-puts a local, low-RAM voice stack in front of **Claude Code**:
+puts a local, low-RAM voice stack in front of **Claude Code, Codex, or Pi**:
 
 ```text
 Mic → Silero VAD → Whisper small (MLX, local) → GLM-5.3-Flash (remote router)
-    → qwen-audio-agent Gateway → claude-code-acp → Claude Code
+    → qwen-audio-agent Gateway → selected ACP adapter → Claude Code / Codex / Pi
     → GLM spoken summary → Supertonic (local TTS) → Speaker
 ```
 
-No DashScope, no local general-purpose LLM, Claude Code unchanged as the only
-backend, native permission prompts kept. Upstream code under `server/`, `shared/`,
+No DashScope or local general-purpose LLM. Select one backend per Gateway;
+Claude Code remains the default. Claude Code and Codex retain native approvals.
+Pi runs without approval prompts and does not expose Gateway MCP tools. Upstream code under `server/`, `shared/`,
 `cli/`, `web/`, `tui/`, `desktop/` is untouched; the fork adds a profile, a prompt,
 a process manager, and tests.
 
@@ -20,9 +21,23 @@ a process manager, and tests.
 npm install
 npm run voice-agent -- setup     # venv + speech-to-speech + Supertonic + Whisper small + config.env
 # fill VOICE_LLM_BASE_URL / VOICE_LLM_API_KEY in ~/.claude-voice-stack/config.env
+# select AGENT_PROTOCOL=claude, codex, or pi in the same file
 npm run voice-agent -- doctor    # includes the GLM compatibility gate
 npm run voice-agent -- start --tui
 ```
+
+Choose the backend in `~/.claude-voice-stack/config.env`:
+
+| Agent | Selection | Project directory |
+|---|---|---|
+| Claude Code | `AGENT_PROTOCOL=claude` | `CLAUDE_WORKSPACE=/path/to/project` |
+| Codex | `AGENT_PROTOCOL=codex` | `CODEX_WORKSPACE=/path/to/project` |
+| Pi | `AGENT_PROTOCOL=pi` | `PI_WORKSPACE=/path/to/project` |
+
+Install and authenticate the selected CLI first. Stop the stack before changing
+agents, then run `doctor` and `start --tui` again. Each agent keeps its own model,
+credentials, and conversation history. Switching does not transfer a running task.
+See [backend setup and limitations](docs/voice-stack/macos-setup.md#choose-a-backend).
 
 Landing page: [`landing/index.html`](landing/index.html) (English/Korean; deploys to GitHub Pages via `.github/workflows/landing-pages.yml`).
 
@@ -33,6 +48,9 @@ Docs: [PRD](PRD.md) · [macOS setup](docs/voice-stack/macos-setup.md) ·
 [RAM benchmark](docs/voice-stack/ram-benchmark.md).
 Tests: `npm run test:voice-stack` (unit, offline) and
 `npm run test:voice-stack:integration` (real speech-to-speech + Supertonic loop).
+`npm run test:voice-stack:e2e` runs recorded Korean speech through the live router,
+Gateway, and all three coding agents, then verifies the files and returned audio.
+This opt-in test uses your configured provider accounts.
 
 ---
 

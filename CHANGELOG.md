@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+## 1.12.0
+
+Released 2026-09-15.
+
+### Claude Voice Stack
+
+- Select Claude Code, Codex, or Pi with `AGENT_PROTOCOL`; Claude remains the default.
+- Diagnose the selected executable and authentication, including custom paths.
+  Reject reuse of a Gateway running a different backend until it is restarted.
+- Keep native Claude/Codex approvals. Pi selection directly enables execution
+  without approval prompts; Gateway MCP tools remain unavailable for Pi.
+- Add an opt-in live E2E runner. All three agents passed Korean audio input,
+  GLM routing, Gateway delegation, real file creation and verification, and
+  a spoken completion on 2026-09-15. Physical microphone/speaker testing and
+  approval-dialog coverage are outside this automated run.
+- Package the voice runner, profiles, prompts, setup script and documentation.
+  Keep upstream npm publishing and signed-installer automation upstream-only.
+
+### Upstream changes inherited by this fork
+
 - 移除 `backend-adapter` 与 `custom-conversation-client` 示例目录及文档入口，保留后台 SDK 与客户端协议能力。
 
 - 新增 AI Passport 语音客户端示例：音频小包拆分、有界发送缓冲、心跳与关闭原因透传，

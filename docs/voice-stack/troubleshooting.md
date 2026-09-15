@@ -13,7 +13,7 @@ Run `npm run voice-agent -- doctor` first. Logs live in `~/.claude-voice-stack/l
 | A `mlx_models/` directory appeared in the repository | speech-to-speech ran with the repository as working directory. It is git-ignored; delete it or move it to `~/.claude-voice-stack/mlx_models/`. |
 | `speech-to-speech exited` right away | Port 8765 in use (`lsof -i :8765`), or a stale pid; `voice-agent stop` then `start`. |
 | Gateway starts but the voice is "not connected" | `SPEECH_TO_SPEECH_REALTIME_URL` must match `VOICE_S2S_HOST:VOICE_S2S_PORT`. |
-| Assistant answers but never delegates | Confirm `AGENT_PROTOCOL=claude` and that the Gateway health shows `backend.ok`. Check `claude auth status`. |
+| Assistant answers but never delegates | Confirm `AGENT_PROTOCOL` is `claude`, `codex`, or `pi`, and that Gateway health shows the same `backend.protocol` with `backend.ok=true`. Run `voice-agent doctor` for the selected CLI. |
 | Claude never asks for permission / edits immediately | `QWEN_AUDIO_AGENT_BACKEND_PERMISSION_MODE` must be `native`; also check Claude Code's own settings for the workspace. |
 | Speech cut off while talking | Increase `--live_transcription_min_silence_ms` in `lib/s2s-command.mjs` (default 500 ms) or use headphones. |
 | Assistant hears itself | Use headphones or enable macOS voice isolation on the input device. |
@@ -25,3 +25,16 @@ Run `npm run voice-agent -- doctor` first. Logs live in `~/.claude-voice-stack/l
 | `voice-agent stop` leaves a process | Pids are in `~/.claude-voice-stack/run/`; the stop sends SIGTERM to the process group, then SIGKILL after 10 s. |
 
 Transcripts are not logged. For a single debugging run: `voice-agent start --debug-transcripts`.
+
+## Backend selection
+
+- If status reports a backend mismatch, stop the stack before restarting with
+  the new `AGENT_PROTOCOL`. Changing config does not switch a running process.
+- If the wrong agent is selected, check shell `AGENT_PROTOCOL`; it overrides
+  `config.env`. Set the matching `CLAUDE_WORKSPACE`, `CODEX_WORKSPACE`, or
+  `PI_WORKSPACE` for the intended repository.
+- Pi does not show permission prompts or expose Gateway MCP tools. This is an
+  adapter limitation, not a missing voice configuration.
+- An ACP launcher check does not prove an authenticated task can run. Check
+  Gateway backend health after start and complete a small task with the selected
+  agent before relying on it.

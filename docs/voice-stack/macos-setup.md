@@ -5,7 +5,7 @@
 - Apple Silicon Mac, macOS 14 or newer, 16 GB unified memory recommended
 - Node.js 22.22+ (`nvm install 22`)
 - Python 3.10–3.12 (`brew install python@3.12`)
-- Claude Code installed and logged in (`claude` on PATH, `claude auth status`)
+- Your selected CLI installed and authenticated: Claude Code, Codex, or Pi
 - A GLM-5.3-Flash Chat Completions endpoint and API key (Z.ai, Zhipu, or any OpenAI-compatible host)
 
 ## One-command setup
@@ -29,11 +29,45 @@ VOICE_LLM_BASE_URL=https://api.z.ai/api/paas/v4
 VOICE_LLM_API_KEY=...
 ```
 
-Optionally point Claude Code at a repository:
+## Choose a backend
 
-```dotenv
-CLAUDE_WORKSPACE=/path/to/your/project
-```
+Set `AGENT_PROTOCOL` in the same `config.env`. One Gateway uses one agent at a
+time; Claude Code remains the default. This applies to both GLM and local MLX
+router profiles.
+
+| Agent | Selection | Optional repository | Executable override |
+|---|---|---|---|
+| Claude Code | `AGENT_PROTOCOL=claude` | `CLAUDE_WORKSPACE=/path/to/project` | `CLAUDE_CODE_EXECUTABLE` |
+| Codex | `AGENT_PROTOCOL=codex` | `CODEX_WORKSPACE=/path/to/project` | `CODEX_PATH` |
+| Pi | `AGENT_PROTOCOL=pi` | `PI_WORKSPACE=/path/to/project` | `PI_ACP_PI_COMMAND` or `PI_BIN` |
+
+Install the selected CLI and authenticate it using `claude`, `codex login`, or
+Pi's interactive `/login`. Pi requires version 0.80.4 or later. The existing
+Gateway launchers use an installed ACP adapter when available, otherwise fetch
+their pinned package through `npx`. Adapter overrides are `CLAUDE_CODE_ACP_BIN`,
+`CODEX_ACP_BIN`, and `PI_ACP_BIN`. See the [upstream backend configuration](../backends/configuration.md)
+for installation and provider settings.
+
+Keep `QWEN_AUDIO_AGENT_BACKEND_MODEL` empty to use the selected agent's model.
+Each backend retains its own credentials and sessions. The workspace defaults
+to the upstream shared workspace when its setting is empty.
+
+Claude Code and Codex use `QWEN_AUDIO_AGENT_BACKEND_PERMISSION_MODE=native`.
+Pi runs as your user without approval prompts even when this value is `native`.
+Selecting Pi enables that behavior directly. Its adapter does not expose Gateway
+MCP tools or create separate delegated sessions; it completes tasks with Pi's own
+tools. See [Pi adapter limitations](https://github.com/svkozak/pi-acp#limitations).
+
+To switch, run `npm run voice-agent -- stop`, edit `AGENT_PROTOCOL` and the
+matching workspace, then run `doctor` and `start --tui`. Shell environment values
+have precedence over `config.env`. Existing tasks and conversation history do
+not move between agents. `start` refuses to reuse a Gateway running a different
+backend, and `status` reports the mismatch.
+
+`doctor` checks the selected executable and its authentication status, including
+custom executable paths and config directories. Unknown authentication remains
+explicitly unverified. The ACP launcher check verifies the local launcher file;
+Gateway health reports whether the adapter actually connected.
 
 ## Check, start, talk
 
@@ -56,6 +90,31 @@ headphones or the built-in echo cancellation to avoid the assistant hearing itse
 
 `npm link` (or `npm run install:global`) exposes `voice-agent` on PATH; the npm
 script form works without it.
+
+## Test the full voice and coding path
+
+```bash
+npm run test:voice-stack:e2e
+# Optional: -- --backends codex --config /path/to/router.env --output /tmp/my-voice-test
+```
+
+This opt-in test uses the configured remote router and actual Claude Code,
+Codex, and Pi accounts, so normal provider usage charges apply. It starts its
+own speech service and Gateway on free loopback ports, sends a synthesized
+Korean recording through the same audio input protocol as the TUI, and checks
+that the selected agent reads a unique instruction file, writes and verifies
+the expected result, and returns a spoken completion through the Gateway.
+
+Each agent gets a separate temporary workspace and Gateway configuration.
+Native approval requests are accepted only when their concrete file locations
+are inside that workspace. Agents retain their normal authentication and
+session stores. `results.json`, event logs, the input recording, and each
+agent's response recording are saved in the printed artifact directory.
+
+The test uses recorded digital audio and simulated playback receipts. Physical
+microphone capture, speakers, and acoustic echo cancellation need a separate
+hands-on check. `test:voice-stack:integration` remains the offline-router test
+of the speech service alone; it does not execute coding agents.
 
 ## Alternative profiles
 
