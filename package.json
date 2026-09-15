@@ -1,7 +1,7 @@
 {
   "name": "qwen-audio-agent",
   "desktopName": "qwen-audio-agent.desktop",
-  "version": "1.11.0",
+  "version": "1.12.0",
   "description": "A realtime voice runtime that keeps AI agents talking, working, and present.",
   "author": "qwen-audio-agent contributors",
   "license": "Apache-2.0",
@@ -81,6 +81,8 @@
     "cli/src/",
     "cli/package.json",
     "config/frontend-agent/",
+    "config/profiles/",
+    "config/prompts/foreground-glm/",
     "config/backends/openclaw/openclaw.json5",
     "config/backends/deepseek-harness/cordis.yml",
     "examples/ai-passport/",
@@ -168,6 +170,7 @@
     "docs/voice-frontends/minicpm-o.zh.md",
     "docs/voice-frontends/custom-provider.md",
     "docs/voice-frontends/custom-provider.zh.md",
+    "docs/voice-stack/",
     "docs/voice-frontends/qwen-audio-realtime.md",
     "docs/voice-frontends/qwen-audio-realtime.zh.md",
     "docs/voice-frontends/qwen-omni-realtime.md",
@@ -204,6 +207,11 @@
     "scripts/*.mjs",
     "scripts/release-check",
     "scripts/runtime/",
+    "scripts/voice-stack/",
+    "services/voice/supertonic/README.md",
+    "services/voice/speech-to-speech/README.md",
+    "landing/index.html",
+    "PRD.md",
     "tui/native/",
     "tui/src/",
     "tui/package.json",
@@ -288,7 +296,8 @@
     "release:check": "./scripts/release-check",
     "voice-agent": "node scripts/voice-stack/voice-agent.mjs",
     "test:voice-stack": "node --test scripts/voice-stack/test/*.test.mjs",
-    "test:voice-stack:integration": "VOICE_STACK_INTEGRATION=1 node --test scripts/voice-stack/test/integration/*.test.mjs"
+    "test:voice-stack:integration": "VOICE_STACK_INTEGRATION=1 node --test scripts/voice-stack/test/integration/*.test.mjs",
+    "test:voice-stack:e2e": "node scripts/voice-stack/e2e.mjs"
   },
   "dependencies": {
     "@a2a-js/sdk": "1.1.0",

@@ -43,16 +43,8 @@ done
 [[ -n "$PYTHON" ]] || die "Python >= 3.10 not found (brew install python@3.12)"
 ok "Python $("$PYTHON" -c 'import platform; print(platform.python_version())') ($PYTHON)"
 
-if command -v claude >/dev/null 2>&1; then
-  ok "Claude Code $(claude --version 2>/dev/null | head -1)"
-  if claude auth status 2>/dev/null | grep -q '"loggedIn": *true'; then
-    ok "Claude Code authenticated"
-  else
-    warn "Claude Code not logged in; run: claude"
-  fi
-else
-  warn "Claude Code not found; install it before voice-agent start"
-fi
+ok "Select Claude Code, Codex, or Pi with AGENT_PROTOCOL in config.env."
+ok "Run voice-agent doctor after setup to check the selected agent and login."
 
 echo
 echo "Installing voice components..."

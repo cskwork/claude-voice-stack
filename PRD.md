@@ -6,6 +6,18 @@
 **Primary platform:** macOS Apple Silicon
 **Primary goal:** Replace the default Qwen/DashScope realtime voice frontend with a RAM-efficient modular voice stack while keeping Claude Code as the backend coding agent.
 
+
+## Compatibility update, 2026-09-15
+
+The voice profile now supports `AGENT_PROTOCOL=claude`, `codex`, and `pi` using
+the existing upstream drivers. Claude remains the default; the Claude-only
+requirements below describe the original v0.1 scope and are superseded by this
+section for backend selection. One Gateway runs one selected backend at a time.
+Stop and restart when changing agents. Native approvals remain for Claude and
+Codex. Pi selection directly enables execution without approval prompts, and
+Pi cannot use Gateway MCP tools or separate delegated sessions.
+See [current setup](docs/voice-stack/macos-setup.md#choose-a-backend).
+
 ---
 
 ## 1. Summary

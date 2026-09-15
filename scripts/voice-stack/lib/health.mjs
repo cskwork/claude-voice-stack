@@ -1,5 +1,7 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
+import { inspectBackendAuthentication } from '../../../shared/backend/auth-status.mjs'
+import { voiceBackend } from './backend.mjs'
 
 const execFileAsync = promisify(execFile)
 
@@ -88,25 +90,43 @@ export async function probeSpeechToSpeech(httpBaseUrl, options) {
   }
 }
 
-export async function probeClaude({ execFileImpl = execFileAsync } = {}) {
-  try {
-    const { stdout } = await execFileImpl('claude', ['--version'], { timeout: 10_000 })
-    const version = stdout.trim().split('\n')[0]
-    let loggedIn = null
+export async function probeBackend(protocol, { env = process.env, execFileImpl = execFileAsync } = {}) {
+  const backend = voiceBackend(protocol, env)
+  if (!backend) return { state: 'failed', detail: `unsupported backend: ${protocol}` }
+  const options = { timeout: 10_000, env }
+  const run = async (command, args) => {
     try {
-      const auth = await execFileImpl('claude', ['auth', 'status'], { timeout: 10_000 })
-      const parsed = JSON.parse(auth.stdout)
-      loggedIn = parsed.loggedIn === true
-    } catch {
-      loggedIn = null
+      const result = await execFileImpl(command, args, options)
+      return { ok: true, output: `${result.stdout || ''}\n${result.stderr || ''}`.trim() }
+    } catch (error) {
+      return { ok: false, output: `${error.stdout || ''}\n${error.stderr || ''}`.trim() }
     }
-    if (loggedIn === false) return { state: 'failed', detail: `${version}; not logged in` }
+  }
+  try {
+    const { stdout } = await execFileImpl(backend.executable, ['--version'], options)
+    const version = stdout.trim().split('\n')[0]
+    let status = 'unknown'
+    if (protocol === 'claude') {
+      const auth = await run(backend.executable, ['auth', 'status'])
+      try {
+        const parsed = JSON.parse(auth.output)
+        if (parsed.loggedIn === true) status = 'authenticated'
+        if (parsed.loggedIn === false) status = 'unauthenticated'
+      } catch { /* An unsupported status command is not proof of missing login. */ }
+    } else {
+      const authentication = await inspectBackendAuthentication(protocol, {
+        command: backend.executable, env, run,
+      })
+      status = authentication.status
+    }
+    if (status === 'unauthenticated') return { state: 'failed', detail: `${version}; not authenticated` }
+    const permissionNote = backend.permissions ? '' : '; no permission prompts; no Gateway MCP tools'
     return {
       state: 'ready',
-      detail: loggedIn ? `${version}; logged in` : `${version}; login state unknown`,
+      detail: `${version}; ${status === 'authenticated' ? 'authenticated' : 'authentication unverified'}${permissionNote}`,
     }
-  } catch {
-    return { state: 'failed', detail: 'claude executable not found' }
+  } catch (error) {
+    return { state: 'failed', detail: `${backend.executable}: ${error.code === 'ENOENT' ? 'executable not found' : 'version check failed'}` }
   }
 }
 

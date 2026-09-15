@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs'
+import { VOICE_BACKENDS } from './backend.mjs'
 
 // Minimal dotenv parser: KEY=VALUE, optional quotes, # comments, no expansion.
 export function parseEnv(text) {
@@ -121,8 +122,8 @@ export function resolveVoiceConfig(env = {}) {
   if (config.realtimeProvider !== 'speech-to-speech') {
     errors.push('QWEN_AUDIO_REALTIME_PROVIDER must be speech-to-speech for this profile')
   }
-  if (config.agentProtocol !== 'claude') {
-    errors.push('AGENT_PROTOCOL must be claude for this profile')
+  if (!VOICE_BACKENDS.includes(config.agentProtocol)) {
+    errors.push(`AGENT_PROTOCOL must be one of ${VOICE_BACKENDS.join(', ')}`)
   }
   if (config.permissionMode === 'full') {
     errors.push('QWEN_AUDIO_AGENT_BACKEND_PERMISSION_MODE=full is not allowed by default; use native')
