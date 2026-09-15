@@ -21,7 +21,7 @@ test('gate passes against a cooperative provider and never leaks the key', async
   assert.ok(provider.seen.every(entry => entry.url === '/v1/chat/completions'))
   const toolRequest = provider.seen.find(entry => entry.request.tools)
   assert.equal(toolRequest.request.messages[0].role, 'system')
-  assert.match(toolRequest.request.messages[0].content, /Claude Code/)
+  assert.match(toolRequest.request.messages[0].content, /configured backend agent/)
   assert.equal(toolRequest.request.tools[0].function.name, 'spawn_thinking')
 })
 

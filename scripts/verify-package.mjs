@@ -153,6 +153,15 @@ if (isMain) {
   }
   const required = [
     'cli/bin/qwenaudio.mjs',
+    'scripts/voice-stack/voice-agent.mjs',
+    'scripts/voice-stack/e2e.mjs',
+    'scripts/voice-stack/bootstrap-macos.sh',
+    'scripts/voice-stack/lib/backend.mjs',
+    'config/profiles/glm-supertonic-claude.env.example',
+    'config/profiles/local-fallback.env.example',
+    'config/prompts/foreground-glm/PROMPT.md',
+    'config/prompts/foreground-glm/ASSISTANT.md',
+    'docs/voice-stack/macos-setup.md',
     'config/backends/deepseek-harness/cordis.yml',
     'config/backends/openclaw/openclaw.json5',
     'CONTRIBUTING.md',

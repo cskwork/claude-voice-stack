@@ -1,4 +1,4 @@
-# Architecture: local ears and voice, remote GLM router, Claude Code backend
+# Architecture: local ears and voice, remote GLM router, selectable coding backend
 
 ```text
 Microphone ─► Silero VAD ─► Whisper small (MLX) ──► GLM-5.3-Flash (HTTPS) ─┐
@@ -8,17 +8,17 @@ Speaker ◄─ Supertonic (in-process ONNX) ◄─ GLM spoken rendering ◄─�
                     │                                   ▼
                     └──────────── qwen-audio-agent Gateway (127.0.0.1:3101)
                                    │  TUI / WebUI / Desktop
-                                   └─ ACP stdio ─► claude-code-acp ─► Claude Code
+                                   └─ ACP stdio ─► selected adapter ─► Claude Code / Codex / Pi
 ```
 
 ## Responsibilities
 
 | Layer | Owns | Never does |
 |---|---|---|
-| speech-to-speech | VAD, STT, calling GLM, TTS, barge-in inside the pipeline | Talk to Claude, touch files |
+| speech-to-speech | VAD, STT, calling GLM, TTS, barge-in inside the pipeline | Talk to the backend, touch files |
 | GLM-5.3-Flash | Turn-taking, routing (VOICE_ONLY / DELEGATE / CONTROL), the `spawn_thinking` objective, spoken summaries | Shell, repository access, tool results it did not receive |
 | Gateway | Realtime session, task lifecycle, permission relay, result injection, UI state | Audio conversion, LLM calls |
-| Claude Code | Repository, shell, edits, tests, MCP, skills, permission prompts | Speak |
+| Selected backend | Repository, shell, edits, tests, and supported agent tools | Speak |
 
 ## How the pieces connect (no upstream code changes)
 
@@ -29,8 +29,11 @@ Speaker ◄─ Supertonic (in-process ONNX) ◄─ GLM spoken rendering ◄─�
 - `QWEN_AUDIO_AGENT_FRONTEND_PROMPT_DIR=config/prompts/foreground-glm` swaps the
   upstream Chinese prompt for the compact English router prompt (target under 500
   tokens; `test/prompt.test.mjs` caps it at 2,400 characters).
-- `AGENT_PROTOCOL=claude` with `QWEN_AUDIO_AGENT_BACKEND_PERMISSION_MODE=native`
-  keeps Claude Code's own permission prompts; the profile validator refuses `full`.
+- `AGENT_PROTOCOL=claude|codex|pi` selects the existing upstream ACP driver.
+  Claude Code is the default. `QWEN_AUDIO_AGENT_BACKEND_PERMISSION_MODE=native`
+  preserves Claude/Codex approvals; the validator still refuses explicit `full`.
+  Pi's effective permission mode is always full, with no approval prompts or
+  Gateway MCP tools. Pi selection enables this behavior directly.
 - `voice-agent start` injects the profile into the Gateway process environment,
   which upstream `loadRuntimeEnvironment` treats as highest precedence.
 
@@ -53,13 +56,12 @@ Gateway code and is the documented trade-off.
 
 ## Result contract
 
-Claude's completion reaches GLM through the upstream Gateway path
+The selected agent's completion reaches GLM through the upstream Gateway path
 (`realtime-provider.mjs` `injectResult`): a short user-role `input_text` item plus
 a response whose instructions say "state the actual result, do not read protocol
 fields, do not claim completion for unfinished work". The Gateway already
 condenses ACP output before injection; the profile prompt further limits speech
-to one to three sentences. Full transcripts, diffs, and logs stay inside Claude
-Code and the Gateway journals.
+to one to three sentences. Full transcripts, diffs, and logs stay inside the selected agent and the Gateway journals.
 
 ## Context budget
 
@@ -74,7 +76,7 @@ Code and the Gateway journals.
 
 Speech during playback triggers `server_vad` with `interrupt_response`: the
 pipeline cancels the active response and stops publishing audio. That is a
-Realtime `response.cancel`, not `cancel_agent_task`. The Claude task keeps
+Realtime `response.cancel`, not `cancel_agent_task`. The backend task keeps
 running unless the user asks to cancel it, which GLM routes as CONTROL.
 
 ## Failure behaviour
@@ -84,8 +86,8 @@ running unless the user asks to cancel it, which GLM routes as CONTROL.
 | GLM unreachable at start | `voice-agent start` refuses to start with "The voice reasoning service is unavailable" |
 | GLM fails mid-session | speech-to-speech reports an error event; the Gateway shows the frontend as degraded; no delegation is fabricated |
 | Supertonic (in-process) fails | speech-to-speech logs the TTS error; text output continues in the UI |
-| Claude unavailable | Gateway health `backend.ok=false`; `voice-agent status` shows Backend degraded; voice-only chat continues |
-| Claude task fails | Gateway injects the failure; prompt forbids turning "failed" into "completed" |
+| Selected backend unavailable | Gateway health `backend.ok=false`; `voice-agent status` shows Backend degraded; voice-only chat continues |
+| Backend task fails | Gateway injects the failure; prompt forbids turning "failed" into "completed" |
 
 ## Logging and privacy
 

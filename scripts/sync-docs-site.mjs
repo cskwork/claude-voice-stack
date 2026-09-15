@@ -29,7 +29,9 @@ const rootDir = fileURLToPath(new URL('..', import.meta.url))
 const docsDir = join(rootDir, 'docs')
 const siteDir = join(docsDir, '.vitepress', '.site')
 
-const EXCLUDED_DIRS = new Set(['promo', 'roadmap', 'node_modules'])
+// The fork's voice-stack manual is linked from its landing page and GitHub
+// README. It is separate from the upstream bilingual VitePress manual.
+const EXCLUDED_DIRS = new Set(['promo', 'roadmap', 'node_modules', 'voice-stack'])
 // Roadmap/presentation pages are maintainer-facing, not user-manual content:
 // they stay in the repo but never land on the site.
 const EXCLUDED_FILES = new Set([

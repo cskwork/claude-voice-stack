@@ -18,7 +18,7 @@ test('foreground prompt stays small and keeps the Gateway tool contract', () => 
   for (const tag of ['<permission_request>', '<backend_input_request>']) {
     assert.ok(prompt.includes(tag), `prompt must explain ${tag}`)
   }
-  assert.match(prompt, /Claude Code/)
+  assert.match(prompt, /configured backend agent/)
   assert.match(prompt, /do not commit/i)
 })
 

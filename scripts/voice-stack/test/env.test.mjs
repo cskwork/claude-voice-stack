@@ -49,13 +49,27 @@ test('resolveVoiceConfig refuses full permissions, non-loopback hosts and unknow
     QWEN_AUDIO_AGENT_BACKEND_PERMISSION_MODE: 'full',
     VOICE_S2S_HOST: '0.0.0.0',
     VOICE_TTS_MODE: 'bogus',
-    AGENT_PROTOCOL: 'codex',
+    AGENT_PROTOCOL: 'unsupported',
   })
   assert.ok(errors.some(line => line.includes('full')))
   assert.ok(errors.some(line => line.includes('loopback')))
   assert.ok(errors.some(line => line.includes('VOICE_TTS_MODE')))
   assert.ok(errors.some(line => line.includes('AGENT_PROTOCOL')))
 })
+
+for (const protocol of ['claude', 'codex', 'pi']) {
+  test(`resolveVoiceConfig accepts ${protocol} for remote and local routers`, () => {
+    for (const router of [
+      { VOICE_LLM_BASE_URL: 'https://example.com/v1', VOICE_LLM_API_KEY: 'k' },
+      { VOICE_LLM_BACKEND: 'mlx-lm', VOICE_LLM_MODEL: 'local-model' },
+    ]) {
+      const { config, errors } = resolveVoiceConfig({ ...router, AGENT_PROTOCOL: protocol })
+      assert.deepEqual(errors, [])
+      assert.equal(config.agentProtocol, protocol)
+      assert.equal(config.permissionMode, 'native')
+    }
+  })
+}
 
 test('resolveVoiceConfig local mlx-lm profile needs no API key', () => {
   const { config, errors } = resolveVoiceConfig({
